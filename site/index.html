@@ -1,0 +1,460 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PDF Standards Converter</title>
+<style>
+  :root {
+    --accent: #0A7AFF;
+    --accent-press: #0063D1;
+    --close: #FF5F57; --min: #FEBC2E; --zoom: #28C840;
+    --win-bg: rgba(242, 242, 247, 0.72);
+    --toolbar-bg: rgba(255, 255, 255, 0.28);
+    --ink: rgba(0, 0, 0, 0.88);
+    --ink-2: rgba(60, 60, 67, 0.6);
+    --ink-3: rgba(60, 60, 67, 0.33);
+    --hairline: rgba(0, 0, 0, 0.09);
+    --row-hover: rgba(0, 0, 0, 0.04);
+    --field-bg: rgba(255, 255, 255, 0.72);
+    --field-border: rgba(0, 0, 0, 0.12);
+    --ok: #1DB954; --bad: #E5484D;
+    --chip-bg: rgba(10, 122, 255, 0.12);
+    --shadow: 0 24px 68px 6px rgba(20, 35, 60, 0.42), 0 1px 3px rgba(0,0,0,.18);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --win-bg: rgba(38, 38, 42, 0.68);
+      --toolbar-bg: rgba(255, 255, 255, 0.05);
+      --ink: rgba(255, 255, 255, 0.92);
+      --ink-2: rgba(235, 235, 245, 0.62);
+      --ink-3: rgba(235, 235, 245, 0.32);
+      --hairline: rgba(255, 255, 255, 0.1);
+      --row-hover: rgba(255, 255, 255, 0.055);
+      --field-bg: rgba(255, 255, 255, 0.085);
+      --field-border: rgba(255, 255, 255, 0.16);
+      --chip-bg: rgba(10, 132, 255, 0.22);
+      --accent: #0A84FF;
+      --shadow: 0 26px 80px 8px rgba(0, 0, 0, 0.6), 0 1px 3px rgba(0,0,0,.5);
+    }
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
+    -webkit-font-smoothing: antialiased;
+    color: var(--ink);
+    display: grid; place-items: center;
+    padding: 40px 16px;
+    background:
+      radial-gradient(120% 90% at 15% 8%,  #7fb6f0 0%, transparent 55%),
+      radial-gradient(110% 95% at 88% 12%, #b7a7f5 0%, transparent 52%),
+      radial-gradient(130% 110% at 50% 108%, #67d4c0 0%, transparent 58%),
+      linear-gradient(180deg, #5f8fd9 0%, #7a9fe0 45%, #6fbcd4 100%);
+    background-attachment: fixed;
+  }
+  @media (prefers-color-scheme: dark) {
+    body {
+      background:
+        radial-gradient(120% 90% at 15% 8%,  #17335f 0%, transparent 55%),
+        radial-gradient(110% 95% at 88% 12%, #3a2c66 0%, transparent 52%),
+        radial-gradient(130% 110% at 50% 108%, #0d4a44 0%, transparent 58%),
+        linear-gradient(180deg, #0b1526 0%, #101d33 50%, #0c1f2b 100%);
+    }
+  }
+  body::after {
+    content: ""; position: fixed; inset: 0; pointer-events: none; opacity: .035;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='140' height='140' filter='url(%23n)'/%3E%3C/svg%3E");
+  }
+
+  .window {
+    width: min(760px, 100%);
+    border-radius: 12px;
+    background: var(--win-bg);
+    backdrop-filter: blur(44px) saturate(1.9);
+    -webkit-backdrop-filter: blur(44px) saturate(1.9);
+    box-shadow: var(--shadow), inset 0 0 0 0.5px rgba(255,255,255,.32);
+    overflow: hidden;
+    animation: pop .44s cubic-bezier(.2,.9,.25,1.15) both;
+  }
+  @keyframes pop { from { opacity: 0; transform: scale(.965) translateY(14px); } }
+
+  .titlebar {
+    display: flex; align-items: center; gap: 8px;
+    height: 52px; padding: 0 16px;
+    background: var(--toolbar-bg);
+    border-bottom: 0.5px solid var(--hairline);
+    user-select: none;
+  }
+  .lights { display: flex; gap: 8px; }
+  .light { width: 12px; height: 12px; border-radius: 50%; position: relative;
+           box-shadow: inset 0 0 0 .5px rgba(0,0,0,.15); }
+  .light.c { background: var(--close); } .light.m { background: var(--min); } .light.z { background: var(--zoom); }
+  .lights:hover .light::before {
+    position: absolute; inset: 0; display: grid; place-items: center;
+    font: 700 9px/1 -apple-system; color: rgba(0,0,0,.5);
+  }
+  .lights:hover .light.c::before { content: "×"; }
+  .lights:hover .light.m::before { content: "–"; }
+  .lights:hover .light.z::before { content: "+"; font-size: 8px; }
+  .title { flex: 1; text-align: center; font-size: 13px; font-weight: 600; letter-spacing: .01em; }
+  .ver {
+    font-size: 11px; color: var(--ink-2);
+    padding: 3px 8px; border-radius: 20px;
+    background: var(--chip-bg);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .toolbar {
+    display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+    padding: 12px 16px;
+    border-bottom: 0.5px solid var(--hairline);
+  }
+  .label { font-size: 12px; color: var(--ink-2); }
+  .popup {
+    appearance: none; -webkit-appearance: none;
+    font: 500 13px/1.2 -apple-system, "SF Pro Text", sans-serif;
+    color: var(--ink);
+    background: var(--field-bg);
+    border: 0.5px solid var(--field-border);
+    border-radius: 7px;
+    padding: 6px 26px 6px 11px;
+    box-shadow: 0 .5px 1.5px rgba(0,0,0,.1);
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='9' height='14' viewBox='0 0 9 14'%3E%3Cpath d='M1.5 5.2 4.5 2l3 3.2M1.5 8.8 4.5 12l3-3.2' fill='none' stroke='%23888' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+    background-repeat: no-repeat; background-position: right 9px center;
+    cursor: pointer;
+  }
+  .popup:focus-visible { outline: 3px solid color-mix(in srgb, var(--accent) 45%, transparent); outline-offset: 1px; }
+
+  .switchwrap { display: flex; align-items: center; gap: 7px; cursor: pointer; }
+  .switch { position: relative; width: 34px; height: 20px; }
+  .switch input { position: absolute; opacity: 0; inset: 0; cursor: pointer; }
+  .track { position: absolute; inset: 0; border-radius: 20px; background: var(--ink-3); transition: background .18s; }
+  .knob { position: absolute; top: 1.5px; left: 1.5px; width: 17px; height: 17px; border-radius: 50%;
+          background: #fff; box-shadow: 0 1px 2.5px rgba(0,0,0,.35); transition: transform .18s cubic-bezier(.3,.8,.4,1.1); }
+  .switch input:checked + .track { background: var(--ok); }
+  .switch input:checked + .track + .knob { transform: translateX(14px); }
+  .switch input:disabled + .track { opacity: .4; }
+
+  .spacer { flex: 1; }
+  .btn {
+    font: 590 13px/1 -apple-system, "SF Pro Text", sans-serif;
+    padding: 7px 16px; border-radius: 7px; border: 0.5px solid var(--field-border);
+    background: var(--field-bg); color: var(--ink); cursor: pointer;
+    box-shadow: 0 .5px 1.5px rgba(0,0,0,.12);
+    transition: transform .06s, filter .12s;
+  }
+  .btn:active { transform: scale(.97); }
+  .btn.primary {
+    color: #fff; border: none;
+    background: linear-gradient(180deg, color-mix(in srgb, var(--accent) 92%, #fff), var(--accent));
+    box-shadow: 0 1px 2.5px rgba(10,110,255,.45), inset 0 .5px 0 rgba(255,255,255,.35);
+  }
+  .btn.primary:active { background: var(--accent-press); }
+  .btn:disabled { opacity: .45; cursor: default; transform: none; }
+  .btn.small { padding: 4px 11px; font-size: 12px; border-radius: 6px; }
+
+  .drop {
+    margin: 16px; padding: 34px 20px;
+    border: 1.5px dashed color-mix(in srgb, var(--ink-3) 90%, transparent);
+    border-radius: 10px;
+    display: grid; place-items: center; gap: 8px;
+    text-align: center; color: var(--ink-2);
+    transition: border-color .15s, background .15s, transform .15s;
+    cursor: pointer;
+  }
+  .drop.over {
+    border-color: var(--accent);
+    background: color-mix(in srgb, var(--accent) 8%, transparent);
+    transform: scale(1.008);
+  }
+  .drop svg { opacity: .5; }
+  .drop .big { font-size: 14px; font-weight: 600; color: var(--ink); }
+  .drop .hint { font-size: 12px; }
+  .drop .hint u { color: var(--accent); text-decoration: none; font-weight: 600; }
+
+  .files { list-style: none; margin: 0 8px 4px; max-height: 320px; overflow-y: auto; }
+  .row {
+    display: flex; align-items: center; gap: 12px;
+    padding: 9px 10px; border-radius: 8px;
+    animation: slidein .28s cubic-bezier(.25,.9,.3,1) both;
+  }
+  @keyframes slidein { from { opacity: 0; transform: translateX(-10px); } }
+  .row:hover { background: var(--row-hover); }
+  .row + .row { position: relative; }
+  .row + .row::before { content:""; position:absolute; left: 48px; right: 10px; top: -0.5px; height: .5px; background: var(--hairline); }
+  .doc { flex-shrink: 0; }
+  .meta { flex: 1; min-width: 0; }
+  .name { font-size: 13px; font-weight: 590; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .sub  { font-size: 11px; color: var(--ink-2); font-variant-numeric: tabular-nums; }
+  .state { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+  .badge { font-size: 11px; font-weight: 600; padding: 2.5px 8px; border-radius: 20px; }
+  .badge.ok { color: var(--ok); background: color-mix(in srgb, var(--ok) 14%, transparent); }
+  .badge.err { color: var(--bad); background: color-mix(in srgb, var(--bad) 13%, transparent); }
+  .badge.wait { color: var(--ink-2); background: var(--row-hover); }
+  .suggest {
+    font-size: 11px; font-weight: 600; color: var(--accent);
+    background: var(--chip-bg); border: none; border-radius: 20px;
+    padding: 2.5px 9px; cursor: pointer;
+  }
+  .spinner { width: 15px; height: 15px; flex-shrink: 0; }
+  .spinner circle {
+    fill: none; stroke: var(--accent); stroke-width: 2.6; stroke-linecap: round;
+    stroke-dasharray: 28 12; animation: spin .8s linear infinite; transform-origin: center;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .statusbar {
+    display: flex; align-items: center; gap: 10px;
+    padding: 9px 16px; font-size: 11.5px; color: var(--ink-2);
+    border-top: 0.5px solid var(--hairline);
+    background: var(--toolbar-bg);
+    font-variant-numeric: tabular-nums;
+  }
+  .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--ok); }
+  .dot.busy { background: var(--min); animation: pulse 1s ease-in-out infinite; }
+  @keyframes pulse { 50% { opacity: .35; } }
+  .hidden { display: none !important; }
+</style>
+</head>
+<body>
+
+<main class="window" role="application" aria-label="PDF Standards Converter">
+  <header class="titlebar">
+    <div class="lights" aria-hidden="true">
+      <span class="light c"></span><span class="light m"></span><span class="light z"></span>
+    </div>
+    <h1 class="title">PDF Standards Converter</h1>
+    <span class="ver" id="ver">loading engine…</span>
+  </header>
+
+  <div class="toolbar">
+    <span class="label">Convert to</span>
+    <select class="popup" id="level" aria-label="Conformance level">
+      <optgroup label="PDF/A — Archival">
+        <option value="2b" selected>PDF/A-2b</option>
+        <option value="2u">PDF/A-2u</option>
+        <option value="2a">PDF/A-2a</option>
+        <option value="1b">PDF/A-1b</option>
+        <option value="1a">PDF/A-1a</option>
+        <option value="3b">PDF/A-3b</option>
+        <option value="3u">PDF/A-3u</option>
+        <option value="3a">PDF/A-3a</option>
+        <option value="4">PDF/A-4</option>
+        <option value="4f">PDF/A-4f</option>
+        <option value="4e">PDF/A-4e</option>
+      </optgroup>
+      <optgroup label="PDF/X — Print">
+        <option value="x1a">PDF/X-1a (CMYK)</option>
+        <option value="x3">PDF/X-3</option>
+        <option value="x4">PDF/X-4</option>
+        <option value="x6">PDF/X-6</option>
+      </optgroup>
+      <optgroup label="PDF/E · PDF/VT">
+        <option value="e1">PDF/E-1</option>
+        <option value="vt1">PDF/VT-1</option>
+        <option value="vt3">PDF/VT-3</option>
+      </optgroup>
+    </select>
+
+    <label class="switchwrap" title="Layer PDF/UA accessibility (PDF/A levels only)">
+      <span class="switch">
+        <input type="checkbox" id="ua">
+        <span class="track"></span><span class="knob"></span>
+      </span>
+      <span class="label">PDF/UA</span>
+    </label>
+
+    <label class="switchwrap" title="Remove or flatten non-compliant content that cannot be preserved exactly (transparency, alpha) instead of rejecting the file">
+      <span class="switch">
+        <input type="checkbox" id="fix">
+        <span class="track"></span><span class="knob"></span>
+      </span>
+      <span class="label">Aggressive cleanup</span>
+    </label>
+
+    <span class="spacer"></span>
+    <button class="btn" id="clear">Clear</button>
+    <button class="btn primary" id="convert" disabled>Convert</button>
+  </div>
+
+  <div class="drop" id="drop" tabindex="0" role="button" aria-label="Add PDF files">
+    <svg width="34" height="34" viewBox="0 0 34 34" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M17 4v16m0 0-6-6m6 6 6-6"/><path d="M6 23v4a3 3 0 0 0 3 3h16a3 3 0 0 0 3-3v-4"/>
+    </svg>
+    <div class="big">Drop PDFs here</div>
+    <div class="hint">or <u>choose files…</u> — JPEG scans work too</div>
+    <input type="file" id="picker" accept="application/pdf,image/jpeg,.pdf,.jpg,.jpeg" multiple hidden>
+  </div>
+
+  <ul class="files" id="files"></ul>
+
+  <footer class="statusbar">
+    <span class="dot" id="dot"></span>
+    <span id="status">Ready</span>
+    <span class="spacer"></span>
+    <button class="btn small hidden" id="dlall">Download All</button>
+  </footer>
+</main>
+
+<script type="module">
+  const $ = (id) => document.getElementById(id);
+  const worker = new Worker('./worker.js', { type: 'module' });
+  const jobs = new Map();
+  let seq = 0;
+  const items = [];
+
+  const fmt = (n) => n > 1048576 ? (n/1048576).toFixed(1) + ' MB' : Math.max(1, Math.round(n/1024)) + ' KB';
+
+  function el(tag, cls, text) {
+    const n = document.createElement(tag);
+    if (cls) n.className = cls;
+    if (text !== undefined) n.textContent = text;
+    return n;
+  }
+  function docIcon() {
+    const t = document.createElement('template');
+    t.innerHTML = `<svg class="doc" width="30" height="34" viewBox="0 0 30 34"><path d="M4 3a3 3 0 0 1 3-3h12l9 9v22a3 3 0 0 1-3 3H7a3 3 0 0 1-3-3z" fill="#E5484D"/><path d="M19 0l9 9h-7a2 2 0 0 1-2-2z" fill="#F8A9AC"/><text x="15" y="26" text-anchor="middle" font-family="-apple-system" font-size="8.5" font-weight="700" fill="#fff">PDF</text></svg>`;
+    return t.content.firstChild;
+  }
+  function spinnerEl() {
+    const t = document.createElement('template');
+    t.innerHTML = `<svg class="spinner" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6.2"/></svg>`;
+    return t.content.firstChild;
+  }
+
+  worker.onmessage = (e) => {
+    const j = jobs.get(e.data.id);
+    if (j) { jobs.delete(e.data.id); j(e.data); }
+  };
+  function convertInWorker(bytes, level, opts) {
+    return new Promise((resolve) => {
+      const id = ++seq;
+      jobs.set(id, resolve);
+      worker.postMessage({ id, bytes, level, opts }, [bytes]);
+    });
+  }
+  convertInWorker(new Uint8Array([0]).buffer, '2b', {}).then(r => {
+    $('ver').textContent = 'engine ' + (r.engine || '1.0.0') + ' · wasm';
+  });
+
+  function addFiles(list) {
+    for (const f of list) {
+      if (!/\.(pdf|jpe?g)$/i.test(f.name)) continue;
+      const it = { file: f, status: 'pending', el: null, blob: null, outName: '' };
+      items.push(it);
+      render(it);
+    }
+    refresh();
+  }
+
+  function render(it) {
+    if (!it.el) {
+      it.el = el('li', 'row');
+      $('files').appendChild(it.el);
+    }
+    it.el.replaceChildren();
+    it.el.appendChild(docIcon());
+
+    const meta = el('div', 'meta');
+    meta.appendChild(el('div', 'name', it.file.name));
+    let sub = fmt(it.file.size);
+    if (it.ms) sub += ' · ' + it.ms + ' ms';
+    if (it.outSize) sub += ' → ' + fmt(it.outSize);
+    meta.appendChild(el('div', 'sub', sub));
+    it.el.appendChild(meta);
+
+    const state = el('div', 'state');
+    if (it.status === 'pending') {
+      state.appendChild(el('span', 'badge wait', 'Ready'));
+    } else if (it.status === 'working') {
+      state.appendChild(spinnerEl());
+    } else if (it.status === 'done') {
+      state.appendChild(el('span', 'badge ok', '✓ ' + it.level + (it.ua ? '+UA' : '')));
+      const dl = el('button', 'btn small', 'Download');
+      dl.onclick = () => download(it);
+      state.appendChild(dl);
+    } else if (it.status === 'error') {
+      const b = el('span', 'badge err', '✕ ' + (it.errorCode || 'Failed'));
+      b.title = it.error || '';
+      state.appendChild(b);
+      if (it.suggest) {
+        const s = el('button', 'suggest', 'Try ' + it.suggest);
+        s.onclick = () => convertOne(it, it.suggest);
+        state.appendChild(s);
+      }
+    }
+    it.el.appendChild(state);
+  }
+
+  function download(it) {
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(it.blob);
+    a.download = it.outName;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+  }
+
+  async function convertOne(it, levelOverride) {
+    const level = levelOverride || $('level').value;
+    const ua = $('ua').checked && !$('ua').disabled;
+    it.status = 'working'; it.suggest = null; render(it); refresh(true);
+    const bytes = await it.file.arrayBuffer();
+    const opts = {}; if (ua) opts.ua = true; if ($('fix').checked) opts.allowVisualRisk = true;
+    const r = await convertInWorker(bytes, level, opts);
+    it.ms = r.ms;
+    if (r.ok) {
+      it.status = 'done'; it.level = level; it.ua = ua;
+      it.blob = new Blob([r.pdf], { type: 'application/pdf' });
+      it.outSize = it.blob.size;
+      it.outName = it.file.name.replace(/\.(pdf|jpe?g)$/i, '') + '.' + level + (ua ? '-ua' : '') + '.pdf';
+    } else {
+      it.status = 'error'; it.errorCode = r.errorCode; it.error = r.error;
+      it.suggest = r.suggestedLevel;
+    }
+    render(it); refresh();
+  }
+
+  async function convertAll() {
+    $('convert').disabled = true;
+    for (const it of items) {
+      if (it.status !== 'done') await convertOne(it);
+    }
+    $('convert').disabled = false;
+    refresh();
+  }
+
+  function refresh(busy) {
+    const done = items.filter(i => i.status === 'done').length;
+    const err = items.filter(i => i.status === 'error').length;
+    $('convert').disabled = items.length === 0;
+    $('dot').className = 'dot' + (busy ? ' busy' : '');
+    $('status').textContent = items.length === 0 ? 'Ready'
+      : busy ? 'Converting…'
+      : `${done} of ${items.length} converted${err ? ` · ${err} failed` : ''}`;
+    $('dlall').classList.toggle('hidden', done < 2);
+  }
+
+  $('level').onchange = () => {
+    const a = /^[1-4]/.test($('level').value);
+    $('ua').disabled = !a;
+    if (!a) $('ua').checked = false;
+  };
+
+  $('convert').onclick = convertAll;
+  $('clear').onclick = () => { items.length = 0; $('files').replaceChildren(); refresh(); };
+  $('dlall').onclick = () => items.filter(i => i.status === 'done').forEach((it, k) =>
+    setTimeout(() => download(it), k * 350));
+
+  const drop = $('drop');
+  drop.onclick = () => $('picker').click();
+  drop.onkeydown = (e) => { if (e.key === 'Enter' || e.key === ' ') $('picker').click(); };
+  $('picker').onchange = (e) => { addFiles(e.target.files); e.target.value = ''; };
+  ['dragover', 'dragenter'].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.add('over'); }));
+  ['dragleave', 'drop'].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.remove('over'); }));
+  drop.addEventListener('drop', e => addFiles(e.dataTransfer.files));
+  window.addEventListener('dragover', e => e.preventDefault());
+  window.addEventListener('drop', e => e.preventDefault());
+</script>
+</body>
+</html>

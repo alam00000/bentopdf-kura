@@ -1,0 +1,91 @@
+#include <emscripten/bind.h>
+#include <emscripten/val.h>
+
+#include <string>
+#include <vector>
+
+#include "pdfa/pdfa.hh"
+
+namespace {
+std::string optString(emscripten::val opts, const char* key) {
+  if (opts.isUndefined() || opts.isNull()) return std::string();
+  emscripten::val v = opts[key];
+  if (v.isUndefined() || v.isNull()) return std::string();
+  return v.as<std::string>();
+}
+
+bool optBool(emscripten::val opts, const char* key) {
+  if (opts.isUndefined() || opts.isNull()) return false;
+  emscripten::val v = opts[key];
+  if (v.isUndefined() || v.isNull()) return false;
+  return v.as<bool>();
+}
+
+std::string optBytes(emscripten::val opts, const char* key) {
+  if (opts.isUndefined() || opts.isNull()) return std::string();
+  emscripten::val v = opts[key];
+  if (v.isUndefined() || v.isNull()) return std::string();
+  std::vector<uint8_t> bytes = emscripten::convertJSArrayToNumberVector<uint8_t>(v);
+  return std::string(bytes.begin(), bytes.end());
+}
+
+emscripten::val convertJs(emscripten::val data, const std::string& level,
+                          emscripten::val opts) {
+  emscripten::val result = emscripten::val::object();
+  pdfa::Options opt;
+  if (!pdfa::levelFromString(level, opt.level)) {
+    result.set("ok", false);
+    result.set("errorCode", std::string("BAD_LEVEL"));
+    result.set("error", std::string("unknown conformance level: ") + level);
+    return result;
+  }
+  opt.allowVisualRisk = optBool(opts, "allowVisualRisk");
+  opt.ua = optBool(opts, "ua");
+  opt.password = optString(opts, "password");
+  opt.docLang = optString(opts, "lang");
+  opt.outputConditionIdentifier = optString(opts, "outputCondition");
+  opt.outputConditionInfo = optString(opts, "outputConditionInfo");
+  opt.outputConditionRegistry = optString(opts, "registry");
+  opt.vtRecords = optString(opts, "vtRecords");
+  opt.attachXmlName = optString(opts, "attachXmlName");
+  opt.facturxProfile = optString(opts, "facturxProfile");
+  opt.nowOverride = optString(opts, "now");
+  opt.destProfile = optBytes(opts, "destProfile");
+  opt.attachXml = optBytes(opts, "attachXml");
+
+  std::vector<uint8_t> input = emscripten::convertJSArrayToNumberVector<uint8_t>(data);
+  pdfa::Result res = pdfa::convert(input.data(), input.size(), opt);
+  result.set("ok", res.ok);
+  result.set("level", pdfa::levelToString(opt.level));
+  result.set("engine", std::string(pdfa::kEngineVersion));
+  if (!res.errorCode.empty()) {
+    result.set("errorCode", res.errorCode);
+    result.set("error", res.error);
+  }
+  if (!res.suggestedLevel.empty()) result.set("suggestedLevel", res.suggestedLevel);
+  emscripten::val issues = emscripten::val::array();
+  for (size_t i = 0; i < res.issues.size(); ++i) {
+    emscripten::val item = emscripten::val::object();
+    item.set("code", res.issues[i].code);
+    item.set("detail", res.issues[i].detail);
+    item.set("fixed", res.issues[i].fixed);
+    issues.set(i, item);
+  }
+  result.set("issues", issues);
+  if (res.ok) {
+    emscripten::val view = emscripten::val(emscripten::typed_memory_view(
+        res.pdf.size(), reinterpret_cast<const unsigned char*>(res.pdf.data())));
+    emscripten::val out = emscripten::val::global("Uint8Array").new_(res.pdf.size());
+    out.call<void>("set", view);
+    result.set("pdf", out);
+  }
+  return result;
+}
+
+std::string versionJs() { return std::string("pdfa-engine ") + pdfa::kEngineVersion; }
+}
+
+EMSCRIPTEN_BINDINGS(pdfa) {
+  emscripten::function("convert", &convertJs);
+  emscripten::function("version", &versionJs);
+}

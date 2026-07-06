@@ -1,0 +1,11 @@
+build
+build-wasm
+third_party/build-qpdf-wasm
+third_party/build-openjpeg-wasm
+third_party/build-lcms2-wasm
+third_party/openjpeg-2.5.4
+third_party/openjpeg.tar.gz
+third_party/qpdf.tar.gz
+third_party/lcms2
+third_party/lcms2.tar.gz
+third_party/fonts

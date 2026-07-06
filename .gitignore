@@ -1,0 +1,14 @@
+.DS_Store
+*.log
+
+out/
+
+suite/
+cert/
+corpus/
+
+pdfa-engine/build/
+pdfa-engine/build-wasm/
+pdfa-engine/third_party/
+
+dist/

@@ -1,0 +1,7 @@
+{
+  "name": "pdfa-engine-wasm",
+  "version": "0.1.0",
+  "type": "module",
+  "main": "pdfa.js",
+  "files": ["pdfa.js", "pdfa.wasm", "example.mjs"]
+}
