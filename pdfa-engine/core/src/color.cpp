@@ -200,7 +200,9 @@ void scanContent(Ctx& ctx, QPDFObjectHandle contentHolder, QPDFObjectHandle res,
   }
 }
 
-void scanResources(Ctx& ctx, QPDFObjectHandle res, Visited& visited, ColorUsage& usage) {
+void scanResources(Ctx& ctx, QPDFObjectHandle res, Visited& visited, ColorUsage& usage,
+                   int depth = 0) {
+  if (depth > 96) return;
   if (!res.isDictionary() || !visited.enter(res)) return;
   QPDFObjectHandle xod = res.getKey("/XObject");
   if (xod.isDictionary()) {
@@ -217,7 +219,7 @@ void scanResources(Ctx& ctx, QPDFObjectHandle res, Visited& visited, ColorUsage&
         QPDFObjectHandle group = d.getKey("/Group");
         if (group.isDictionary()) classifySpace(ctx, group.getKey("/CS"), inner, usage, 0);
         scanContent(ctx, xo, inner, usage);
-        scanResources(ctx, d.getKey("/Resources"), visited, usage);
+        scanResources(ctx, d.getKey("/Resources"), visited, usage, depth + 1);
       }
     }
   }
@@ -246,7 +248,7 @@ void scanResources(Ctx& ctx, QPDFObjectHandle res, Visited& visited, ColorUsage&
                                      ? p.getDict().getKey("/Resources")
                                      : res;
         scanContent(ctx, p, inner, usage);
-        scanResources(ctx, p.getDict().getKey("/Resources"), visited, usage);
+        scanResources(ctx, p.getDict().getKey("/Resources"), visited, usage, depth + 1);
       } else if (p.isDictionary()) {
         QPDFObjectHandle sh = p.getKey("/Shading");
         QPDFObjectHandle d = sh.isStream() ? sh.getDict() : sh;
@@ -641,10 +643,11 @@ void fixIccIdenticalToIntent(Ctx& ctx, QPDFObjectHandle keepIntent) {
   if (identical.empty()) return;
   int replaced = 0;
   Visited visited;
-  std::function<void(QPDFObjectHandle)> hunt = [&](QPDFObjectHandle o) {
+  std::function<void(QPDFObjectHandle, int)> hunt = [&](QPDFObjectHandle o, int depth) {
+    if (depth > 64) return;
     if (o.isIndirect() && !visited.enter(o)) return;
     if (o.isStream()) {
-      hunt(o.getDict());
+      hunt(o.getDict(), depth + 1);
       return;
     }
     if (o.isArray()) {
@@ -658,18 +661,18 @@ void fixIccIdenticalToIntent(Ctx& ctx, QPDFObjectHandle keepIntent) {
       }
       for (int i = 0; i < o.getArrayNItems(); ++i) {
         QPDFObjectHandle v = o.getArrayItem(i);
-        if (!v.isIndirect()) hunt(v);
+        if (!v.isIndirect()) hunt(v, depth + 1);
       }
       return;
     }
     if (o.isDictionary()) {
       for (const std::string& k : o.getKeys()) {
         QPDFObjectHandle v = o.getKey(k);
-        if (!v.isIndirect()) hunt(v);
+        if (!v.isIndirect()) hunt(v, depth + 1);
       }
     }
   };
-  for (QPDFObjectHandle obj : ctx.pdf.getAllObjects()) hunt(obj);
+  for (QPDFObjectHandle obj : ctx.pdf.getAllObjects()) hunt(obj, 0);
   int opm = 0;
   for (QPDFObjectHandle obj : ctx.pdf.getAllObjects()) {
     if (obj.isDictionary() && obj.getKey("/OPM").isNumber() &&
@@ -821,10 +824,11 @@ void passColor(Ctx& ctx) {
     int reduced = 0;
     std::vector<QPDFObjectHandle> wide;
     Visited hunt;
-    std::function<void(QPDFObjectHandle)> collect = [&](QPDFObjectHandle o) {
+    std::function<void(QPDFObjectHandle, int)> collect = [&](QPDFObjectHandle o, int depth) {
+      if (depth > 64) return;
       if (o.isIndirect() && !hunt.enter(o)) return;
       if (o.isStream()) {
-        collect(o.getDict());
+        collect(o.getDict(), depth + 1);
         return;
       }
       if (o.isArray()) {
@@ -837,18 +841,18 @@ void passColor(Ctx& ctx) {
         }
         for (int i = 0; i < o.getArrayNItems(); ++i) {
           QPDFObjectHandle v = o.getArrayItem(i);
-          if (!v.isIndirect()) collect(v);
+          if (!v.isIndirect()) collect(v, depth + 1);
         }
         return;
       }
       if (o.isDictionary()) {
         for (const std::string& k : o.getKeys()) {
           QPDFObjectHandle v = o.getKey(k);
-          if (!v.isIndirect()) collect(v);
+          if (!v.isIndirect()) collect(v, depth + 1);
         }
       }
     };
-    for (QPDFObjectHandle obj : ctx.pdf.getAllObjects()) collect(obj);
+    for (QPDFObjectHandle obj : ctx.pdf.getAllObjects()) collect(obj, 0);
     for (QPDFObjectHandle obj : wide) {
       QPDFObjectHandle icc = buildIccStream(ctx, kCmykIcc, kCmykIccLen, 4);
       while (obj.getArrayNItems() > 0) obj.eraseItem(obj.getArrayNItems() - 1);

@@ -16,6 +16,8 @@ struct RawImage {
 };
 
 RawImage decodeImage(QPDFObjectHandle image);
+std::string encodeCmykJpeg(const std::string& cmyk, int width, int height, int quality);
+std::string flateCompress(const std::string& data);
 bool flattenImageSMask(Ctx& ctx, QPDFObjectHandle image);
 RawImage decodeJpxData(const std::string& data, std::string& alphaOut);
 bool transcodeJpxImage(Ctx& ctx, QPDFObjectHandle image);

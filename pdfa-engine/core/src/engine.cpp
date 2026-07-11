@@ -6,6 +6,7 @@
 #include <cstdio>
 
 #include <chrono>
+#include <set>
 #include <cstring>
 #include <exception>
 
@@ -310,6 +311,46 @@ Result convert(const unsigned char* data, std::size_t size, const Options& opt) 
     }
     if (wasEncrypted) {
       ctx.issue("ENCRYPTION_REMOVED", "document was encrypted; encryption removed", true);
+    }
+    {
+      int maxDepth = 0;
+      std::set<QPDFObjGen> path;
+      std::vector<std::pair<QPDFObjectHandle, int>> stack;
+      QPDFObjectHandle rootPages = active->getRoot().getKey("/Pages");
+      if (rootPages.isDictionary()) stack.push_back({rootPages, 0});
+      std::set<QPDFObjGen> seen;
+      size_t visited = 0;
+      while (!stack.empty()) {
+        auto [node, d] = stack.back();
+        stack.pop_back();
+        if (d > maxDepth) maxDepth = d;
+        if (maxDepth > 500 || ++visited > 5000000) {
+          res.errorCode = "NESTING_TOO_DEEP";
+          res.error = "document has pathologically nested resources or an object cycle "
+                      "that cannot be safely processed; the file may be malformed or crafted";
+          return res;
+        }
+        if (!node.isDictionary() && !node.isStream()) continue;
+        QPDFObjectHandle dict = node.isStream() ? node.getDict() : node;
+        if (node.isIndirect() && !seen.insert(node.getObjGen()).second) continue;
+        QPDFObjectHandle kids = dict.getKey("/Kids");
+        if (kids.isArray()) {
+          for (int i = 0; i < kids.getArrayNItems(); ++i) {
+            stack.push_back({kids.getArrayItem(i), d + 1});
+          }
+        }
+        QPDFObjectHandle resrc = dict.getKey("/Resources");
+        QPDFObjectHandle xo = resrc.isDictionary() ? resrc.getKey("/XObject")
+                                                   : QPDFObjectHandle::newNull();
+        if (xo.isDictionary()) {
+          for (const std::string& k : xo.getKeys()) {
+            QPDFObjectHandle x = xo.getKey(k);
+            if (x.isStream() && x.getDict().getKey("/Subtype").isName() && x.getDict().getKey("/Subtype").getName() == "/Form") {
+              stack.push_back({x, d + 1});
+            }
+          }
+        }
+      }
     }
     const bool timing = std::getenv("PDFA_TIMING") != nullptr;
     auto tmark = std::chrono::steady_clock::now();

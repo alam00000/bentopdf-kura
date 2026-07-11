@@ -14,6 +14,7 @@
 #include <memory>
 #include <set>
 #include <string>
+#include <thread>
 #include <vector>
 
 #include "assets/cmyk_icc.hh"
@@ -60,6 +61,23 @@ struct Xform {
   bool ok() const { return rgb2cmyk != nullptr; }
 
   void rgbBuffer(const unsigned char* in, unsigned char* out, size_t pixels) const {
+    if (pixels >= 1u << 21) {
+      unsigned n = std::min(4u, std::thread::hardware_concurrency());
+      if (n > 1) {
+        std::vector<std::thread> ts;
+        size_t chunk = pixels / n;
+        for (unsigned t = 0; t < n; ++t) {
+          size_t off = t * chunk;
+          size_t cnt = t == n - 1 ? pixels - off : chunk;
+          ts.emplace_back([this, in, out, off, cnt] {
+            cmsDoTransform(rgb2cmyk, in + off * 3, out + off * 4,
+                           static_cast<cmsUInt32Number>(cnt));
+          });
+        }
+        for (auto& th : ts) th.join();
+        return;
+      }
+    }
     cmsDoTransform(rgb2cmyk, in, out, static_cast<cmsUInt32Number>(pixels));
   }
 
@@ -228,7 +246,21 @@ QPDFObjectHandle convertType4(Ctx& ctx, QPDFObjectHandle fn, bool& naive) {
   return ctx.pdf.makeIndirectObject(nf);
 }
 
+int& x1aDepth() {
+  static thread_local int d = 0;
+  return d;
+}
+
+struct X1aGuard {
+  bool over;
+  X1aGuard() : over(x1aDepth() > 200) { ++x1aDepth(); }
+  ~X1aGuard() { --x1aDepth(); }
+};
+
 QPDFObjectHandle convertFunction(Ctx& ctx, const Xform& xf, QPDFObjectHandle fn, bool& naive) {
+  X1aGuard g_;
+  if (g_.over) return QPDFObjectHandle();
+
   QPDFObjectHandle d = fn.isStream() ? fn.getDict() : fn;
   if (!d.isDictionary()) return QPDFObjectHandle();
   long long type = d.getKey("/FunctionType").isInteger()
@@ -334,8 +366,26 @@ void convertImage(Ctx& ctx, ConvertState& st, QPDFObjectHandle image) {
   std::string out(pixels * 4, '\0');
   st.xf.rgbBuffer(reinterpret_cast<const unsigned char*>(img.samples.data()),
                   reinterpret_cast<unsigned char*>(&out[0]), pixels);
-  image.replaceStreamData(out, QPDFObjectHandle::newNull(), QPDFObjectHandle::newNull());
-  d.removeKey("/Filter");
+  std::string encoded;
+  const char* newFilter = nullptr;
+  if (pixels > 262144) {
+    encoded = encodeCmykJpeg(out, img.width, img.height, 90);
+    if (!encoded.empty()) newFilter = "/DCTDecode";
+  }
+  if (!newFilter) {
+    std::string flated = flateCompress(out);
+    if (!flated.empty() && (encoded.empty() || flated.size() < encoded.size())) {
+      encoded = flated;
+      newFilter = "/FlateDecode";
+    }
+  }
+  if (newFilter) {
+    image.replaceStreamData(encoded, QPDFObjectHandle::newName(newFilter),
+                            QPDFObjectHandle::newNull());
+  } else {
+    image.replaceStreamData(out, QPDFObjectHandle::newNull(), QPDFObjectHandle::newNull());
+    d.removeKey("/Filter");
+  }
   d.replaceKey("/ColorSpace", QPDFObjectHandle::newName("/DeviceCMYK"));
   d.replaceKey("/BitsPerComponent", QPDFObjectHandle::newInteger(8));
   d.replaceKey("/Width", QPDFObjectHandle::newInteger(img.width));
@@ -383,6 +433,8 @@ bool convertSpaceObject(Ctx& ctx, ConvertState& st, QPDFObjectHandle holder,
                         std::map<std::string, bool>* opFix);
 
 void convertShading(Ctx& ctx, ConvertState& st, QPDFObjectHandle sh) {
+  X1aGuard g_;
+  if (g_.over) { st.failed = true; st.failReason = "shading nesting too deep"; return; }
   QPDFObjectHandle d = sh.isStream() ? sh.getDict() : sh;
   if (!d.isDictionary() || !st.spacesDone.enter(sh)) return;
   QPDFObjectHandle cs = d.getKey("/ColorSpace");
@@ -432,6 +484,8 @@ void convertShading(Ctx& ctx, ConvertState& st, QPDFObjectHandle sh) {
 bool convertSpaceObject(Ctx& ctx, ConvertState& st, QPDFObjectHandle holder,
                         const std::string& key, QPDFObjectHandle cs,
                         std::map<std::string, bool>* opFix) {
+  X1aGuard g_;
+  if (g_.over) { st.failed = true; st.failReason = "colour space nesting too deep"; return false; }
   if (cs.isName()) {
     if (isRgbClassName(cs.getName())) {
       holder.replaceKey(key, QPDFObjectHandle::newName("/DeviceCMYK"));
@@ -667,10 +721,20 @@ void rewriteContent(Ctx& ctx, ConvertState& st, QPDFObjectHandle holder,
 }
 
 void processResources(Ctx& ctx, ConvertState& st, QPDFObjectHandle res, Visited& visited,
-                      std::map<std::string, bool>& fixNames);
+                      std::map<std::string, bool>& fixNames, int depth = 0);
+
+struct RecurGuard {
+  int& d;
+  bool over;
+  explicit RecurGuard(int& c) : d(c), over(c > 250) { ++d; }
+  ~RecurGuard() { --d; }
+};
 
 void processResources(Ctx& ctx, ConvertState& st, QPDFObjectHandle res, Visited& visited,
-                      std::map<std::string, bool>& fixNames) {
+                      std::map<std::string, bool>& fixNames, int depth) {
+  static thread_local int liveDepth = 0;
+  RecurGuard guard(liveDepth);
+  if (guard.over || depth > 64) return;
   if (!res.isDictionary() || !visited.enter(res)) return;
   QPDFObjectHandle csd = res.getKey("/ColorSpace");
   if (csd.isDictionary()) {
@@ -690,7 +754,7 @@ void processResources(Ctx& ctx, ConvertState& st, QPDFObjectHandle res, Visited&
         if (st.failed) return;
       } else if (subtype == "/Form" && visited.enter(xo)) {
         std::map<std::string, bool> inner;
-        processResources(ctx, st, xo.getDict().getKey("/Resources"), visited, inner);
+        processResources(ctx, st, xo.getDict().getKey("/Resources"), visited, inner, depth + 1);
         if (st.failed) return;
         rewriteContent(ctx, st, xo, inner);
         if (st.failed) return;
@@ -710,7 +774,7 @@ void processResources(Ctx& ctx, ConvertState& st, QPDFObjectHandle res, Visited&
       QPDFObjectHandle p = pat.getKey(k);
       if (p.isStream() && visited.enter(p)) {
         std::map<std::string, bool> inner;
-        processResources(ctx, st, p.getDict().getKey("/Resources"), visited, inner);
+        processResources(ctx, st, p.getDict().getKey("/Resources"), visited, inner, depth + 1);
         if (st.failed) return;
         rewriteContent(ctx, st, p, inner);
         if (st.failed) return;
@@ -730,7 +794,7 @@ void processResources(Ctx& ctx, ConvertState& st, QPDFObjectHandle res, Visited&
       if (cp.isDictionary() && visited.enter(cp)) {
         std::map<std::string, bool> inner;
         QPDFObjectHandle fres = fnt.getKey("/Resources");
-        processResources(ctx, st, fres.isDictionary() ? fres : res, visited, inner);
+        processResources(ctx, st, fres.isDictionary() ? fres : res, visited, inner, depth + 1);
         if (st.failed) return;
         for (const std::string& g : cp.getKeys()) {
           QPDFObjectHandle glyph = cp.getKey(g);

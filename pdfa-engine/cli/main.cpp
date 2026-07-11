@@ -1,6 +1,9 @@
 #include <dlfcn.h>
 
+#include <csignal>
 #include <cstdio>
+#include <cstdlib>
+#include <unistd.h>
 #include <cstring>
 #include <fstream>
 #include <iostream>
@@ -167,7 +170,20 @@ int usage() {
 }
 }
 
+extern "C" void pdfa_watchdog(int) {
+  static const char* msg =
+      "{\n  \"ok\": false,\n  \"errorCode\": \"CONVERT_TIMEOUT\",\n"
+      "  \"error\": \"conversion exceeded the time budget; the input may be "
+      "malformed or crafted with pathological nesting\"\n}\n";
+  ssize_t n = write(1, msg, std::strlen(msg));
+  (void)n;
+  _exit(0);
+}
+
 int main(int argc, char** argv) {
+  std::signal(SIGALRM, pdfa_watchdog);
+  const char* budget = std::getenv("PDFA_TIMEOUT");
+  alarm(budget ? static_cast<unsigned>(std::atoi(budget)) : 120u);
   pdfa::Options opt;
   std::string input, output;
   bool haveLevel = false;

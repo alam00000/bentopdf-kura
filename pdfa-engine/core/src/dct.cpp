@@ -93,4 +93,57 @@ RawImage decodeDctData(const std::string& data, bool& cmykInverted) {
   out.ok = true;
   return out;
 }
+
+std::string encodeCmykJpeg(const std::string& cmyk, int width, int height, int quality) {
+  std::string inverted(cmyk.size(), '\0');
+  for (size_t i = 0; i < cmyk.size(); ++i) {
+    inverted[i] = static_cast<char>(0xFF - static_cast<unsigned char>(cmyk[i]));
+  }
+  jpeg_compress_struct cinfo;
+  JpegError jerr;
+  cinfo.err = jpeg_std_error(&jerr.mgr);
+  jerr.mgr.error_exit = [](j_common_ptr ci) {
+    JpegError* e = reinterpret_cast<JpegError*>(ci->err);
+    longjmp(e->jump, 1);
+  };
+  unsigned char* buf = nullptr;
+  unsigned long bufLen = 0;
+  if (setjmp(jerr.jump)) {
+    jpeg_destroy_compress(&cinfo);
+    if (buf) free(buf);
+    return std::string();
+  }
+  jpeg_create_compress(&cinfo);
+  jpeg_mem_dest(&cinfo, &buf, &bufLen);
+  cinfo.image_width = static_cast<JDIMENSION>(width);
+  cinfo.image_height = static_cast<JDIMENSION>(height);
+  cinfo.input_components = 4;
+  cinfo.in_color_space = JCS_CMYK;
+  jpeg_set_defaults(&cinfo);
+  jpeg_set_quality(&cinfo, quality, TRUE);
+  jpeg_start_compress(&cinfo, TRUE);
+  size_t stride = static_cast<size_t>(width) * 4;
+  while (cinfo.next_scanline < cinfo.image_height) {
+    JSAMPROW row = reinterpret_cast<JSAMPROW>(
+        const_cast<char*>(inverted.data()) + cinfo.next_scanline * stride);
+    jpeg_write_scanlines(&cinfo, &row, 1);
+  }
+  jpeg_finish_compress(&cinfo);
+  jpeg_destroy_compress(&cinfo);
+  std::string out(reinterpret_cast<char*>(buf), bufLen);
+  free(buf);
+  return out;
+}
+
+std::string flateCompress(const std::string& data) {
+  uLongf cap = compressBound(static_cast<uLong>(data.size()));
+  std::string out(cap, '\0');
+  if (compress2(reinterpret_cast<Bytef*>(&out[0]), &cap,
+                reinterpret_cast<const Bytef*>(data.data()),
+                static_cast<uLong>(data.size()), 6) != Z_OK) {
+    return std::string();
+  }
+  out.resize(cap);
+  return out;
+}
 }
