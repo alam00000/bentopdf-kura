@@ -257,12 +257,12 @@
       </optgroup>
     </select>
 
-    <label class="switchwrap" title="Layer PDF/UA accessibility (PDF/A levels only)">
+    <label class="switchwrap" id="uawrap" title="Layer PDF/UA accessibility. PDF/A-1/2/3 → PDF/UA-1; PDF/A-4 → PDF/UA-2.">
       <span class="switch">
         <input type="checkbox" id="ua">
         <span class="track"></span><span class="knob"></span>
       </span>
-      <span class="label">PDF/UA</span>
+      <span class="label" id="ualabel">PDF/UA-1</span>
     </label>
 
     <label class="switchwrap" title="Remove or flatten non-compliant content that cannot be preserved exactly (transparency, alpha) instead of rejecting the file">
@@ -435,11 +435,17 @@
     $('dlall').classList.toggle('hidden', done < 2);
   }
 
-  $('level').onchange = () => {
-    const a = /^[1-4]/.test($('level').value);
-    $('ua').disabled = !a;
-    if (!a) $('ua').checked = false;
-  };
+  function syncUa() {
+    const v = $('level').value;
+    const isA = /^[1-4]/.test(v);
+    $('ua').disabled = !isA;
+    if (!isA) $('ua').checked = false;
+    const uaVer = /^4/.test(v) ? 'PDF/UA-2' : 'PDF/UA-1';
+    $('ualabel').textContent = isA ? uaVer : 'PDF/UA';
+    $('uawrap').style.opacity = isA ? '1' : '.4';
+  }
+  $('level').onchange = syncUa;
+  syncUa();
 
   $('convert').onclick = convertAll;
   $('clear').onclick = () => { items.length = 0; $('files').replaceChildren(); refresh(); };
