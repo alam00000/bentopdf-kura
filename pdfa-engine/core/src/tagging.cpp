@@ -203,6 +203,8 @@ class StripMcFilter : public QPDFObjectHandle::TokenFilter {
 };
 
 void stripFormMarkedContent(Ctx& ctx, QPDFObjectHandle res, Visited& visited) {
+  DepthGuard g_(visited);
+  if (g_.over) return;
   if (!res.isDictionary() || !visited.enter(res)) return;
   QPDFObjectHandle xod = res.getKey("/XObject");
   if (!xod.isDictionary()) return;
@@ -586,7 +588,9 @@ void uaTagging(Ctx& ctx) {
           }
         } else if (!a.getKey("/Contents").isString() ||
                    a.getKey("/Contents").getUTF8Value().empty()) {
-          std::string alt = subtype == "/Link" ? "Link" : subtype.substr(1) + " annotation";
+          std::string alt = subtype == "/Link" ? "Link"
+                            : (subtype.size() > 1 ? subtype.substr(1) : std::string("Annotation")) +
+                                  " annotation";
           if (subtype == "/Link") {
             QPDFObjectHandle act = a.getKey("/A");
             if (act.isDictionary() && act.getKey("/URI").isString()) {

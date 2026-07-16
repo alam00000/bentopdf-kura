@@ -12,3 +12,5 @@ pdfa-engine/build-wasm/
 pdfa-engine/third_party/
 
 dist/
+pdfa-engine/build-asan/
+pdfa-engine/build-fuzz/

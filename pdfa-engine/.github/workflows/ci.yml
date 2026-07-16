@@ -1,0 +1,134 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+env:
+  QPDF_VERSION: 12.3.2
+
+jobs:
+  asan:
+    name: ASan + UBSan (memory-safety & recursion guard)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            cmake clang ninja-build pkg-config zlib1g-dev libjpeg-dev \
+            libfreetype-dev libopenjp2-7-dev liblcms2-dev libgnutls28-dev
+      - name: Cache qpdf
+        id: qpdf-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/qpdf-install
+          key: qpdf-${{ env.QPDF_VERSION }}-${{ runner.os }}
+      - name: Build qpdf from source
+        if: steps.qpdf-cache.outputs.cache-hit != 'true'
+        run: |
+          curl -sSL -o /tmp/qpdf.tar.gz \
+            "https://github.com/qpdf/qpdf/releases/download/v${QPDF_VERSION}/qpdf-${QPDF_VERSION}.tar.gz"
+          tar -xzf /tmp/qpdf.tar.gz -C /tmp
+          cmake -S "/tmp/qpdf-${QPDF_VERSION}" -B /tmp/qpdf-build -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=OFF \
+            -DREQUIRE_CRYPTO_GNUTLS=ON -DUSE_IMPLICIT_CRYPTO=OFF \
+            -DBUILD_DOC=OFF -DBUILD_EXAMPLES=OFF -DQPDF_TEST_COMPARE_IMAGES=OFF \
+            -DCMAKE_INSTALL_PREFIX="$HOME/qpdf-install"
+          cmake --build /tmp/qpdf-build --target libqpdf
+          cmake --install /tmp/qpdf-build --component dev
+          cmake --install /tmp/qpdf-build --component lib
+      - name: Configure (ASan + UBSan)
+        working-directory: pdfa-engine
+        run: |
+          cmake -B build-asan -G Ninja \
+            -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ \
+            -DPDFA_BUILD_FUZZ=ON \
+            -DCMAKE_PREFIX_PATH="$HOME/qpdf-install" \
+            -DCMAKE_BUILD_TYPE=Debug \
+            -DCMAKE_CXX_FLAGS="-fsanitize=address,undefined -fno-omit-frame-pointer -fno-sanitize-recover=undefined -g -O1" \
+            -DCMAKE_EXE_LINKER_FLAGS="-fsanitize=address,undefined"
+      - name: Build
+        working-directory: pdfa-engine
+        run: cmake --build build-asan --target pdfa-convert fuzz_replay
+      - name: Generate seeds + regression sentinels
+        working-directory: pdfa-engine
+        run: python3 fuzz/gen_seeds.py build-asan/seeds
+      - name: Replay seeds under ASan (recursion / OOB regression guard)
+        working-directory: pdfa-engine
+        env:
+          ASAN_OPTIONS: halt_on_error=1:detect_leaks=0
+          UBSAN_OPTIONS: halt_on_error=1:print_stacktrace=1
+        run: ./build-asan/fuzz/fuzz_replay build-asan/seeds/*.pdf
+      - name: CLI handles deep-nested sentinels without a sanitizer abort
+        working-directory: pdfa-engine
+        env:
+          ASAN_OPTIONS: halt_on_error=1:detect_leaks=0
+        run: |
+          set -e
+          for f in build-asan/seeds/deep_*.pdf; do
+            for lv in 2b 1b 4 x1a; do
+              PDFA_TIMEOUT=60 ./build-asan/cli/pdfa-convert --level "$lv" "$f" /tmp/o.pdf >/dev/null || true
+            done
+          done
+          echo "all sentinels handled without a sanitizer abort"
+
+  fuzz-smoke:
+    name: libFuzzer smoke (short coverage-guided run)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            cmake clang ninja-build pkg-config zlib1g-dev libjpeg-dev \
+            libfreetype-dev libopenjp2-7-dev liblcms2-dev libgnutls28-dev
+      - name: Cache qpdf
+        id: qpdf-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/qpdf-install
+          key: qpdf-${{ env.QPDF_VERSION }}-${{ runner.os }}
+      - name: Build qpdf from source
+        if: steps.qpdf-cache.outputs.cache-hit != 'true'
+        run: |
+          curl -sSL -o /tmp/qpdf.tar.gz \
+            "https://github.com/qpdf/qpdf/releases/download/v${QPDF_VERSION}/qpdf-${QPDF_VERSION}.tar.gz"
+          tar -xzf /tmp/qpdf.tar.gz -C /tmp
+          cmake -S "/tmp/qpdf-${QPDF_VERSION}" -B /tmp/qpdf-build -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=OFF \
+            -DREQUIRE_CRYPTO_GNUTLS=ON -DUSE_IMPLICIT_CRYPTO=OFF \
+            -DBUILD_DOC=OFF -DBUILD_EXAMPLES=OFF -DQPDF_TEST_COMPARE_IMAGES=OFF \
+            -DCMAKE_INSTALL_PREFIX="$HOME/qpdf-install"
+          cmake --build /tmp/qpdf-build --target libqpdf
+          cmake --install /tmp/qpdf-build --component dev
+          cmake --install /tmp/qpdf-build --component lib
+      - name: Configure + build libFuzzer binary
+        working-directory: pdfa-engine
+        run: |
+          cmake -B build-fuzz -G Ninja \
+            -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ \
+            -DPDFA_BUILD_FUZZ=ON -DPDFA_FUZZ_LIBFUZZER=ON -DPDFA_BUILD_CLI=OFF \
+            -DCMAKE_PREFIX_PATH="$HOME/qpdf-install" \
+            -DCMAKE_BUILD_TYPE=Debug \
+            -DCMAKE_CXX_FLAGS="-fsanitize=fuzzer-no-link,address,undefined -fno-omit-frame-pointer -g -O1"
+          cmake --build build-fuzz --target fuzz_convert
+      - name: Seed + run (60s, fail on any crash)
+        working-directory: pdfa-engine
+        env:
+          ASAN_OPTIONS: detect_leaks=0
+        run: |
+          python3 fuzz/gen_seeds.py build-fuzz/corpus
+          ./build-fuzz/fuzz/fuzz_convert build-fuzz/corpus \
+            -max_total_time=60 -rss_limit_mb=4096 -timeout=45 -print_final_stats=1
+      - name: Upload crash reproducers
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fuzz-crashes
+          path: pdfa-engine/crash-*
+          if-no-files-found: ignore

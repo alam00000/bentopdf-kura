@@ -268,8 +268,8 @@ void appendSimple(std::string& xmp, const std::string& tag, const std::string& v
 void appendAlt(std::string& xmp, const std::string& tag, const std::string& value,
                const std::string& lang = "x-default") {
   if (value.empty()) return;
-  xmp += "      <" + tag + "><rdf:Alt><rdf:li xml:lang=\"" + lang + "\">" + xmlEscape(value) +
-         "</rdf:li></rdf:Alt></" + tag + ">\n";
+  xmp += "      <" + tag + "><rdf:Alt><rdf:li xml:lang=\"" + xmlEscape(lang) + "\">" +
+         xmlEscape(value) + "</rdf:li></rdf:Alt></" + tag + ">\n";
 }
 
 void appendSeq(std::string& xmp, const std::string& tag, const std::string& value) {

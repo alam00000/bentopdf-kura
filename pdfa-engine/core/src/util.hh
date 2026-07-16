@@ -20,9 +20,21 @@ inline double numOf(QPDFObjectHandle o, double dflt) {
 
 struct Visited {
   std::set<QPDFObjGen> seen;
+  int depth = 0;
   bool enter(QPDFObjectHandle o) {
     if (!o.isIndirect()) return true;
     return seen.insert(o.getObjGen()).second;
   }
+};
+
+constexpr int kMaxNest = 200;
+
+struct DepthGuard {
+  Visited& v;
+  bool over;
+  explicit DepthGuard(Visited& visited) : v(visited), over(visited.depth >= kMaxNest) {
+    ++v.depth;
+  }
+  ~DepthGuard() { --v.depth; }
 };
 }

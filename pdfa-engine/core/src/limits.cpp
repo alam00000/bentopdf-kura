@@ -295,6 +295,8 @@ QPDFObjectHandle clampScalar(QPDFObjectHandle v, LimitStats& st, bool& changed) 
 }
 
 void clampObjectLimits(QPDFObjectHandle obj, Visited& visited, LimitStats& st) {
+  DepthGuard g_(visited);
+  if (g_.over) return;
   if (obj.isIndirect() && !visited.enter(obj)) return;
   if (obj.isStream()) {
     QPDFObjectHandle sd = obj.getDict();
@@ -364,6 +366,8 @@ void attachFilter(Ctx& ctx, QPDFObjectHandle s, bool pdf14, bool limits23) {
 }
 
 void attachToContentStreams(Ctx& ctx, QPDFObjectHandle res, Visited& visited) {
+  DepthGuard g_(visited);
+  if (g_.over) return;
   bool pdf14 = ctx.pdf14Target();
   bool limits23 = ctx.isA() && ctx.part >= 2 && ctx.part <= 3;
   if (!res.isDictionary() || !visited.enter(res)) return;

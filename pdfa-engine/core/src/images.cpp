@@ -204,6 +204,11 @@ RawImage decodeImage(QPDFObjectHandle image) {
     return out;
   }
   if (comps == -1) {
+    size_t needIdx = ((static_cast<size_t>(width) * bpc + 7) / 8) * height;
+    if (raw.size() < needIdx) {
+      out.error = "truncated indexed image data";
+      return out;
+    }
     std::string indices = expandBits(raw, width, height, 1, bpc);
     int baseComps = componentsForSpace(indexedBase, nullptr, nullptr, nullptr, 1);
     if (baseComps <= 0) {

@@ -130,6 +130,8 @@ void stripSignatures(Ctx& ctx, QPDFObjectHandle root) {
 }
 
 void walkFields(Ctx& ctx, QPDFObjectHandle fields, Visited& visited) {
+  DepthGuard g_(visited);
+  if (g_.over) return;
   if (!fields.isArray()) return;
   for (int i = 0; i < fields.getArrayNItems(); ++i) {
     QPDFObjectHandle f = fields.getArrayItem(i);

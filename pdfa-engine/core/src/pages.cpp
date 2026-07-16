@@ -46,6 +46,8 @@ bool gsHasTransparency(QPDFObjectHandle gs) {
 }
 
 void scanResources(QPDFObjectHandle res, Visited& visited, TransparencyReport& rep) {
+  DepthGuard g_(visited);
+  if (g_.over) return;
   if (!res.isDictionary() || !visited.enter(res)) return;
   QPDFObjectHandle gsd = res.getKey("/ExtGState");
   if (gsd.isDictionary()) {
@@ -81,8 +83,8 @@ void scanResources(QPDFObjectHandle res, Visited& visited, TransparencyReport& r
 
 TransparencyReport scanTransparency(Ctx& ctx, std::vector<QPDFPageObjectHelper>& pages) {
   TransparencyReport rep;
-  Visited visited;
   for (auto& page : pages) {
+    Visited visited;
     size_t before = rep.where.size();
     bool hadReal = rep.real;
     rep.real = false;
@@ -417,6 +419,8 @@ void fixImage(Ctx& ctx, QPDFObjectHandle image, int depth) {
 }
 
 void fixResources(Ctx& ctx, QPDFObjectHandle res, Visited& visited, bool flatten) {
+  DepthGuard g_(visited);
+  if (g_.over) return;
   if (!res.isDictionary() || !visited.enter(res)) return;
   QPDFObjectHandle gsd = res.getKey("/ExtGState");
   if (gsd.isDictionary()) {

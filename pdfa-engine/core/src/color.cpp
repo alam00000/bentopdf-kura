@@ -282,7 +282,7 @@ void scanResources(Ctx& ctx, QPDFObjectHandle res, Visited& visited, ColorUsage&
           QPDFObjectHandle glyph = cp.getKey(g);
           if (glyph.isStream() && visited.enter(glyph)) scanContent(ctx, glyph, inner, usage);
         }
-        scanResources(ctx, fnt.getKey("/Resources"), visited, usage);
+        scanResources(ctx, fnt.getKey("/Resources"), visited, usage, depth + 1);
       }
     }
   }

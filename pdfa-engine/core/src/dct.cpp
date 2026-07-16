@@ -41,6 +41,10 @@ bool inflateData(const std::string& in, std::string& out) {
       return false;
     }
     out.append(buf.data(), buf.size() - zs.avail_out);
+    if (out.size() > (size_t{1} << 29)) {
+      inflateEnd(&zs);
+      return false;
+    }
     if (ret == Z_BUF_ERROR && zs.avail_in == 0) break;
   }
   inflateEnd(&zs);

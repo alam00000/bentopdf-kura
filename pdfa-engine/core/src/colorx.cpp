@@ -129,6 +129,7 @@ QPDFObjectHandle convertType0(Ctx& ctx, const Xform& xf, QPDFObjectHandle fn) {
   int bps = d.getKey("/BitsPerSample").isInteger()
                 ? static_cast<int>(d.getKey("/BitsPerSample").getIntValue())
                 : 8;
+  if (bps < 1 || bps > 32) return QPDFObjectHandle();
   QPDFObjectHandle range = d.getKey("/Range");
   QPDFObjectHandle size = d.getKey("/Size");
   if (!range.isArray() || range.getArrayNItems() < 6 || !size.isArray()) {

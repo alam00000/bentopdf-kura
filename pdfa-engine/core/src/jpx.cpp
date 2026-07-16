@@ -138,12 +138,19 @@ RawImage decodeJpxDataAt(const std::string& data, std::string& alphaOut) {
     int dx = comp.dx ? static_cast<int>(comp.dx) : 1;
     int dy = comp.dy ? static_cast<int>(comp.dy) : 1;
     int cw = static_cast<int>(comp.w);
+    size_t compSize = static_cast<size_t>(comp.w) * comp.h;
+    if (!comp.data || compSize == 0) {
+      opj_image_destroy(image);
+      out.error = "jpx component has no data";
+      return out;
+    }
     bool isAlpha = static_cast<int>(c) == alphaIdx;
     for (int y = 0; y < height; ++y) {
       int sy = dy > 1 ? y / dy : y;
       for (int x = 0; x < width; ++x) {
         int sx = dx > 1 ? x / dx : x;
-        long v = comp.data[static_cast<size_t>(sy) * cw + sx] + adjust;
+        size_t cidx = static_cast<size_t>(sy) * cw + sx;
+        long v = (cidx < compSize ? comp.data[cidx] : 0) + adjust;
         v = (v >> shift) * scale;
         if (v < 0) v = 0;
         if (v > 255) v = 255;
