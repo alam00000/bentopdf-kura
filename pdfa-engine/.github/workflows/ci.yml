@@ -53,7 +53,7 @@ jobs:
             -DCMAKE_EXE_LINKER_FLAGS="-fsanitize=address,undefined"
       - name: Build
         working-directory: pdfa-engine
-        run: cmake --build build-asan --target pdfa-convert fuzz_replay
+        run: cmake --build build-asan --target kura fuzz_replay
       - name: Generate seeds + regression sentinels
         working-directory: pdfa-engine
         run: python3 fuzz/gen_seeds.py build-asan/seeds
@@ -71,7 +71,7 @@ jobs:
           set -e
           for f in build-asan/seeds/deep_*.pdf; do
             for lv in 2b 1b 4 x1a; do
-              PDFA_TIMEOUT=60 ./build-asan/cli/pdfa-convert --level "$lv" "$f" /tmp/o.pdf >/dev/null || true
+              PDFA_TIMEOUT=60 ./build-asan/cli/kura --level "$lv" "$f" /tmp/o.pdf >/dev/null || true
             done
           done
           echo "all sentinels handled without a sanitizer abort"

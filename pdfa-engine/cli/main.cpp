@@ -140,7 +140,8 @@ void printReport(const pdfa::Options& opt, const pdfa::Result& res) {
   std::string json = "{";
   json += "\"ok\":" + std::string(res.ok ? "true" : "false");
   json += ",\"level\":\"" + pdfa::levelToString(opt.level) + "\"";
-  json += ",\"engine\":\"" + std::string(pdfa::kEngineVersion) + "\"";
+  json += ",\"engine\":\"" + std::string(pdfa::kEngineName) + " " +
+          std::string(pdfa::kEngineVersion) + "\"";
   if (!res.errorCode.empty()) {
     json += ",\"errorCode\":\"" + jsonEscape(res.errorCode) + "\"";
     json += ",\"error\":\"" + jsonEscape(res.error) + "\"";
@@ -190,7 +191,7 @@ int main(int argc, char** argv) {
   for (int i = 1; i < argc; ++i) {
     std::string arg = argv[i];
     if (arg == "--version") {
-      std::cout << "pdfa-convert " << pdfa::kEngineVersion << std::endl;
+      std::cout << pdfa::kEngineName << " (kura) " << pdfa::kEngineVersion << std::endl;
       return 0;
     } else if (arg == "--level" && i + 1 < argc) {
       if (!pdfa::levelFromString(argv[++i], opt.level)) return usage();

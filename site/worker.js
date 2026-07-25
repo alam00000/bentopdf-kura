@@ -1,4 +1,4 @@
-import createModule from './pdfa.js';
+import createModule from './kura.js';
 
 let modPromise = null;
 

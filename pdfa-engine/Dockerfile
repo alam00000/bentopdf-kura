@@ -16,11 +16,11 @@ COPY core core
 COPY cli cli
 COPY wasm wasm
 COPY CMakeLists.txt CMakeLists.txt
-RUN cmake -B build -DCMAKE_BUILD_TYPE=Release && cmake --build build -j"$(nproc)" --target pdfa-convert
+RUN cmake -B build -DCMAKE_BUILD_TYPE=Release && cmake --build build -j"$(nproc)" --target kura
 
 FROM debian:bookworm-slim
 RUN apt-get update && apt-get install -y --no-install-recommends \
     zlib1g libjpeg62-turbo libfreetype6 libopenjp2-7 liblcms2-2 \
     && rm -rf /var/lib/apt/lists/*
-COPY --from=build /src/build/cli/pdfa-convert /usr/local/bin/pdfa-convert
-ENTRYPOINT ["/usr/local/bin/pdfa-convert"]
+COPY --from=build /src/build/cli/kura /usr/local/bin/kura
+ENTRYPOINT ["/usr/local/bin/kura"]

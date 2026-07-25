@@ -152,6 +152,7 @@ std::string cleanText(QPDFObjectHandle v) {
 
 InfoData collectInfo(Ctx& ctx) {
   InfoData d;
+  d.producer = std::string(kEngineName) + " " + kEngineVersion;
   QPDFObjectHandle trailer = ctx.pdf.getTrailer();
   QPDFObjectHandle info = trailer.getKey("/Info");
   if (!info.isDictionary()) {
@@ -165,7 +166,6 @@ InfoData collectInfo(Ctx& ctx) {
   d.subject = cleanText(info.getKey("/Subject"));
   d.keywords = cleanText(info.getKey("/Keywords"));
   d.creator = cleanText(info.getKey("/Creator"));
-  d.producer = cleanText(info.getKey("/Producer"));
   std::string rawCreate = cleanText(info.getKey("/CreationDate"));
   std::string rawModify = cleanText(info.getKey("/ModDate"));
   std::string canonCreate, canonModify;

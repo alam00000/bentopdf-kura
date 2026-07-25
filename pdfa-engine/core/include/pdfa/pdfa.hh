@@ -7,6 +7,7 @@
 
 namespace pdfa {
 constexpr const char* kEngineVersion = "1.1.0";
+constexpr const char* kEngineName = "BentoPDF Kura Engine";
 
 enum class Level { A1B, A1A, A2B, A2U, A2A, A3B, A3U, A3A, A4, A4F, A4E,
                    X1A, X3, X4, X6, E1, VT1, VT3 };

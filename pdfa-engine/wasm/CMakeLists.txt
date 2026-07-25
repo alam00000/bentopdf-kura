@@ -1,11 +1,11 @@
 add_executable(pdfa_wasm pdfa_wasm.cpp)
 target_link_libraries(pdfa_wasm PRIVATE pdfa_core embind)
-set_target_properties(pdfa_wasm PROPERTIES OUTPUT_NAME "pdfa")
+set_target_properties(pdfa_wasm PROPERTIES OUTPUT_NAME "kura")
 target_link_options(pdfa_wasm PRIVATE
   -fwasm-exceptions
   -sMODULARIZE=1
   -sEXPORT_ES6=1
-  -sEXPORT_NAME=createPdfaModule
+  -sEXPORT_NAME=createKuraModule
   -sALLOW_MEMORY_GROWTH=1
   -sMAXIMUM_MEMORY=4GB
   -sENVIRONMENT=web,worker,node
