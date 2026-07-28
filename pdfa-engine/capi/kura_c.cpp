@@ -4,6 +4,9 @@
 #include <vector>
 
 #include "pdfa/pdfa.hh"
+#ifdef KURA_WITH_PDFIUM
+#include "kura/raster.hh"
+#endif
 
 namespace {
 struct KuraResultImpl {
@@ -44,6 +47,9 @@ extern "C" kura_result* kura_convert(const unsigned char* data, size_t size, con
       opt.destProfile.assign(options->dest_profile, options->dest_profile_len);
     }
   }
+#ifdef KURA_WITH_PDFIUM
+  opt.rasterizePage = kura::makeRasterizer(data, size, opt.password);
+#endif
   pdfa::Result r = pdfa::convert(data, size, opt);
   impl->pdf.assign(r.pdf.begin(), r.pdf.end());
   impl->error_code = r.errorCode;

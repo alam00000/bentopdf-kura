@@ -21,6 +21,7 @@ add_library(pdfa_core STATIC
   src/colorx.cpp
   src/printx.cpp
   src/fonts.cpp
+  src/fonts_glyph.cpp
   src/xmp.cpp
   src/limits.cpp
   src/tagging.cpp
@@ -64,7 +65,36 @@ if(EMSCRIPTEN)
     -fwasm-exceptions "SHELL:-s USE_FREETYPE=1" "SHELL:-s USE_LIBJPEG=1" "SHELL:-s USE_ZLIB=1")
 else()
   target_include_directories(pdfa_core PRIVATE ${LCMS2_INCLUDE_DIR})
-  target_link_libraries(pdfa_core
-    PUBLIC qpdf::libqpdf
-    PRIVATE Freetype::Freetype openjp2 JPEG::JPEG ZLIB::ZLIB ${LCMS2_LIBRARY})
+  if(PDFA_STATIC_DEPS)
+    foreach(dep qpdf freetype openjp2 jpeg lcms2 png crypto)
+      find_library(PDFA_A_${dep} NAMES lib${dep}.a
+        HINTS /opt/homebrew/lib /opt/homebrew/opt/qpdf/lib
+              /opt/homebrew/opt/freetype/lib /opt/homebrew/opt/openjpeg/lib
+              /opt/homebrew/opt/jpeg-turbo/lib /opt/homebrew/opt/little-cms2/lib
+              /opt/homebrew/opt/libpng/lib /opt/homebrew/opt/openssl@3/lib
+              ${CMAKE_PREFIX_PATH} $ENV{CMAKE_PREFIX_PATH})
+      if(NOT PDFA_A_${dep})
+        message(FATAL_ERROR
+          "PDFA_STATIC_DEPS is ON but lib${dep}.a was not found. Install the "
+          "static library, or configure without -DPDFA_STATIC_DEPS=ON.")
+      endif()
+    endforeach()
+    foreach(tgt qpdf::libqpdf JPEG::JPEG openjp2)
+      if(TARGET ${tgt})
+        get_target_property(_inc ${tgt} INTERFACE_INCLUDE_DIRECTORIES)
+        if(_inc)
+          target_include_directories(pdfa_core PRIVATE ${_inc})
+        endif()
+      endif()
+    endforeach()
+    target_include_directories(pdfa_core PRIVATE ${FREETYPE_INCLUDE_DIRS})
+    target_link_libraries(pdfa_core
+      PUBLIC ${PDFA_A_qpdf}
+      PRIVATE ${PDFA_A_freetype} ${PDFA_A_png} ${PDFA_A_openjp2}
+              ${PDFA_A_jpeg} ${PDFA_A_lcms2} ${PDFA_A_crypto} ZLIB::ZLIB bz2)
+  else()
+    target_link_libraries(pdfa_core
+      PUBLIC qpdf::libqpdf
+      PRIVATE Freetype::Freetype openjp2 JPEG::JPEG ZLIB::ZLIB ${LCMS2_LIBRARY})
+  endif()
 endif()

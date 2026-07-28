@@ -1,0 +1,30 @@
+FROM --platform=linux/amd64 debian:bookworm-slim
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+      git python3 python3-venv curl ca-certificates xz-utils file \
+      pkg-config build-essential rsync lsb-release sudo \
+    && rm -rf /var/lib/apt/lists/*
+
+ENV DEPOT_TOOLS_UPDATE=0
+ENV PDFIUM_BRANCH=chromium/7961
+WORKDIR /work
+
+RUN git clone --depth 1 \
+      https://chromium.googlesource.com/chromium/tools/depot_tools.git depot_tools
+ENV PATH=/work/depot_tools:$PATH
+
+RUN git clone --depth 1 -b $PDFIUM_BRANCH \
+      https://pdfium.googlesource.com/pdfium.git pdfium-src
+
+COPY strip_reclient.py /work/strip_reclient.py
+RUN python3 /work/strip_reclient.py /work/pdfium-src/DEPS
+
+RUN printf 'solutions = [{"name": "pdfium-src", "url": "https://pdfium.googlesource.com/pdfium.git", "managed": False, "custom_deps": {}, "deps_file": "DEPS"}]\n' > /work/.gclient \
+    && gclient sync --no-history --shallow --force
+
+RUN ./pdfium-src/build/install-build-deps.sh --no-prompt --no-arm --no-nacl || true
+
+COPY build_in_container.sh /work/build_in_container.sh
+RUN chmod +x /work/build_in_container.sh
+
+ENTRYPOINT ["/work/build_in_container.sh"]

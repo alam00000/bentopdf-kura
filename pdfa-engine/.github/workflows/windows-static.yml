@@ -1,0 +1,95 @@
+name: windows-static
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+env:
+  PDFIUM_BRANCH: chromium/7961
+  VCPKG_TRIPLET: x64-windows-static
+
+jobs:
+  build:
+    name: Windows x86-64 self-contained binary
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Cache built PDFium
+        id: pdfium-cache
+        uses: actions/cache@v4
+        with:
+          path: pdfa-engine/third_party/pdfium-build/dist
+          key: pdfium-win-x64-${{ env.PDFIUM_BRANCH }}-${{ hashFiles('pdfa-engine/scripts/pdfium/*') }}
+
+      - name: Build PDFium from source
+        if: steps.pdfium-cache.outputs.cache-hit != 'true'
+        working-directory: pdfa-engine
+        env:
+          DEPOT_TOOLS_WIN_TOOLCHAIN: '0'
+        run: |
+          ./scripts/pdfium/sync.sh
+          ./scripts/pdfium/build.sh win-x64
+          rm -rf third_party/pdfium-build/pdfium-src third_party/pdfium-build/depot_tools
+
+      - name: Cache vcpkg packages
+        uses: actions/cache@v4
+        with:
+          path: |
+            C:/vcpkg/installed
+            C:/vcpkg/packages
+          key: vcpkg-${{ env.VCPKG_TRIPLET }}-qpdf-freetype-lcms-openjpeg
+
+      - name: Install engine dependencies
+        run: |
+          vcpkg install --triplet "$VCPKG_TRIPLET" \
+            qpdf freetype libjpeg-turbo openjpeg lcms zlib libpng openssl
+
+      - name: Configure and build
+        working-directory: pdfa-engine
+        run: |
+          cmake -B build -A x64 \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_TOOLCHAIN_FILE=C:/vcpkg/scripts/buildsystems/vcpkg.cmake \
+            -DVCPKG_TARGET_TRIPLET="$VCPKG_TRIPLET" \
+            -DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreaded
+          cmake --build build --config Release --target kura kura_sdk
+
+      - name: Assert the binary is self-contained
+        working-directory: pdfa-engine
+        run: |
+          set -e
+          exe=$(find build -name kura.exe | head -1)
+          echo "binary: $exe"
+          deps=$(dumpbin //DEPENDENTS "$exe" | grep -iE '^\s+\S+\.dll' | tr -d ' \r')
+          echo "$deps"
+          leaked=$(echo "$deps" | grep -viE '^(kernel32|user32|advapi32|gdi32|shell32|ole32|oleaut32|ws2_32|crypt32|bcrypt|ucrtbase|api-ms-win|vcruntime|msvcp|comdlg32|winspool|shlwapi)\.dll$' | grep -c '\.dll' || true)
+          echo "non-OS DLLs: $leaked"
+          test "$leaked" -eq 0
+          test -z "$(echo "$deps" | grep -i pdfium || true)"
+
+      - name: Convert with no PDFium sidecar present
+        working-directory: pdfa-engine
+        run: |
+          set -e
+          exe=$(find build -name kura.exe | head -1)
+          test -z "$(find / -name 'pdfium.dll' 2>/dev/null || true)"
+          python ../tests/gen_part4_synth.py
+          report=$("$exe" --level 2b ../corpus-synth/p4_widget_ocg.pdf out.pdf)
+          echo "$report"
+          echo "$report" | grep -q '"ok":true'
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: kura-windows-x64
+          path: |
+            pdfa-engine/build/**/kura.exe
+            pdfa-engine/build/**/kura.lib
+            pdfa-engine/third_party/pdfium-build/dist/win-x64/pdfium.lib
+          if-no-files-found: error

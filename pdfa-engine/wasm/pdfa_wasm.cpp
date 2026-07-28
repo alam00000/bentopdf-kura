@@ -5,6 +5,9 @@
 #include <vector>
 
 #include "pdfa/pdfa.hh"
+#ifdef KURA_WITH_PDFIUM
+#include "kura/raster.hh"
+#endif
 
 namespace {
 std::string optString(emscripten::val opts, const char* key) {
@@ -54,6 +57,9 @@ emscripten::val convertJs(emscripten::val data, const std::string& level,
   opt.attachXml = optBytes(opts, "attachXml");
 
   std::vector<uint8_t> input = emscripten::convertJSArrayToNumberVector<uint8_t>(data);
+#ifdef KURA_WITH_PDFIUM
+  opt.rasterizePage = kura::makeRasterizer(input.data(), input.size(), opt.password);
+#endif
   pdfa::Result res = pdfa::convert(input.data(), input.size(), opt);
   result.set("ok", res.ok);
   result.set("level", pdfa::levelToString(opt.level));

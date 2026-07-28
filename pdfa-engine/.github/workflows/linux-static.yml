@@ -1,0 +1,116 @@
+name: linux-static
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+env:
+  QPDF_VERSION: 12.3.2
+  PDFIUM_BRANCH: chromium/7961
+
+jobs:
+  build:
+    name: Linux x86-64 self-contained binary
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Free disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc
+          df -h /
+
+      - name: Cache built PDFium
+        id: pdfium-cache
+        uses: actions/cache@v4
+        with:
+          path: pdfa-engine/third_party/pdfium-build/dist
+          key: pdfium-linux-x64-${{ env.PDFIUM_BRANCH }}-${{ hashFiles('pdfa-engine/scripts/pdfium/*') }}
+
+      - name: Build PDFium from source
+        if: steps.pdfium-cache.outputs.cache-hit != 'true'
+        working-directory: pdfa-engine
+        run: |
+          ./scripts/pdfium/sync.sh
+          ./scripts/pdfium/build.sh linux-x64
+          rm -rf third_party/pdfium-build/pdfium-src third_party/pdfium-build/depot_tools
+
+      - name: Install engine dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            cmake ninja-build pkg-config zlib1g-dev libjpeg62-turbo-dev \
+            libfreetype-dev libpng-dev libopenjp2-7-dev liblcms2-dev \
+            libssl-dev qpdf
+
+      - name: Cache qpdf
+        id: qpdf-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/qpdf-install
+          key: qpdf-static-${{ env.QPDF_VERSION }}-${{ runner.os }}
+
+      - name: Build qpdf from source (static)
+        if: steps.qpdf-cache.outputs.cache-hit != 'true'
+        run: |
+          curl -sSL -o /tmp/qpdf.tar.gz \
+            "https://github.com/qpdf/qpdf/releases/download/v${QPDF_VERSION}/qpdf-${QPDF_VERSION}.tar.gz"
+          tar -xzf /tmp/qpdf.tar.gz -C /tmp
+          cmake -S "/tmp/qpdf-${QPDF_VERSION}" -B /tmp/qpdf-build -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=OFF \
+            -DREQUIRE_CRYPTO_OPENSSL=ON -DUSE_IMPLICIT_CRYPTO=OFF \
+            -DBUILD_DOC=OFF -DBUILD_EXAMPLES=OFF -DQPDF_TEST_COMPARE_IMAGES=OFF \
+            -DCMAKE_INSTALL_PREFIX="$HOME/qpdf-install"
+          cmake --build /tmp/qpdf-build --target libqpdf
+          cmake --install /tmp/qpdf-build --component dev
+          cmake --install /tmp/qpdf-build --component lib
+
+      - name: Configure and build
+        working-directory: pdfa-engine
+        run: |
+          cmake -B build -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DPDFA_STATIC_DEPS=ON \
+            -DCMAKE_PREFIX_PATH="$HOME/qpdf-install"
+          cmake --build build --target kura kura_sdk
+
+      - name: Assert the binary is self-contained
+        working-directory: pdfa-engine
+        run: |
+          set -e
+          ldd build/cli/kura || true
+          leaked=$(ldd build/cli/kura \
+            | grep '=>' \
+            | grep -viE 'libc\.so|libm\.so|libdl\.so|libpthread\.so|librt\.so|libgcc_s\.so|libstdc\+\+\.so|ld-linux|linux-vdso' \
+            | wc -l)
+          echo "non-OS shared libraries: $leaked"
+          test "$leaked" -eq 0
+          test -z "$(ldd build/cli/kura | grep -i pdfium || true)"
+
+      - name: Convert with no PDFium sidecar present
+        working-directory: pdfa-engine
+        run: |
+          set -e
+          test -z "$(find / -name 'libpdfium.so*' -not -path '*/pdfium-build/*' 2>/dev/null)"
+          python3 ../tests/gen_part4_synth.py
+          report=$(./build/cli/kura --level 2b ../corpus-synth/p4_widget_ocg.pdf /tmp/out.pdf)
+          echo "$report"
+          echo "$report" | grep -q '"ok":true'
+
+      - name: Conformance gates
+        run: |
+          mkdir -p pdfa-engine/build/cli
+          python3 tests/run_print_synth.py
+          python3 tests/run_part4_synth.py
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: kura-linux-x64
+          path: |
+            pdfa-engine/build/cli/kura
+            pdfa-engine/build/capi/libkura.a
+            pdfa-engine/third_party/pdfium-build/dist/linux-x64/libpdfium.a
+          if-no-files-found: error
