@@ -698,6 +698,29 @@ void passPages(Ctx& ctx) {
   QPDFPageDocumentHelper dh(ctx.pdf);
   std::vector<QPDFPageObjectHelper> pages = dh.getAllPages();
 
+  if (ctx.opt.rasterizeAllPages) {
+    if (!ctx.opt.rasterizePage) {
+      ctx.fatal("RASTERIZER_UNAVAILABLE",
+                "--rasterize-pages needs a renderer; this build has none linked in");
+      return;
+    }
+    int rastered = 0;
+    for (size_t i = 0; i < pages.size(); ++i) {
+      if (rasterFlattenPage(ctx, pages[i], static_cast<int>(i))) ++rastered;
+    }
+    if (rastered != static_cast<int>(pages.size())) {
+      ctx.fatal("RASTERIZE_FAILED",
+                "could not render " + std::to_string(pages.size() - rastered) + " of " +
+                    std::to_string(pages.size()) + " page(s)");
+      return;
+    }
+    ctx.issue("PAGES_RASTERIZED",
+              "rasterized all " + std::to_string(rastered) + " page(s) at " +
+                  std::to_string(static_cast<int>(ctx.opt.rasterDpi)) +
+                  " dpi on request; vector text and its searchability are gone",
+              true);
+  }
+
   bool flatten = false;
   if (ctx.transparencyBanned()) {
     TransparencyReport rep = scanTransparency(ctx, pages);

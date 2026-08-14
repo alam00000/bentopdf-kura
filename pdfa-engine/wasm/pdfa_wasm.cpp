@@ -55,6 +55,22 @@ emscripten::val convertJs(emscripten::val data, const std::string& level,
   opt.nowOverride = optString(opts, "now");
   opt.destProfile = optBytes(opts, "destProfile");
   opt.attachXml = optBytes(opts, "attachXml");
+  opt.verifyOnly = optBool(opts, "check");
+  opt.embedSource = optBytes(opts, "embedSource");
+  opt.embedSourceName = optString(opts, "embedSourceName");
+  opt.embedSourceMime = optString(opts, "embedSourceMime");
+  opt.defaultRgbProfile = optBytes(opts, "defaultRgb");
+  opt.defaultCmykProfile = optBytes(opts, "defaultCmyk");
+  opt.defaultGrayProfile = optBytes(opts, "defaultGray");
+  opt.rasterizeAllPages = optBool(opts, "rasterizePages");
+  {
+    emscripten::val dpi = opts.isUndefined() || opts.isNull() ? emscripten::val::undefined()
+                                                             : opts["rasterDpi"];
+    if (!dpi.isUndefined() && !dpi.isNull()) {
+      double v = dpi.as<double>();
+      if (v >= 24 && v <= 1200) opt.rasterDpi = v;
+    }
+  }
 
   std::vector<uint8_t> input = emscripten::convertJSArrayToNumberVector<uint8_t>(data);
 #ifdef KURA_WITH_PDFIUM
@@ -70,15 +86,22 @@ emscripten::val convertJs(emscripten::val data, const std::string& level,
   }
   if (!res.suggestedLevel.empty()) result.set("suggestedLevel", res.suggestedLevel);
   emscripten::val issues = emscripten::val::array();
-  for (size_t i = 0; i < res.issues.size(); ++i) {
+  size_t n = 0;
+  for (const pdfa::Issue& is : res.issues) {
+    if (opt.verifyOnly && (!is.fixed || pdfa::issueIsNormalization(is.code))) continue;
     emscripten::val item = emscripten::val::object();
-    item.set("code", res.issues[i].code);
-    item.set("detail", res.issues[i].detail);
-    item.set("fixed", res.issues[i].fixed);
-    issues.set(i, item);
+    item.set("code", is.code);
+    item.set("detail", is.detail);
+    item.set("fixed", is.fixed);
+    issues.set(n++, item);
   }
   result.set("issues", issues);
-  if (res.ok) {
+  if (opt.verifyOnly) {
+    result.set("mode", std::string("check"));
+    result.set("compliant", res.compliant);
+    result.set("findings", n);
+  }
+  if (res.ok && !opt.verifyOnly) {
     emscripten::val view = emscripten::val(emscripten::typed_memory_view(
         res.pdf.size(), reinterpret_cast<const unsigned char*>(res.pdf.data())));
     emscripten::val out = emscripten::val::global("Uint8Array").new_(res.pdf.size());

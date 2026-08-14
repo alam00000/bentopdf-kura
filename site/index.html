@@ -273,6 +273,42 @@
       <span class="label">Aggressive cleanup</span>
     </label>
 
+    <label class="switchwrap" title="Report what would have to change without producing a file">
+      <span class="switch">
+        <input type="checkbox" id="checkonly">
+        <span class="track"></span><span class="knob"></span>
+      </span>
+      <span class="label">Check only</span>
+    </label>
+
+    <label class="switchwrap" title="Attach the original file to the output (PDF/A-3, 4f and PDF/E-1 only)">
+      <span class="switch">
+        <input type="checkbox" id="embedsrc">
+        <span class="track"></span><span class="knob"></span>
+      </span>
+      <span class="label">Embed source</span>
+    </label>
+
+    <label class="switchwrap" title="Render every page to an image at the chosen resolution">
+      <span class="switch">
+        <input type="checkbox" id="rasterize">
+        <span class="track"></span><span class="knob"></span>
+      </span>
+      <span class="label">Rasterize</span>
+    </label>
+
+    <select class="popup" id="dpi" aria-label="Raster resolution" title="Resolution used for rasterizing and for the transparency fallback">
+      <option value="150">150 dpi</option>
+      <option value="200">200 dpi</option>
+      <option value="300" selected>300 dpi</option>
+      <option value="600">600 dpi</option>
+    </select>
+
+    <label class="btn" id="invbtn" title="Attach a Factur-X, ZUGFeRD, XRechnung or Order-X XML and build a hybrid e-invoice">
+      <input type="file" id="invxml" accept=".xml,text/xml" hidden>
+      <span id="invlabel">e-invoice XML…</span>
+    </label>
+
     <span class="spacer"></span>
     <button class="btn" id="clear">Clear</button>
     <button class="btn primary" id="convert" disabled>Convert</button>
@@ -303,6 +339,7 @@
   const jobs = new Map();
   let seq = 0;
   const items = [];
+  let invoiceXml = null;
 
   const fmt = (n) => n > 1048576 ? (n/1048576).toFixed(1) + ' MB' : Math.max(1, Math.round(n/1024)) + ' KB';
 
@@ -374,6 +411,20 @@
       const dl = el('button', 'btn small', 'Download');
       dl.onclick = () => download(it);
       state.appendChild(dl);
+    } else if (it.status === 'checked') {
+      const ok = it.compliant;
+      const b = el('span', 'badge ' + (ok ? 'ok' : 'err'),
+        ok ? '✓ already ' + it.level
+           : it.findings + ' finding' + (it.findings === 1 ? '' : 's'));
+      b.title = ok
+        ? 'This file already conforms to PDF/A-' + it.level
+        : (it.issues || []).map((i) => i.code + ' — ' + i.detail).join('\n');
+      state.appendChild(b);
+      if (!ok && it.issues && it.issues.length) {
+        const s = el('button', 'suggest', 'Convert');
+        s.onclick = () => { $('checkonly').checked = false; convertOne(it); };
+        state.appendChild(s);
+      }
     } else if (it.status === 'error') {
       const b = el('span', 'badge err', '✕ ' + (it.errorCode || 'Failed'));
       b.title = it.error || '';
@@ -401,8 +452,27 @@
     it.status = 'working'; it.suggest = null; render(it); refresh(true);
     const bytes = await it.file.arrayBuffer();
     const opts = {}; if (ua) opts.ua = true; if ($('fix').checked) opts.allowVisualRisk = true;
+    const checkOnly = $('checkonly').checked;
+    if (checkOnly) opts.check = true;
+    if ($('embedsrc').checked) {
+      opts.embedSource = new Uint8Array(bytes.slice(0));
+      opts.embedSourceName = it.file.name;
+      opts.embedSourceMime = /\.jpe?g$/i.test(it.file.name) ? 'image/jpeg' : 'application/pdf';
+    }
+    if ($('rasterize').checked) opts.rasterizePages = true;
+    opts.rasterDpi = parseInt($('dpi').value, 10);
+    if (invoiceXml) opts.attachXml = invoiceXml;
     const r = await convertInWorker(bytes, level, opts);
     it.ms = r.ms;
+    if (checkOnly && r.ok) {
+      it.status = 'checked';
+      it.level = level;
+      it.compliant = r.compliant;
+      it.findings = r.findings;
+      it.issues = r.issueList || [];
+      render(it); refresh();
+      return;
+    }
     if (r.ok) {
       it.status = 'done'; it.level = level; it.ua = ua;
       it.blob = new Blob([r.pdf], { type: 'application/pdf' });
@@ -446,6 +516,15 @@
   }
   $('level').onchange = syncUa;
   syncUa();
+
+  $('invxml').onchange = async (e) => {
+    const f = e.target.files && e.target.files[0];
+    if (!f) { invoiceXml = null; $('invlabel').textContent = 'e-invoice XML…'; return; }
+    invoiceXml = new Uint8Array(await f.arrayBuffer());
+    $('invlabel').textContent = f.name;
+    const lv = $('level').value;
+    if (!/^(3b|3u|3a|4f)$/.test(lv)) $('level').value = '3b';
+  };
 
   $('convert').onclick = convertAll;
   $('clear').onclick = () => { items.length = 0; $('files').replaceChildren(); refresh(); };

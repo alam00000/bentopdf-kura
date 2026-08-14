@@ -271,23 +271,21 @@ void handleEmbeddedFiles(Ctx& ctx, QPDFObjectHandle root) {
   }
 }
 
-void attachInvoiceXml(Ctx& ctx, QPDFObjectHandle root) {
-  std::string name = ctx.opt.attachXmlName.empty() ? "factur-x.xml" : ctx.opt.attachXmlName;
-  QPDFObjectHandle ef = QPDFObjectHandle::newStream(&ctx.pdf, ctx.opt.attachXml);
+void attachAssociatedFile(Ctx& ctx, QPDFObjectHandle root, const std::string& name,
+                          const std::string& mime, const std::string& desc,
+                          const std::string& relationship, const std::string& bytes) {
+  QPDFObjectHandle ef = QPDFObjectHandle::newStream(&ctx.pdf, bytes);
   QPDFObjectHandle efd = ef.getDict();
   efd.replaceKey("/Type", QPDFObjectHandle::newName("/EmbeddedFile"));
-  efd.replaceKey("/Subtype", QPDFObjectHandle::newName("/text/xml"));
+  efd.replaceKey("/Subtype", QPDFObjectHandle::newName("/" + mime));
   QPDFObjectHandle efRef = ctx.pdf.makeIndirectObject(ef);
 
   QPDFObjectHandle fs = QPDFObjectHandle::newDictionary();
   fs.replaceKey("/Type", QPDFObjectHandle::newName("/Filespec"));
   fs.replaceKey("/F", QPDFObjectHandle::newString(name));
   fs.replaceKey("/UF", QPDFObjectHandle::newUnicodeString(name));
-  fs.replaceKey("/Desc", QPDFObjectHandle::newUnicodeString("Factur-X/ZUGFeRD invoice data"));
-  std::string profile = ctx.opt.facturxProfile.empty() ? "EN 16931" : ctx.opt.facturxProfile;
-  bool dataRel = profile == "MINIMUM" || profile == "BASIC WL";
-  fs.replaceKey("/AFRelationship",
-                QPDFObjectHandle::newName(dataRel ? "/Data" : "/Alternative"));
+  fs.replaceKey("/Desc", QPDFObjectHandle::newUnicodeString(desc));
+  fs.replaceKey("/AFRelationship", QPDFObjectHandle::newName(relationship));
   QPDFObjectHandle efMap = QPDFObjectHandle::newDictionary();
   efMap.replaceKey("/F", efRef);
   efMap.replaceKey("/UF", efRef);
@@ -327,8 +325,31 @@ void attachInvoiceXml(Ctx& ctx, QPDFObjectHandle root) {
     root.replaceKey("/AF", af);
   }
   af.appendItem(fsRef);
+}
+
+void attachInvoiceXml(Ctx& ctx, QPDFObjectHandle root) {
+  attachAssociatedFile(ctx, root, ctx.inv.filename, "text/xml",
+                       ctx.inv.standard + " invoice data", ctx.inv.relationship,
+                       ctx.opt.attachXml);
   ctx.issue("FACTURX_ATTACHED",
-            "embedded " + name + " (" + profile + ") as an associated invoice attachment", true);
+            "embedded " + ctx.inv.filename + " as " + ctx.inv.standard + " " + ctx.inv.profile +
+                (ctx.inv.guidelineId.empty()
+                     ? " (profile supplied by the caller; the XML declares no guideline)"
+                     : " (detected from " + ctx.inv.guidelineId + ")") +
+                ", AFRelationship " + ctx.inv.relationship,
+            true);
+}
+
+void embedSourceFile(Ctx& ctx, QPDFObjectHandle root) {
+  std::string name = ctx.opt.embedSourceName.empty() ? "source.pdf" : ctx.opt.embedSourceName;
+  std::string mime = ctx.opt.embedSourceMime.empty() ? "application/octet-stream"
+                                                     : ctx.opt.embedSourceMime;
+  attachAssociatedFile(ctx, root, name, mime, "Original source document before conversion",
+                       "/Source", ctx.opt.embedSource);
+  ctx.issue("SOURCE_EMBEDDED",
+            "embedded the original document as " + name + " (" + mime +
+                ", AFRelationship /Source)",
+            true);
 }
 
 void handleOptionalContent(Ctx& ctx, QPDFObjectHandle root) {
@@ -618,12 +639,45 @@ void passStructure(Ctx& ctx) {
 
   handleOptionalContent(ctx, root);
   handleEmbeddedFiles(ctx, root);
+  if (!ctx.opt.embedSource.empty()) {
+    if (ctx.allowEmbeddedFiles()) {
+      embedSourceFile(ctx, root);
+    } else {
+      ctx.fatal("EMBED_SOURCE_UNSUPPORTED_LEVEL",
+                "embedding the source document needs a level that allows arbitrary "
+                "attachments: PDF/A-3 (3b, 3u, 3a), PDF/A-4f or PDF/E-1");
+    }
+  }
   if (!ctx.opt.attachXml.empty()) {
-    if (ctx.isA() && ctx.part == 3) {
+    if (!ctx.inv.rootKnown) {
+      ctx.fatal("EINVOICE_NOT_A_DOCUMENT",
+                "the attached XML has root element \"" +
+                    (ctx.inv.rootName.empty() ? std::string("(none)") : ctx.inv.rootName) +
+                    "\"; a hybrid document needs CrossIndustryInvoice, CrossIndustryDocument, "
+                    "SCRDMCCBDACIOMessageStructure (Order-X) or a UBL Invoice/CreditNote");
+    } else if (!ctx.inv.detected) {
+      ctx.fatal("EINVOICE_PROFILE_UNKNOWN",
+                "the attached XML declares no recognised Factur-X/ZUGFeRD/XRechnung guideline "
+                "in GuidelineSpecifiedDocumentContextParameter/ID; supply --facturx-profile "
+                "to state the profile explicitly");
+    } else if (!ctx.inv.profileValid) {
+      ctx.fatal("EINVOICE_PROFILE_INVALID",
+                "conformance level \"" + ctx.inv.profile +
+                    "\" is not in the Factur-X HybridConformanceType code list (MINIMUM, "
+                    "BASIC WL, BASIC, EN 16931, EXTENDED, XRECHNUNG)");
+    } else if (ctx.isA() && (ctx.part == 3 || ctx.conf == 'F')) {
       attachInvoiceXml(ctx, root);
+      if (ctx.part == 4) {
+        ctx.issue("EINVOICE_PDFA4_CONTAINER",
+                  "PDF/A-4f container is permitted by Factur-X 1.07 BR-HYBRID-02, but "
+                  "validators and recipients still commonly require PDF/A-3; use 3b unless "
+                  "the recipient has confirmed PDF/A-4f support",
+                  false);
+      }
     } else {
       ctx.fatal("FACTURX_REQUIRES_PDFA3",
-                "Factur-X/ZUGFeRD invoices must be PDF/A-3; use level 3b, 3u or 3a");
+                "Factur-X/ZUGFeRD invoices must be PDF/A-3 (3b, 3u, 3a) or, per Factur-X "
+                "1.07 BR-HYBRID-02, PDF/A-4f");
     }
   }
 }

@@ -6,6 +6,7 @@
 #include <set>
 #include <string>
 
+#include "einvoice.hh"
 #include "pdfa/pdfa.hh"
 
 namespace pdfa {
@@ -17,6 +18,7 @@ struct Ctx {
   char conf;
   Family fam;
   std::set<QPDFObjGen> identityCmaps;
+  InvoiceProfile inv;
 
   bool isA() const { return fam == Family::PDFA; }
   bool isX() const { return fam == Family::PDFX || fam == Family::PDFVT; }

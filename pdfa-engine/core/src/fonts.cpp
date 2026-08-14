@@ -596,12 +596,24 @@ void ensureCidSet(Ctx& ctx, FtLib& lib, QPDFObjectHandle type0) {
     }
   }
   QPDFObjectHandle cidSet = QPDFObjectHandle::newStream(&ctx.pdf, bits);
-  bool had = fd.getKey("/CIDSet").isStream();
+  QPDFObjectHandle prior = fd.getKey("/CIDSet");
+  bool had = prior.isStream();
+  bool same = false;
+  if (had) {
+    try {
+      std::shared_ptr<Buffer> pb = prior.getStreamData(qpdf_dl_all);
+      same = pb->getSize() == bits.size() &&
+             std::memcmp(pb->getBuffer(), bits.data(), bits.size()) == 0;
+    } catch (...) {
+    }
+  }
   fd.replaceKey("/CIDSet", ctx.pdf.makeIndirectObject(cidSet));
-  ctx.issue("CIDSET_ADDED",
-            std::string(had ? "regenerated" : "synthesized") + " /CIDSet for subset " +
-                nameOf(cidFont.getKey("/BaseFont")),
-            true);
+  if (!same) {
+    ctx.issue("CIDSET_ADDED",
+              std::string(had ? "regenerated" : "synthesized") + " /CIDSet for subset " +
+                  nameOf(cidFont.getKey("/BaseFont")),
+              true);
+  }
 }
 
 void ensureCharSet(Ctx& ctx, FtLib& lib, QPDFObjectHandle font) {
@@ -623,12 +635,16 @@ void ensureCharSet(Ctx& ctx, FtLib& lib, QPDFObjectHandle font) {
     }
   }
   if (charset.empty()) return;
-  bool had = fd.getKey("/CharSet").isString();
+  QPDFObjectHandle prior = fd.getKey("/CharSet");
+  bool had = prior.isString();
+  bool same = had && prior.getUTF8Value() == charset;
   fd.replaceKey("/CharSet", QPDFObjectHandle::newString(charset));
-  ctx.issue("CHARSET_ADDED",
-            std::string(had ? "regenerated" : "synthesized") + " /CharSet for subset " +
-                nameOf(font.getKey("/BaseFont")),
-            true);
+  if (!same) {
+    ctx.issue("CHARSET_ADDED",
+              std::string(had ? "regenerated" : "synthesized") + " /CharSet for subset " +
+                  nameOf(font.getKey("/BaseFont")),
+              true);
+  }
 }
 
 const struct {
@@ -1442,6 +1458,14 @@ const FontAsset* findAsset(const std::string& key) {
   return nullptr;
 }
 
+struct UserFont {
+  std::string wanted;
+  std::string psName;
+  std::string key;
+  std::string bytes;
+  FontAsset asset{nullptr, nullptr, nullptr, 0};
+};
+
 struct SubstituteChoice {
   const FontAsset* asset = nullptr;
   bool serif = false;
@@ -1453,6 +1477,50 @@ struct SubstituteChoice {
 
 bool nameHas(const std::string& lower, const char* needle) {
   return lower.find(needle) != std::string::npos;
+}
+
+std::vector<std::unique_ptr<UserFont>>& userFonts() {
+  static thread_local std::vector<std::unique_ptr<UserFont>> fonts;
+  return fonts;
+}
+
+bool isTrueTypeSfnt(const std::string& b) {
+  if (b.size() < 4) return false;
+  const unsigned char* p = reinterpret_cast<const unsigned char*>(b.data());
+  return (p[0] == 0x00 && p[1] == 0x01 && p[2] == 0x00 && p[3] == 0x00) ||
+         std::memcmp(p, "true", 4) == 0 || std::memcmp(p, "ttcf", 4) == 0;
+}
+
+const FontAsset* hostFont(Ctx& ctx, const std::string& base) {
+  if (!ctx.opt.loadFont) return nullptr;
+  std::string bare = base.empty() || base[0] != '/' ? base : base.substr(1);
+  std::string wanted = bare;
+  for (const auto& sub : ctx.opt.fontSubstitutions) {
+    if (sub.first == bare) {
+      wanted = sub.second;
+      break;
+    }
+  }
+  for (const auto& f : userFonts()) {
+    if (f->wanted == wanted) return f->asset.data ? &f->asset : nullptr;
+  }
+  auto uf = std::make_unique<UserFont>();
+  uf->wanted = wanted;
+  if (!ctx.opt.loadFont(wanted, uf->psName, uf->bytes) || uf->bytes.size() < 64 ||
+      !isTrueTypeSfnt(uf->bytes)) {
+    uf->bytes.clear();
+    userFonts().push_back(std::move(uf));
+    return nullptr;
+  }
+  if (uf->psName.empty()) uf->psName = wanted;
+  uf->key = "user:" + wanted;
+  uf->asset.key = uf->key.c_str();
+  uf->asset.psName = uf->psName.c_str();
+  uf->asset.data = reinterpret_cast<const unsigned char*>(uf->bytes.data());
+  uf->asset.len = static_cast<unsigned int>(uf->bytes.size());
+  const FontAsset* out = &uf->asset;
+  userFonts().push_back(std::move(uf));
+  return out;
 }
 
 SubstituteChoice chooseSubstitute(QPDFObjectHandle font, QPDFObjectHandle fd) {
@@ -1618,14 +1686,17 @@ bool embedSimpleSubstitute(Ctx& ctx, FtLib& lib, EmbedCache& cache, QPDFObjectHa
   QPDFObjectHandle oldFd = font.getKey("/FontDescriptor");
   SubstituteChoice c = chooseSubstitute(font, oldFd);
   if (!c.asset) return false;
+  const FontAsset* host = hostFont(ctx, nameOf(font.getKey("/BaseFont")));
+  if (host) c.asset = host;
   auto face = assetFace(lib, cache, c.asset);
   if (!face->face) return false;
   std::string original = nameOf(font.getKey("/BaseFont"));
 
   QPDFObjectHandle fd = buildDescriptor(ctx, c, face->face, c.asset->psName);
-  fd.replaceKey("/FontFile3", assetStream(ctx, cache, c.asset, false));
+  fd.replaceKey(host ? "/FontFile2" : "/FontFile3",
+                assetStream(ctx, cache, c.asset, host != nullptr));
   font.replaceKey("/FontDescriptor", ctx.pdf.makeIndirectObject(fd));
-  font.replaceKey("/Subtype", QPDFObjectHandle::newName("/Type1"));
+  font.replaceKey("/Subtype", QPDFObjectHandle::newName(host ? "/TrueType" : "/Type1"));
   font.replaceKey("/BaseFont", QPDFObjectHandle::newName("/" + std::string(c.asset->psName)));
 
   if (c.symbolTable) {
@@ -1672,7 +1743,8 @@ bool embedCidSubstitute(Ctx& ctx, FtLib& lib, EmbedCache& cache, QPDFObjectHandl
   QPDFObjectHandle oldFd = cidFont.getKey("/FontDescriptor");
   SubstituteChoice c = chooseSubstitute(type0, oldFd);
   if (!c.asset) return false;
-  c.asset = findAsset(std::string(c.asset->key) + ":ttf");
+  const FontAsset* host = hostFont(ctx, nameOf(type0.getKey("/BaseFont")));
+  c.asset = host ? host : findAsset(std::string(c.asset->key) + ":ttf");
   if (!c.asset) return false;
   auto face = assetFace(lib, cache, c.asset);
   if (!face->face) return false;

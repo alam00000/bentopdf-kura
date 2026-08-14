@@ -1,5 +1,23 @@
-add_executable(kura main.cpp)
+option(KURA_WITH_SIGNING "Build the CLI with PKCS#7 signing (needs OpenSSL)" ON)
+
+set(KURA_CLI_SOURCES main.cpp)
+if(KURA_WITH_SIGNING)
+  find_package(OpenSSL QUIET)
+  if(OpenSSL_FOUND)
+    list(APPEND KURA_CLI_SOURCES signer.cpp)
+  else()
+    message(STATUS "OpenSSL not found; building the CLI without --sign")
+    set(KURA_WITH_SIGNING OFF)
+  endif()
+endif()
+
+add_executable(kura ${KURA_CLI_SOURCES})
 target_link_libraries(kura PRIVATE pdfa_core)
+
+if(KURA_WITH_SIGNING)
+  target_link_libraries(kura PRIVATE OpenSSL::Crypto)
+  target_compile_definitions(kura PRIVATE KURA_WITH_SIGNING=1)
+endif()
 
 if(PDFA_WITH_PDFIUM)
   target_link_libraries(kura PRIVATE kura_raster)

@@ -32,6 +32,8 @@ extern "C" kura_result* kura_convert(const unsigned char* data, size_t size, con
     impl->pub.error_code = impl->error_code.c_str();
     impl->pub.error = impl->error.c_str();
     impl->pub.suggested_level = nullptr;
+    impl->pub.compliant = 0;
+    impl->pub.findings = 0;
     return &impl->pub;
   }
   opt.level = parsed;
@@ -46,6 +48,13 @@ extern "C" kura_result* kura_convert(const unsigned char* data, size_t size, con
     if (options->dest_profile && options->dest_profile_len > 0) {
       opt.destProfile.assign(options->dest_profile, options->dest_profile_len);
     }
+    opt.verifyOnly = options->verify_only != 0;
+    if (options->invoice_xml && options->invoice_xml_len > 0) {
+      opt.attachXml.assign(reinterpret_cast<const char*>(options->invoice_xml),
+                           options->invoice_xml_len);
+    }
+    if (options->invoice_profile) opt.facturxProfile = options->invoice_profile;
+    if (options->invoice_filename) opt.attachXmlName = options->invoice_filename;
   }
 #ifdef KURA_WITH_PDFIUM
   opt.rasterizePage = kura::makeRasterizer(data, size, opt.password);
@@ -61,6 +70,11 @@ extern "C" kura_result* kura_convert(const unsigned char* data, size_t size, con
   impl->pub.error_code = impl->error_code.empty() ? nullptr : impl->error_code.c_str();
   impl->pub.error = impl->error.empty() ? nullptr : impl->error.c_str();
   impl->pub.suggested_level = impl->suggested.empty() ? nullptr : impl->suggested.c_str();
+  impl->pub.compliant = r.compliant ? 1 : 0;
+  impl->pub.findings = 0;
+  for (const pdfa::Issue& i : r.issues) {
+    if (i.fixed && !pdfa::issueIsNormalization(i.code)) ++impl->pub.findings;
+  }
   return &impl->pub;
 }
 

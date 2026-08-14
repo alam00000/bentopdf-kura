@@ -15,6 +15,10 @@ endif()
 
 add_library(pdfa_core STATIC
   src/engine.cpp
+  src/einvoice.cpp
+  src/einvoice_read.cpp
+  src/sign.cpp
+  src/ocr.cpp
   src/sanitize.cpp
   src/pages.cpp
   src/color.cpp

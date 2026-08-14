@@ -17,6 +17,11 @@ typedef struct {
   const char* output_condition_identifier;
   const char* dest_profile;
   size_t dest_profile_len;
+  int verify_only;
+  const unsigned char* invoice_xml;
+  size_t invoice_xml_len;
+  const char* invoice_profile;
+  const char* invoice_filename;
 } kura_options;
 
 typedef struct {
@@ -26,6 +31,8 @@ typedef struct {
   const char* error_code;
   const char* error;
   const char* suggested_level;
+  int compliant;
+  size_t findings;
 } kura_result;
 
 kura_result* kura_convert(const unsigned char* data, size_t size, const char* level,

@@ -327,8 +327,32 @@ ColorUsage scanUsage(Ctx& ctx) {
 }
 }
 
+const char* iccSpaceTag(const std::string& p) {
+  if (p.size() < 20) return nullptr;
+  if (std::memcmp(p.data() + 16, "RGB ", 4) == 0) return "RGB ";
+  if (std::memcmp(p.data() + 16, "CMYK", 4) == 0) return "CMYK";
+  if (std::memcmp(p.data() + 16, "GRAY", 4) == 0) return "GRAY";
+  return nullptr;
+}
+
 QPDFObjectHandle buildIccStream(Ctx& ctx, const unsigned char* data, unsigned int len, int n) {
   std::string bytes(reinterpret_cast<const char*>(data), len);
+  const std::string& override_ = n == 4   ? ctx.opt.defaultCmykProfile
+                                 : n == 1 ? ctx.opt.defaultGrayProfile
+                                          : ctx.opt.defaultRgbProfile;
+  if (!override_.empty()) {
+    const char* want = n == 4 ? "CMYK" : (n == 1 ? "GRAY" : "RGB ");
+    const char* got = iccSpaceTag(override_);
+    if (!got || std::memcmp(got, want, 4) != 0) {
+      ctx.fatal("DEFAULT_PROFILE_MISMATCH",
+                std::string("the supplied default profile is not a valid ") + want +
+                    " ICC profile");
+    } else {
+      bytes = override_;
+      ctx.issue("DEFAULT_PROFILE_USED",
+                std::string("used the caller-supplied ") + want + " ICC profile", true);
+    }
+  }
   QPDFObjectHandle stream = QPDFObjectHandle::newStream(&ctx.pdf, bytes);
   stream.getDict().replaceKey("/N", QPDFObjectHandle::newInteger(n));
   return ctx.pdf.makeIndirectObject(stream);
@@ -421,6 +445,12 @@ void collectSpecialSpaces(QPDFObjectHandle o, Visited& visited,
   }
 }
 
+bool sameColorRef(QPDFObjectHandle a, QPDFObjectHandle b) {
+  if (a.isIndirect() && b.isIndirect()) return a.getObjGen() == b.getObjGen();
+  if (a.isName() && b.isName()) return a.getName() == b.getName();
+  return false;
+}
+
 void fixSpecialColorSpaces(Ctx& ctx) {
   std::vector<QPDFObjectHandle> seps, dns;
   Visited visited;
@@ -462,10 +492,8 @@ void fixSpecialColorSpaces(Ctx& ctx) {
     } else {
       QPDFObjectHandle alt = sep.getArrayItem(2);
       QPDFObjectHandle tint = sep.getArrayItem(3);
-      bool sameAlt = alt.isIndirect() && it->second.first.isIndirect() &&
-                     alt.getObjGen() == it->second.first.getObjGen();
-      bool sameTint = tint.isIndirect() && it->second.second.isIndirect() &&
-                      tint.getObjGen() == it->second.second.getObjGen();
+      bool sameAlt = sameColorRef(alt, it->second.first);
+      bool sameTint = sameColorRef(tint, it->second.second);
       if (!sameAlt || !sameTint) {
         if (it->second.first.isIndirect() || it->second.first.isName()) {
           sep.setArrayItem(2, it->second.first);
@@ -515,10 +543,8 @@ void fixSpecialColorSpaces(Ctx& ctx) {
       if (known == canon.end()) continue;
       QPDFObjectHandle alt2 = csep.getArrayItem(2);
       QPDFObjectHandle tint2 = csep.getArrayItem(3);
-      bool sameAlt = alt2.isIndirect() && known->second.first.isIndirect() &&
-                     alt2.getObjGen() == known->second.first.getObjGen();
-      bool sameTint = tint2.isIndirect() && known->second.second.isIndirect() &&
-                      tint2.getObjGen() == known->second.second.getObjGen();
+      bool sameAlt = sameColorRef(alt2, known->second.first);
+      bool sameTint = sameColorRef(tint2, known->second.second);
       if (!sameAlt || !sameTint) {
         csep.setArrayItem(2, known->second.first);
         csep.setArrayItem(3, known->second.second);
@@ -691,16 +717,21 @@ void fixIccIdenticalToIntent(Ctx& ctx, QPDFObjectHandle keepIntent) {
   }
 }
 
-void injectDefaultSpace(Ctx& ctx, std::vector<QPDFObjectHandle>& scopes, const char* key,
+bool injectDefaultSpace(Ctx& ctx, std::vector<QPDFObjectHandle>& scopes, const char* key,
                         QPDFObjectHandle defRef) {
+  bool changed = false;
   for (QPDFObjectHandle res : scopes) {
     QPDFObjectHandle csd = res.getKey("/ColorSpace");
     if (!csd.isDictionary()) {
       csd = QPDFObjectHandle::newDictionary();
       res.replaceKey("/ColorSpace", csd);
     }
-    if (!csd.hasKey(key)) csd.replaceKey(key, defRef);
+    if (!csd.hasKey(key)) {
+      csd.replaceKey(key, defRef);
+      changed = true;
+    }
   }
+  return changed;
 }
 
 void passColorPrint(Ctx& ctx, ColorUsage& usage) {
@@ -801,20 +832,22 @@ void passColorPrint(Ctx& ctx, ColorUsage& usage) {
     QPDFObjectHandle defRgb = QPDFObjectHandle::newArray();
     defRgb.appendItem(QPDFObjectHandle::newName("/ICCBased"));
     defRgb.appendItem(srgb);
-    injectDefaultSpace(ctx, usage.rgbScopes, "/DefaultRGB",
-                       ctx.pdf.makeIndirectObject(defRgb));
-    ctx.issue("DEFAULT_RGB_INJECTED",
-              "mapped DeviceRGB usage to sRGB via /DefaultRGB (colour-managed print)", true);
+    if (injectDefaultSpace(ctx, usage.rgbScopes, "/DefaultRGB",
+                           ctx.pdf.makeIndirectObject(defRgb))) {
+      ctx.issue("DEFAULT_RGB_INJECTED",
+                "mapped DeviceRGB usage to sRGB via /DefaultRGB (colour-managed print)", true);
+    }
   }
   if (ctx.isE() && anchor != "CMYK" && !usage.cmykScopes.empty()) {
     QPDFObjectHandle cmyk = buildIccStream(ctx, kCmykIcc, kCmykIccLen, 4);
     QPDFObjectHandle defCmyk = QPDFObjectHandle::newArray();
     defCmyk.appendItem(QPDFObjectHandle::newName("/ICCBased"));
     defCmyk.appendItem(cmyk);
-    injectDefaultSpace(ctx, usage.cmykScopes, "/DefaultCMYK",
-                       ctx.pdf.makeIndirectObject(defCmyk));
-    ctx.issue("DEFAULT_CMYK_INJECTED",
-              "mapped DeviceCMYK usage to a calibrated profile via /DefaultCMYK", true);
+    if (injectDefaultSpace(ctx, usage.cmykScopes, "/DefaultCMYK",
+                           ctx.pdf.makeIndirectObject(defCmyk))) {
+      ctx.issue("DEFAULT_CMYK_INJECTED",
+                "mapped DeviceCMYK usage to a calibrated profile via /DefaultCMYK", true);
+    }
   }
 }
 }
@@ -1006,34 +1039,22 @@ void passColor(Ctx& ctx) {
       QPDFObjectHandle defCmyk = QPDFObjectHandle::newArray();
       defCmyk.appendItem(QPDFObjectHandle::newName("/ICCBased"));
       defCmyk.appendItem(cmykIccShared);
-      QPDFObjectHandle defRef = ctx.pdf.makeIndirectObject(defCmyk);
-      for (QPDFObjectHandle res : usage.cmykScopes) {
-        QPDFObjectHandle csd = res.getKey("/ColorSpace");
-        if (!csd.isDictionary()) {
-          csd = QPDFObjectHandle::newDictionary();
-          res.replaceKey("/ColorSpace", csd);
-        }
-        if (!csd.hasKey("/DefaultCMYK")) csd.replaceKey("/DefaultCMYK", defRef);
+      if (injectDefaultSpace(ctx, usage.cmykScopes, "/DefaultCMYK",
+                             ctx.pdf.makeIndirectObject(defCmyk))) {
+        ctx.issue("DEFAULT_CMYK_INJECTED",
+                  "mapped DeviceCMYK usage to a calibrated CMYK profile via /DefaultCMYK", true);
       }
-      ctx.issue("DEFAULT_CMYK_INJECTED",
-                "mapped DeviceCMYK usage to a calibrated CMYK profile via /DefaultCMYK", true);
     }
     if (anchor != "RGB " && !usage.rgbScopes.empty()) {
       QPDFObjectHandle srgb = buildIccStream(ctx, kSrgbIcc, kSrgbIccLen, 3);
       QPDFObjectHandle defRgb = QPDFObjectHandle::newArray();
       defRgb.appendItem(QPDFObjectHandle::newName("/ICCBased"));
       defRgb.appendItem(srgb);
-      QPDFObjectHandle defRef = ctx.pdf.makeIndirectObject(defRgb);
-      for (QPDFObjectHandle res : usage.rgbScopes) {
-        QPDFObjectHandle csd = res.getKey("/ColorSpace");
-        if (!csd.isDictionary()) {
-          csd = QPDFObjectHandle::newDictionary();
-          res.replaceKey("/ColorSpace", csd);
-        }
-        if (!csd.hasKey("/DefaultRGB")) csd.replaceKey("/DefaultRGB", defRef);
+      if (injectDefaultSpace(ctx, usage.rgbScopes, "/DefaultRGB",
+                             ctx.pdf.makeIndirectObject(defRgb))) {
+        ctx.issue("DEFAULT_RGB_INJECTED",
+                  "mapped DeviceRGB usage to sRGB via /DefaultRGB", true);
       }
-      ctx.issue("DEFAULT_RGB_INJECTED",
-                "mapped DeviceRGB usage to sRGB via /DefaultRGB", true);
     }
   } else {
     if (anchor != "CMYK" && usage.cmyk) {

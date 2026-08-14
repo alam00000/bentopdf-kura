@@ -7,11 +7,8 @@ suite/
 cert/
 corpus/
 
-pdfa-engine/build/
-pdfa-engine/build-wasm/
+pdfa-engine/build*/
 pdfa-engine/third_party/
 
 dist/
-pdfa-engine/build-asan/
-pdfa-engine/build-fuzz/
-pdfa-engine/build-static/
+cert/mustang.jar

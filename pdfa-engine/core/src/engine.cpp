@@ -12,6 +12,8 @@
 
 #include "ctx.hh"
 #include "passes.hh"
+#include "ocr.hh"
+#include "sign.hh"
 #include "pdfa/pdfa.hh"
 
 namespace pdfa {
@@ -139,6 +141,7 @@ std::string detectSecurityHandler(const unsigned char* data, std::size_t size) {
 
 void serialize(Ctx& ctx) {
   QPDFWriter w(ctx.pdf);
+  const bool signing = static_cast<bool>(ctx.opt.signDocument);
   w.setOutputMemory();
   w.setPreserveEncryption(false);
   w.setLinearization(false);
@@ -152,10 +155,10 @@ void serialize(Ctx& ctx) {
     w.setObjectStreamMode(qpdf_o_disable);
     w.forcePDFVersion("1.4");
   } else if (!ctx.isA()) {
-    w.setObjectStreamMode(qpdf_o_generate);
+    w.setObjectStreamMode(signing ? qpdf_o_disable : qpdf_o_generate);
     w.forcePDFVersion(ctx.pdf20Print() ? "2.0" : "1.6");
   } else {
-    w.setObjectStreamMode(qpdf_o_generate);
+    w.setObjectStreamMode(signing ? qpdf_o_disable : qpdf_o_generate);
     w.forcePDFVersion(ctx.part >= 4 ? "2.0" : "1.7");
   }
   w.write();
@@ -251,6 +254,11 @@ std::string wrapJpegAsPdf(const unsigned char* data, std::size_t size) {
 }
 }
 
+bool issueIsNormalization(const std::string& code) {
+  return code == "XMP_REBUILT" || code == "CONTENT_FILTERED" ||
+         code == "OUTPUT_INTENT_PRESENT";
+}
+
 Result convert(const unsigned char* data, std::size_t size, const Options& opt) {
   Result res;
   std::string wrapped;
@@ -303,6 +311,9 @@ Result convert(const unsigned char* data, std::size_t size, const Options& opt) 
     }
     Ctx ctx{*active, opt, res, levelPart(opt.level), levelConformance(opt.level),
             levelFamily(opt.level)};
+    if (!opt.attachXml.empty()) {
+      ctx.inv = detectInvoice(opt.attachXml, opt.facturxProfile, opt.attachXmlName);
+    }
     if (opt.ua && !ctx.isA()) {
       res.errorCode = "UA_UNSUPPORTED_LEVEL";
       res.error = "PDF/UA layers only on PDF/A levels (UA-1 on parts 1-3, UA-2 on part 4)";
@@ -365,6 +376,8 @@ Result convert(const unsigned char* data, std::size_t size, const Options& opt) 
     lap("structure");
     if (!ctx.failed()) passPages(ctx);
     lap("pages");
+    if (!ctx.failed()) passOcr(ctx);
+    lap("ocr");
     if (!ctx.failed()) passCompleteResources(ctx);
     lap("resources");
     if (!ctx.failed()) passColor(ctx);
@@ -377,12 +390,31 @@ Result convert(const unsigned char* data, std::size_t size, const Options& opt) 
     lap("glyphclean");
     if (!ctx.failed()) passTagging(ctx);
     lap("tagging");
+    if (!ctx.failed() && opt.signDocument) addSignaturePlaceholder(ctx);
     if (!ctx.failed()) passMetadata(ctx);
     lap("metadata");
     if (!ctx.failed()) passLimits(ctx);
     lap("limits");
-    if (!ctx.failed()) serialize(ctx);
+    if (!ctx.failed() && !opt.verifyOnly) serialize(ctx);
+    if (!ctx.failed() && !opt.verifyOnly && opt.signDocument) {
+      std::string signErr;
+      if (!applySignature(opt, res.pdf, signErr)) {
+        ctx.fatal("SIGN_FAILED", signErr);
+      } else {
+        ctx.issue("DOCUMENT_SIGNED",
+                  "applied a PKCS#7 detached signature over the whole file", true);
+      }
+    }
     res.ok = res.errorCode.empty();
+    if (opt.verifyOnly && res.ok) {
+      res.compliant = true;
+      for (const Issue& i : res.issues) {
+        if (i.fixed && !issueIsNormalization(i.code)) {
+          res.compliant = false;
+          break;
+        }
+      }
+    }
     if (!res.ok && ctx.isA() && ctx.part == 1 &&
         (res.errorCode == "TRANSPARENCY_P1" || res.errorCode == "JPX_IN_PDFA1" ||
          res.errorCode == "CMYK_MIXED_P1" || res.errorCode == "RGB_UNDER_CMYK_P1")) {

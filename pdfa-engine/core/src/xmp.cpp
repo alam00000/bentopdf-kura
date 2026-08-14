@@ -342,7 +342,7 @@ void passMetadata(Ctx& ctx) {
     xmp += "        xmlns:pdfe=\"http://www.aiim.org/pdfe/ns/id/\"\n";
   }
   if (!ctx.opt.attachXml.empty()) {
-    xmp += "        xmlns:fx=\"urn:factur-x:pdfa:CrossIndustryDocument:invoice:1p0#\"\n";
+    xmp += "        xmlns:" + ctx.inv.prefix + "=\"" + ctx.inv.nsUri + "\"\n";
   }
   xmp += "        xmlns:dc=\"http://purl.org/dc/elements/1.1/\"\n";
   xmp += "        xmlns:xmp=\"http://ns.adobe.com/xap/1.0/\"\n";
@@ -379,13 +379,14 @@ void passMetadata(Ctx& ctx) {
     xmp += "      <pdfe:ISO_PDFEVersion>1</pdfe:ISO_PDFEVersion>\n";
   }
   if (!ctx.opt.attachXml.empty()) {
-    std::string fxName = ctx.opt.attachXmlName.empty() ? "factur-x.xml" : ctx.opt.attachXmlName;
-    std::string fxProfile =
-        ctx.opt.facturxProfile.empty() ? "EN 16931" : ctx.opt.facturxProfile;
-    xmp += "      <fx:DocumentType>INVOICE</fx:DocumentType>\n";
-    xmp += "      <fx:DocumentFileName>" + xmlEscape(fxName) + "</fx:DocumentFileName>\n";
-    xmp += "      <fx:Version>1.0</fx:Version>\n";
-    xmp += "      <fx:ConformanceLevel>" + xmlEscape(fxProfile) + "</fx:ConformanceLevel>\n";
+    const std::string& px = ctx.inv.prefix;
+    xmp += "      <" + px + ":DocumentType>" + xmlEscape(ctx.inv.documentType) + "</" + px +
+           ":DocumentType>\n";
+    xmp += "      <" + px + ":DocumentFileName>" + xmlEscape(ctx.inv.filename) + "</" + px +
+           ":DocumentFileName>\n";
+    xmp += "      <" + px + ":Version>" + xmlEscape(ctx.inv.version) + "</" + px + ":Version>\n";
+    xmp += "      <" + px + ":ConformanceLevel>" + xmlEscape(ctx.inv.profile) + "</" + px +
+           ":ConformanceLevel>\n";
   }
   xmp += "      <dc:format>application/pdf</dc:format>\n";
   if (ctx.opt.ua) {
@@ -437,15 +438,19 @@ void passMetadata(Ctx& ctx) {
     }
     if (wantFxSchema) {
       xmp += "          <rdf:li rdf:parseType=\"Resource\">\n";
-      xmp += "            <pdfaSchema:schema>Factur-X PDFA Extension Schema</pdfaSchema:schema>\n";
-      xmp += "            <pdfaSchema:namespaceURI>urn:factur-x:pdfa:CrossIndustryDocument:invoice:1p0#</pdfaSchema:namespaceURI>\n";
-      xmp += "            <pdfaSchema:prefix>fx</pdfaSchema:prefix>\n";
+      xmp += "            <pdfaSchema:schema>" + ctx.inv.schemaName +
+             "</pdfaSchema:schema>\n";
+      xmp += "            <pdfaSchema:namespaceURI>" + ctx.inv.nsUri +
+             "</pdfaSchema:namespaceURI>\n";
+      xmp += "            <pdfaSchema:prefix>" + ctx.inv.prefix + "</pdfaSchema:prefix>\n";
       xmp += "            <pdfaSchema:property>\n";
       xmp += "              <rdf:Seq>\n";
-      const char* props[4][2] = {{"DocumentFileName", "name of the embedded XML invoice file"},
-                                 {"DocumentType", "INVOICE"},
-                                 {"Version", "The actual version of the Factur-X data"},
-                                 {"ConformanceLevel", "The conformance level of the embedded Factur-X data"}};
+      const std::string& std_ = ctx.inv.standard;
+      const std::string props[4][2] = {
+          {"DocumentFileName", "name of the embedded XML document file"},
+          {"DocumentType", ctx.inv.documentType},
+          {"Version", "The actual version of the " + std_ + " data"},
+          {"ConformanceLevel", "The conformance level of the embedded " + std_ + " data"}};
       for (auto& pr : props) {
         xmp += "                <rdf:li rdf:parseType=\"Resource\">\n";
         xmp += std::string("                  <pdfaProperty:name>") + pr[0] +
