@@ -30,6 +30,7 @@ struct Options {
   std::function<bool(int pageIndex, double dpi, int& width, int& height, std::string& rgb)>
       rasterizePage;
   double rasterDpi = 300.0;
+  double imageMaxPpi = 0.0;
   std::string attachXml;
   std::string attachXmlName;
   std::string facturxProfile;

@@ -1,3 +1,4 @@
+#include <qpdf/Pl_Buffer.hh>
 #include <qpdf/QPDF.hh>
 #include <qpdf/QPDFPageDocumentHelper.hh>
 #include <qpdf/QPDFPageObjectHelper.hh>
@@ -264,7 +265,74 @@ void passCompleteResources(Ctx& ctx) {
   }
 }
 
-bool rasterFlattenPage(Ctx& ctx, QPDFPageObjectHelper& ph, int pageIndex) {
+class InvisibleTextFilter : public QPDFObjectHandle::TokenFilter {
+ public:
+  void handleToken(QPDFTokenizer::Token const& token) override {
+    QPDFTokenizer::token_type_e type = token.getType();
+    if (type == QPDFTokenizer::tt_inline_image) {
+      operands.clear();
+      return;
+    }
+    if (type != QPDFTokenizer::tt_word) {
+      operands.push_back(token);
+      return;
+    }
+    std::string op = token.getValue();
+    if (op == "BT") {
+      emit(op);
+      write(" 3 Tr");
+      inText = true;
+      ++kept;
+    } else if (op == "ET") {
+      emit(op);
+      inText = false;
+    } else if (inText) {
+      if (op == "Tr" || op == "Do" || op == "sh" || op == "gs") {
+        operands.clear();
+        return;
+      }
+      emit(op);
+    } else if (op == "q" || op == "Q" || op == "cm") {
+      emit(op);
+    } else {
+      operands.clear();
+    }
+  }
+
+  void handleEOF() override { operands.clear(); }
+
+  int textRuns() const { return kept; }
+
+ private:
+  void emit(const std::string& op) {
+    for (const auto& t : operands) writeToken(t);
+    operands.clear();
+    write(" ");
+    write(op);
+    write("\n");
+  }
+
+  std::vector<QPDFTokenizer::Token> operands;
+  bool inText = false;
+  int kept = 0;
+};
+
+std::string invisibleTextLayer(QPDFPageObjectHelper& ph, int& runs) {
+  InvisibleTextFilter filter;
+  Pl_Buffer buf("invisible-text");
+  try {
+    ph.filterContents(&filter, &buf);
+  } catch (const std::exception&) {
+    runs = 0;
+    return std::string();
+  }
+  runs = filter.textRuns();
+  if (!runs) return std::string();
+  std::shared_ptr<Buffer> b(buf.getBuffer());
+  return std::string(reinterpret_cast<const char*>(b->getBuffer()), b->getSize());
+}
+
+bool rasterFlattenPage(Ctx& ctx, QPDFPageObjectHelper& ph, int pageIndex, bool preserveText) {
   int w = 0, h = 0;
   std::string rgb;
   if (!ctx.opt.rasterizePage(pageIndex, ctx.opt.rasterDpi, w, h, rgb)) return false;
@@ -287,16 +355,30 @@ bool rasterFlattenPage(Ctx& ctx, QPDFPageObjectHelper& ph, int pageIndex) {
   id.replaceKey("/Height", QPDFObjectHandle::newInteger(h));
   id.replaceKey("/ColorSpace", QPDFObjectHandle::newName("/DeviceRGB"));
   id.replaceKey("/BitsPerComponent", QPDFObjectHandle::newInteger(8));
+  int runs = 0;
+  std::string text;
+  QPDFObjectHandle fonts = QPDFObjectHandle::newNull();
+  if (preserveText) {
+    QPDFObjectHandle oldRes = ph.getAttribute("/Resources", true);
+    if (oldRes.isDictionary() && oldRes.getKey("/Font").isDictionary()) {
+      text = invisibleTextLayer(ph, runs);
+      if (runs) fonts = oldRes.getKey("/Font");
+    }
+  }
+
   QPDFObjectHandle res = QPDFObjectHandle::newDictionary();
   QPDFObjectHandle xo = QPDFObjectHandle::newDictionary();
   xo.replaceKey("/FlatIm", ctx.pdf.makeIndirectObject(img));
   res.replaceKey("/XObject", xo);
+  if (!fonts.isNull()) res.replaceKey("/Font", fonts);
   page.replaceKey("/Resources", res);
   char buf[192];
-  std::snprintf(buf, sizeof(buf), "q %.4f 0 0 %.4f %.4f %.4f cm /FlatIm Do Q", pw, phh, mx1,
+  std::snprintf(buf, sizeof(buf), "q %.4f 0 0 %.4f %.4f %.4f cm /FlatIm Do Q\n", pw, phh, mx1,
                 my1);
+  std::string content(buf);
+  if (!text.empty()) content += text;
   page.replaceKey("/Contents",
-                  ctx.pdf.makeIndirectObject(QPDFObjectHandle::newStream(&ctx.pdf, buf)));
+                  ctx.pdf.makeIndirectObject(QPDFObjectHandle::newStream(&ctx.pdf, content)));
   if (page.getKey("/Group").isDictionary()) page.removeKey("/Group");
   return true;
 }
@@ -706,7 +788,7 @@ void passPages(Ctx& ctx) {
     }
     int rastered = 0;
     for (size_t i = 0; i < pages.size(); ++i) {
-      if (rasterFlattenPage(ctx, pages[i], static_cast<int>(i))) ++rastered;
+      if (rasterFlattenPage(ctx, pages[i], static_cast<int>(i), true)) ++rastered;
     }
     if (rastered != static_cast<int>(pages.size())) {
       ctx.fatal("RASTERIZE_FAILED",
@@ -729,7 +811,7 @@ void passPages(Ctx& ctx) {
       bool allOk = true;
       for (size_t i = 0; i < pages.size(); ++i) {
         if (i < rep.pages.size() && rep.pages[i]) {
-          if (rasterFlattenPage(ctx, pages[i], static_cast<int>(i))) {
+          if (rasterFlattenPage(ctx, pages[i], static_cast<int>(i), true)) {
             ++rastered;
           } else {
             allOk = false;
@@ -741,7 +823,7 @@ void passPages(Ctx& ctx) {
                   "rasterized " + std::to_string(rastered) +
                       " page(s) containing transparency at " +
                       std::to_string(static_cast<int>(ctx.opt.rasterDpi)) +
-                      " dpi (renderer-faithful flattening)",
+                      " dpi (renderer-faithful flattening; the original text is kept as an invisible layer so the page stays searchable)",
                   true);
       }
       if (allOk) rep.real = false;

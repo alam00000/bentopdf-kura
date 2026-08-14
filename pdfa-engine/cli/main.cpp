@@ -482,6 +482,8 @@ int main(int argc, char** argv) {
       opt.attachXmlName = argv[++i];
     } else if (arg == "--facturx-profile" && i + 1 < argc) {
       opt.facturxProfile = argv[++i];
+    } else if (arg == "--image-max-ppi" && i + 1 < argc) {
+      opt.imageMaxPpi = std::atof(argv[++i]);
     } else if (arg == "--password" && i + 1 < argc) {
       opt.password = argv[++i];
     } else if (input.empty()) {

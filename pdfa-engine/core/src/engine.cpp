@@ -375,6 +375,7 @@ Result convert(const unsigned char* data, std::size_t size, const Options& opt) 
     passStructure(ctx);
     lap("structure");
     if (!ctx.failed()) passPages(ctx);
+    if (!ctx.failed()) passImageResolution(ctx);
     lap("pages");
     if (!ctx.failed()) passOcr(ctx);
     lap("ocr");
