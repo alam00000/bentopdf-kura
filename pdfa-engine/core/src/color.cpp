@@ -717,6 +717,109 @@ void fixIccIdenticalToIntent(Ctx& ctx, QPDFObjectHandle keepIntent) {
   }
 }
 
+std::string iccStreamBytes(QPDFObjectHandle s) {
+  try {
+    auto buf = s.getStreamData(qpdf_dl_all);
+    return std::string(reinterpret_cast<const char*>(buf->getBuffer()), buf->getSize());
+  } catch (...) {
+    return std::string();
+  }
+}
+
+bool cmykIccStream(QPDFObjectHandle s) {
+  return s.isStream() && s.getDict().getKey("/N").isInteger() &&
+         s.getDict().getKey("/N").getIntValue() == 4;
+}
+
+void collectGroupProfiles(QPDFObjectHandle holder, Visited& seen,
+                          std::set<std::string>& profiles, int depth = 0) {
+  if (depth > 24 || !holder.isDictionary()) return;
+  QPDFObjectHandle grp = holder.getKey("/Group");
+  if (grp.isDictionary() && nameIs(grp.getKey("/S"), "/Transparency")) {
+    QPDFObjectHandle cs = grp.getKey("/CS");
+    if (cs.isArray() && cs.getArrayNItems() >= 2 && nameIs(cs.getArrayItem(0), "/ICCBased") &&
+        cmykIccStream(cs.getArrayItem(1))) {
+      std::string bytes = iccStreamBytes(cs.getArrayItem(1));
+      if (!bytes.empty()) profiles.insert(bytes);
+    }
+  }
+  QPDFObjectHandle res = holder.getKey("/Resources");
+  QPDFObjectHandle xod = res.isDictionary() ? res.getKey("/XObject")
+                                            : QPDFObjectHandle::newNull();
+  if (!xod.isDictionary()) return;
+  for (const std::string& k : xod.getKeys()) {
+    QPDFObjectHandle xo = xod.getKey(k);
+    if (xo.isStream() && nameIs(xo.getDict().getKey("/Subtype"), "/Form") &&
+        seen.enter(xo)) {
+      collectGroupProfiles(xo.getDict(), seen, profiles, depth + 1);
+    }
+  }
+}
+
+void replaceIccUses(QPDFObjectHandle o, const std::set<QPDFObjGen>& identical,
+                    Visited& visited, int& replaced, int depth = 0) {
+  if (depth > 64) return;
+  if (o.isIndirect() && !visited.enter(o)) return;
+  if (o.isStream()) {
+    replaceIccUses(o.getDict(), identical, visited, replaced, depth + 1);
+    return;
+  }
+  if (o.isArray()) {
+    if (o.getArrayNItems() >= 2 && nameIs(o.getArrayItem(0), "/ICCBased") &&
+        o.getArrayItem(1).isIndirect() && identical.count(o.getArrayItem(1).getObjGen())) {
+      while (o.getArrayNItems() > 0) o.eraseItem(o.getArrayNItems() - 1);
+      o.appendItem(QPDFObjectHandle::newName("/DeviceCMYK"));
+      ++replaced;
+      return;
+    }
+    for (int i = 0; i < o.getArrayNItems(); ++i) {
+      replaceIccUses(o.getArrayItem(i), identical, visited, replaced, depth + 1);
+    }
+    return;
+  }
+  if (o.isDictionary()) {
+    bool group = nameIs(o.getKey("/S"), "/Transparency");
+    for (const std::string& k : o.getKeys()) {
+      if (group && k == "/CS") continue;
+      replaceIccUses(o.getKey(k), identical, visited, replaced, depth + 1);
+    }
+  }
+}
+
+void fixIccIdenticalToGroups(Ctx& ctx) {
+  QPDFPageDocumentHelper dh(ctx.pdf);
+  int replaced = 0;
+  for (auto& ph : dh.getAllPages()) {
+    QPDFObjectHandle page = ph.getObjectHandle();
+    std::set<std::string> profiles;
+    Visited gseen;
+    collectGroupProfiles(page, gseen, profiles);
+    if (profiles.empty()) continue;
+    std::set<QPDFObjGen> identical;
+    for (QPDFObjectHandle obj : ctx.pdf.getAllObjects()) {
+      if (!cmykIccStream(obj)) continue;
+      std::string bytes = iccStreamBytes(obj);
+      if (!bytes.empty() && profiles.count(bytes)) identical.insert(obj.getObjGen());
+    }
+    if (identical.empty()) continue;
+    Visited visited;
+    replaceIccUses(page.getKey("/Resources"), identical, visited, replaced);
+    QPDFObjectHandle annots = page.getKey("/Annots");
+    if (annots.isArray()) {
+      for (int i = 0; i < annots.getArrayNItems(); ++i) {
+        replaceIccUses(annots.getArrayItem(i), identical, visited, replaced);
+      }
+    }
+  }
+  if (replaced) {
+    ctx.issue("ICC_INTENT_DEDUPED",
+              "replaced " + std::to_string(replaced) +
+                  " ICCBased space(s) identical to a transparency group blending profile "
+                  "with DeviceCMYK",
+              true);
+  }
+}
+
 bool injectDefaultSpace(Ctx& ctx, std::vector<QPDFObjectHandle>& scopes, const char* key,
                         QPDFObjectHandle defRef) {
   bool changed = false;
@@ -1001,6 +1104,7 @@ void passColor(Ctx& ctx) {
 
   if (ctx.part >= 2) {
     fixIccIdenticalToIntent(ctx, keepIntent);
+    fixIccIdenticalToGroups(ctx);
   }
 
   if (ctx.part == 1 && anchor != "RGB ") {

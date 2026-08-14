@@ -117,6 +117,29 @@ bool parseCmapBody(const std::string& text, std::vector<CodespaceRange>& spaces,
 }
 
 const std::set<QPDFObjGen>* ctxIdentityCmaps = nullptr;
+bool gStrictNotdef = false;
+
+FT_UInt strictSimpleGid(FT_Face face, int code, const SimpleEncoding& enc, bool symbolic) {
+  if (symbolic) return glyphForCode(face, code, enc, symbolic);
+  const std::string& diffName = enc.diffs[code];
+  if (!diffName.empty()) {
+    std::string bare = diffName.substr(1);
+    FT_UInt gid = FT_HAS_GLYPH_NAMES(face) ? FT_Get_Name_Index(face, bare.c_str()) : 0;
+    if (gid) return gid;
+    uint32_t uni = aglNameToUnicode(bare);
+    if (!uni) parseUniName(bare, uni);
+    if (uni && FT_Select_Charmap(face, FT_ENCODING_UNICODE) == 0) {
+      return FT_Get_Char_Index(face, uni);
+    }
+    return 0;
+  }
+  uint16_t uni = enc.base ? enc.base(code) : 0;
+  if (!uni) uni = winAnsiToUnicode(code);
+  if (uni && FT_Select_Charmap(face, FT_ENCODING_UNICODE) == 0) {
+    return FT_Get_Char_Index(face, uni);
+  }
+  return 0;
+}
 
 FontGlyphInfo analyzeFontGlyphs(FtLib& lib, QPDFObjectHandle font) {
   FontGlyphInfo info;
@@ -238,7 +261,12 @@ FontGlyphInfo analyzeFontGlyphs(FtLib& lib, QPDFObjectHandle font) {
     } else {
       gid = glyphForCode(face.face, code, enc, symbolic);
     }
-    if (gid == 0) info.bad.insert(code);
+    if (gid == 0) {
+      info.bad.insert(code);
+    } else if (gStrictNotdef && !(nameBased && !enc.diffs[code].empty()) &&
+               strictSimpleGid(face.face, code, enc, symbolic) == 0) {
+      info.bad.insert(code);
+    }
   }
   return info;
 }
@@ -585,7 +613,11 @@ void glyphCleanHolder(Ctx& ctx, FtLib& lib, QPDFObjectHandle holder, QPDFObjectH
                                  refDropped, langFixed);
     int before = dropped + refDropped + langFixed;
     ph.filterContents(&probeFilter, &probe);
-    if (dropped + refDropped + langFixed == before && !needClean) return;
+    if (dropped + refDropped + langFixed == before && !needClean) {
+      glyphCleanResources(ctx, lib, res, visited, cache, dropped, refDropped, langFixed,
+                          depth);
+      return;
+    }
     auto data = probe.getBufferSharedPointer();
     std::string rewritten(reinterpret_cast<const char*>(data->getBuffer()), data->getSize());
     if (holder.isStream()) {
@@ -605,6 +637,7 @@ void glyphCleanHolder(Ctx& ctx, FtLib& lib, QPDFObjectHandle holder, QPDFObjectH
 void passGlyphClean(Ctx& ctx) {
   if (!ctx.isA()) return;
   ctxIdentityCmaps = &ctx.identityCmaps;
+  gStrictNotdef = ctx.part >= 2;
   FtLib lib;
   Visited visited;
   std::map<QPDFObjGen, FontGlyphInfo> cache;

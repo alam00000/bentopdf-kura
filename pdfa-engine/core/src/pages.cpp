@@ -197,6 +197,48 @@ void completeStreamResources(Ctx& ctx, QPDFObjectHandle holder, QPDFObjectHandle
   QPDFObjectHandle effNow = d.getKey("/Resources").isDictionary() ? d.getKey("/Resources")
                                                                   : parentRes;
   if (effNow.isDictionary()) {
+    QPDFObjectHandle fonts = effNow.getKey("/Font");
+    if (fonts.isDictionary()) {
+      for (const std::string& fk : fonts.getKeys()) {
+        QPDFObjectHandle fnt = fonts.getKey(fk);
+        if (!fnt.isDictionary() || !nameIs(fnt.getKey("/Subtype"), "/Type3")) continue;
+        QPDFObjectHandle cp = fnt.getKey("/CharProcs");
+        if (!cp.isDictionary() || !visited.enter(fnt)) continue;
+        ResourceNeedScanner t3scan;
+        for (const std::string& g : cp.getKeys()) {
+          if (!cp.getKey(g).isStream()) continue;
+          try {
+            QPDFObjectHandle::parseContentStream(cp.getKey(g), &t3scan);
+          } catch (...) {
+          }
+        }
+        QPDFObjectHandle fres = fnt.getKey("/Resources");
+        for (auto& kv : t3scan.need) {
+          const std::string& cat = kv.first;
+          for (const std::string& n : kv.second) {
+            if (cat == "/ColorSpace" && kStdCs.count(n)) continue;
+            if (fres.isDictionary() && fres.getKey(cat).isDictionary() &&
+                fres.getKey(cat).hasKey(n)) {
+              continue;
+            }
+            if (!effNow.getKey(cat).isDictionary() || !effNow.getKey(cat).hasKey(n)) {
+              continue;
+            }
+            if (!fres.isDictionary()) {
+              fnt.replaceKey("/Resources", QPDFObjectHandle::newDictionary());
+              fres = fnt.getKey("/Resources");
+            }
+            QPDFObjectHandle fcat = fres.getKey(cat);
+            if (!fcat.isDictionary()) {
+              fres.replaceKey(cat, QPDFObjectHandle::newDictionary());
+              fcat = fres.getKey(cat);
+            }
+            fcat.replaceKey(n, effNow.getKey(cat).getKey(n));
+            ++fixedEntries;
+          }
+        }
+      }
+    }
     QPDFObjectHandle xod = effNow.getKey("/XObject");
     if (xod.isDictionary()) {
       for (const std::string& k : xod.getKeys()) {
@@ -421,11 +463,62 @@ void fixGState(Ctx& ctx, QPDFObjectHandle gs) {
         htd.removeKey("/TransferFunction");
         ctx.issue("HALFTONE_TF_REMOVED", "removed /TransferFunction from halftone", true);
       }
+      if (type == 5) {
+        static const std::set<std::string> kPrimary = {"/Cyan", "/Magenta", "/Yellow",
+                                                       "/Black", "/Default"};
+        for (const std::string& ck : htd.getKeys()) {
+          if (ck == "/Type" || ck == "/HalftoneType") continue;
+          QPDFObjectHandle sub = htd.getKey(ck);
+          QPDFObjectHandle subd = sub.isStream() ? sub.getDict()
+                                                 : (sub.isDictionary() ? sub
+                                                                       : QPDFObjectHandle::newNull());
+          if (!subd.isDictionary()) continue;
+          if (subd.hasKey("/HalftoneName")) {
+            subd.removeKey("/HalftoneName");
+            ctx.issue("HALFTONE_NAME_REMOVED", "removed /HalftoneName from halftone", true);
+          }
+          if (kPrimary.count(ck) && subd.hasKey("/TransferFunction")) {
+            subd.removeKey("/TransferFunction");
+            ctx.issue("HALFTONE_TF_REMOVED",
+                      "removed /TransferFunction from primary colourant halftone " + ck,
+                      true);
+          } else if (!kPrimary.count(ck) && !subd.hasKey("/TransferFunction")) {
+            subd.replaceKey("/TransferFunction", QPDFObjectHandle::newName("/Identity"));
+            ctx.issue("HALFTONE_TF_ADDED",
+                      "added identity /TransferFunction to nonprimary colourant halftone " +
+                          ck,
+                      true);
+          }
+        }
+      }
     }
   }
   if (gs.hasKey("/RI") && kValidIntents.count(nameOf(gs.getKey("/RI"))) == 0) {
     gs.removeKey("/RI");
     ctx.issue("RENDERING_INTENT_FIXED", "removed invalid rendering intent in ExtGState", true);
+  }
+  QPDFObjectHandle bm = gs.getKey("/BM");
+  if (!bm.isNull()) {
+    static const std::set<std::string> kBlendModes = {
+        "/Normal", "/Multiply", "/Screen", "/Overlay", "/Darken", "/Lighten",
+        "/ColorDodge", "/ColorBurn", "/HardLight", "/SoftLight", "/Difference",
+        "/Exclusion", "/Hue", "/Saturation", "/Color", "/Luminosity"};
+    std::string pick;
+    if (bm.isName() && kBlendModes.count(bm.getName())) pick = bm.getName();
+    if (bm.isArray()) {
+      for (int i = 0; i < bm.getArrayNItems() && pick.empty(); ++i) {
+        std::string n = nameOf(bm.getArrayItem(i));
+        if (kBlendModes.count(n)) pick = n;
+      }
+    }
+    bool isPlainStandard = bm.isName() && !pick.empty();
+    if (!isPlainStandard) {
+      gs.replaceKey("/BM", QPDFObjectHandle::newName(pick.empty() ? "/Normal" : pick));
+      ctx.issue("BLEND_MODE_FIXED",
+                "replaced non-standard blend mode with " +
+                    (pick.empty() ? std::string("/Normal") : pick),
+                true);
+    }
   }
 }
 
@@ -479,7 +572,7 @@ void fixImage(Ctx& ctx, QPDFObjectHandle image, int depth) {
     d.removeKey("/Intent");
     ctx.issue("RENDERING_INTENT_FIXED", "removed invalid rendering intent on image", true);
   }
-  if (ctx.pdf14Target()) {
+  {
     QPDFObjectHandle filters = d.getKey("/Filter");
     std::vector<std::string> names;
     if (filters.isName()) names.push_back(filters.getName());
@@ -488,12 +581,25 @@ void fixImage(Ctx& ctx, QPDFObjectHandle image, int depth) {
         names.push_back(nameOf(filters.getArrayItem(i)));
       }
     }
+    bool jpx = false;
     for (const std::string& n : names) {
-      if (n == "/JPXDecode") {
+      if (n == "/JPXDecode") jpx = true;
+    }
+    if (jpx && ctx.pdf14Target()) {
+      if (!transcodeJpxImage(ctx, image)) return;
+    } else if (jpx && names.size() == 1 && ctx.isA() && ctx.part >= 2) {
+      std::string raw;
+      try {
+        auto buf = image.getRawStreamData();
+        raw.assign(reinterpret_cast<const char*>(buf->getBuffer()), buf->getSize());
+      } catch (...) {
+      }
+      if (!raw.empty() && !jpxPdfaConformant(raw)) {
         if (!transcodeJpxImage(ctx, image)) return;
-        break;
       }
     }
+  }
+  if (ctx.pdf14Target()) {
     if (d.getKey("/SMask").isStream()) {
       if (!flattenImageSMask(ctx, image)) return;
     }

@@ -59,6 +59,91 @@ RawImage decodeJpxData(const std::string& rawData, std::string& alphaOut) {
 }
 
 namespace {
+uint32_t be32(const unsigned char* p) {
+  return (static_cast<uint32_t>(p[0]) << 24) | (p[1] << 16) | (p[2] << 8) | p[3];
+}
+
+bool scanJp2Boxes(const unsigned char* d, size_t n, int& colrCount, bool& colrOk,
+                  int& nc, int& bpcVal, bool& bpcVaries, bool& bpccEqual, int depth) {
+  if (depth > 4) return false;
+  size_t i = 0;
+  bool sawIhdr = false;
+  while (i + 8 <= n) {
+    uint64_t len = be32(d + i);
+    std::string type(reinterpret_cast<const char*>(d + i + 4), 4);
+    size_t hdr = 8;
+    if (len == 1) {
+      if (i + 16 > n) return false;
+      len = (static_cast<uint64_t>(be32(d + i + 8)) << 32) | be32(d + i + 12);
+      hdr = 16;
+    } else if (len == 0) {
+      len = n - i;
+    }
+    if (len < hdr || i + len > n) return false;
+    const unsigned char* p = d + i + hdr;
+    size_t plen = static_cast<size_t>(len - hdr);
+    if (type == "jp2h") {
+      if (!scanJp2Boxes(p, plen, colrCount, colrOk, nc, bpcVal, bpcVaries, bpccEqual,
+                        depth + 1)) {
+        return false;
+      }
+      sawIhdr = true;
+    } else if (type == "ihdr" && plen >= 10) {
+      nc = (p[8] << 8) | p[9];
+      bpcVal = plen >= 11 ? p[10] : 0;
+      bpcVaries = bpcVal == 0xFF;
+      sawIhdr = true;
+    } else if (type == "bpcc") {
+      bpccEqual = true;
+      for (size_t j = 1; j < plen; ++j) {
+        if (p[j] != p[0]) bpccEqual = false;
+      }
+      if (plen > 0) bpcVal = p[0];
+    } else if (type == "colr" && plen >= 3) {
+      ++colrCount;
+      int meth = p[0];
+      int approx = p[2];
+      bool ok = approx == 0;
+      if (meth == 1) {
+        if (plen < 7) {
+          ok = false;
+        } else {
+          uint32_t enumCs = be32(p + 3);
+          ok = ok && (enumCs == 16 || enumCs == 17 || enumCs == 18);
+        }
+      } else if (meth != 2) {
+        ok = false;
+      }
+      colrOk = colrOk && ok;
+    }
+    i += static_cast<size_t>(len);
+  }
+  return depth > 0 ? true : sawIhdr;
+}
+}
+
+bool jpxPdfaConformant(const std::string& data) {
+  const unsigned char* d = reinterpret_cast<const unsigned char*>(data.data());
+  size_t n = data.size();
+  if (n < 12) return false;
+  if (d[0] == 0xFF && d[1] == 0x4F) return false;
+  int colrCount = 0, nc = 0, bpcVal = -1;
+  bool colrOk = true, bpcVaries = false, bpccEqual = true;
+  if (!scanJp2Boxes(d, n, colrCount, colrOk, nc, bpcVal, bpcVaries, bpccEqual, 0)) {
+    return false;
+  }
+  if (nc != 1 && nc != 3 && nc != 4) return false;
+  if (bpcVaries) {
+    if (!bpccEqual) return false;
+    if (bpcVal < 0) return false;
+  }
+  int depthBits = (bpcVal & 0x7F) + 1;
+  if (depthBits < 1 || depthBits > 38) return false;
+  if (colrCount != 1 || !colrOk) return false;
+  return true;
+}
+
+namespace {
 RawImage decodeJpxDataAt(const std::string& data, std::string& alphaOut) {
   RawImage out;
   if (data.size() < 12) {

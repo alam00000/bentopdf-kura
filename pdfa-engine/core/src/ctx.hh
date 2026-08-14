@@ -19,6 +19,8 @@ struct Ctx {
   Family fam;
   std::set<QPDFObjGen> identityCmaps;
   InvoiceProfile inv;
+  int inlineImagesFixed = 0;
+  int contentPuaFixed = 0;
 
   bool isA() const { return fam == Family::PDFA; }
   bool isX() const { return fam == Family::PDFX || fam == Family::PDFVT; }

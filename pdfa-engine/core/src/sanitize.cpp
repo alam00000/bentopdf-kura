@@ -577,8 +577,72 @@ void normalizeNameTrees(Ctx& ctx) {
 }
 }
 
+namespace {
+void fixStructNameText(Ctx& ctx) {
+  QPDFObjectHandle root = ctx.pdf.getRoot();
+  bool wantUtf8 = ctx.isA() && ctx.part >= 4;
+  bool wantPua = (ctx.isA() && ctx.part >= 4) || ctx.opt.ua;
+  if (!wantUtf8 && !wantPua) return;
+  QPDFObjectHandle rm = QPDFObjectHandle::newNull();
+  QPDFObjectHandle str = root.getKey("/StructTreeRoot");
+  if (str.isDictionary()) rm = str.getKey("/RoleMap");
+  int renamed = 0, rmFixed = 0, puaFixed = 0;
+  for (QPDFObjectHandle obj : ctx.pdf.getAllObjects()) {
+    if (!obj.isDictionary()) continue;
+    if (wantUtf8 && obj.getKey("/S").isName() &&
+        (nameIs(obj.getKey("/Type"), "/StructElem") ||
+         (!obj.getKey("/Type").isName() && (obj.hasKey("/P") || obj.hasKey("/K"))))) {
+      std::string s = obj.getKey("/S").getName();
+      if (!validUtf8(s.substr(1))) {
+        std::string target = "/P";
+        if (rm.isDictionary() && rm.getKey(s).isName()) {
+          std::string mapped = rm.getKey(s).getName();
+          if (validUtf8(mapped.substr(1))) target = mapped;
+        }
+        obj.replaceKey("/S", QPDFObjectHandle::newName(target));
+        ++renamed;
+      }
+    }
+    if (wantPua && obj.getKey("/ActualText").isString()) {
+      bool changed = false;
+      std::string cleaned = stripPuaUtf8(obj.getKey("/ActualText").getUTF8Value(), changed);
+      if (changed) {
+        if (cleaned.empty()) {
+          obj.removeKey("/ActualText");
+        } else {
+          obj.replaceKey("/ActualText", QPDFObjectHandle::newUnicodeString(cleaned));
+        }
+        ++puaFixed;
+      }
+    }
+  }
+  if (wantUtf8 && rm.isDictionary()) {
+    for (const std::string& k : rm.getKeys()) {
+      QPDFObjectHandle v = rm.getKey(k);
+      if (!validUtf8(k.substr(1)) || !v.isName() || !validUtf8(v.getName().substr(1))) {
+        rm.removeKey(k);
+        ++rmFixed;
+      }
+    }
+  }
+  if (renamed || rmFixed) {
+    ctx.issue("STRUCT_NAMES_SANITIZED",
+              "replaced " + std::to_string(renamed) + " structure type name(s) and removed " +
+                  std::to_string(rmFixed) + " role map entrie(s) that are not valid UTF-8",
+              true);
+  }
+  if (puaFixed) {
+    ctx.issue("ACTUALTEXT_PUA_REMOVED",
+              "removed private-use-area characters from " + std::to_string(puaFixed) +
+                  " ActualText value(s)",
+              true);
+  }
+}
+}
+
 void passStructure(Ctx& ctx) {
   QPDFObjectHandle root = ctx.pdf.getRoot();
+  fixStructNameText(ctx);
 
   for (const char* key : {"/AA", "/Requirements", "/NeedsRendering", "/Perms", "/Version"}) {
     if (root.hasKey(key)) {

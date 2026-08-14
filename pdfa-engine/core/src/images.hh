@@ -22,6 +22,8 @@ std::string encodeJpeg(const std::string& samples, int width, int height, int co
 std::string flateCompress(const std::string& data);
 bool flattenImageSMask(Ctx& ctx, QPDFObjectHandle image);
 RawImage decodeJpxData(const std::string& data, std::string& alphaOut);
+
+bool jpxPdfaConformant(const std::string& data);
 bool transcodeJpxImage(Ctx& ctx, QPDFObjectHandle image);
 RawImage decodeDctData(const std::string& data, bool& cmykInverted);
 bool inflateData(const std::string& in, std::string& out);

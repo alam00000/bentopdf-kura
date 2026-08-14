@@ -212,6 +212,8 @@ void stripFormMarkedContent(Ctx& ctx, QPDFObjectHandle res, Visited& visited) {
     QPDFObjectHandle xo = xod.getKey(k);
     if (!xo.isStream() || !visited.enter(xo)) continue;
     if (!nameIs(xo.getDict().getKey("/Subtype"), "/Form")) continue;
+    xo.getDict().removeKey("/StructParents");
+    xo.getDict().removeKey("/StructParent");
     try {
       QPDFPageObjectHelper ph(xo);
       StripMcFilter filter;
@@ -737,6 +739,7 @@ void passTagging(Ctx& ctx) {
   }
   if (ctx.conf != 'A') return;
   QPDFObjectHandle root = ctx.pdf.getRoot();
+  bool hadTree = root.getKey("/StructTreeRoot").isDictionary();
 
   QPDFObjectHandle markInfo = root.getKey("/MarkInfo");
   if (!markInfo.isDictionary()) {
@@ -774,5 +777,6 @@ void passTagging(Ctx& ctx) {
     }
   }
   fixRoleMap(ctx);
+  if (hadTree) passSemanticRepair(ctx);
 }
 }

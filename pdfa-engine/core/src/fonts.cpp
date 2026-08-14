@@ -755,6 +755,20 @@ void scrubToUnicode(Ctx& ctx, QPDFObjectHandle font) {
         for (size_t i = 0; i + 4 <= hex.size(); i += 4) {
           std::string quad = hex.substr(i, 4);
           unsigned v = static_cast<unsigned>(std::strtoul(quad.c_str(), nullptr, 16));
+          if (puaBanned && v >= 0xD800 && v <= 0xDBFF && i + 8 <= hex.size()) {
+            unsigned lo = static_cast<unsigned>(
+                std::strtoul(hex.substr(i + 4, 4).c_str(), nullptr, 16));
+            if (lo >= 0xDC00 && lo <= 0xDFFF) {
+              unsigned cp = 0x10000 + ((v - 0xD800) << 10) + (lo - 0xDC00);
+              if ((cp >= 0xF0000 && cp <= 0xFFFFD) || (cp >= 0x100000 && cp <= 0x10FFFD)) {
+                hex.replace(i, 8, "FFFD");
+                bad = true;
+                continue;
+              }
+              i += 4;
+              continue;
+            }
+          }
           if (v == 0 || v == 0xFEFF || v == 0xFFFE) {
             hex.replace(i, 4, "FFFD");
             bad = true;
@@ -933,11 +947,15 @@ void fixEmbeddedCMap(Ctx& ctx, QPDFObjectHandle type0) {
     std::string cord = cd.isDictionary() && cd.getKey("/Ordering").isString()
                            ? cd.getKey("/Ordering").getStringValue()
                            : "";
-    if (creg != reg || cord != ord) {
+    long long csupp = cd.isDictionary() && cd.getKey("/Supplement").isInteger()
+                          ? cd.getKey("/Supplement").getIntValue()
+                          : -1;
+    if (creg != reg || cord != ord || csupp < rosSupp) {
       QPDFObjectHandle nr = QPDFObjectHandle::newDictionary();
       nr.replaceKey("/Registry", QPDFObjectHandle::newString(reg));
       nr.replaceKey("/Ordering", QPDFObjectHandle::newString(ord));
-      nr.replaceKey("/Supplement", QPDFObjectHandle::newInteger(rosSupp));
+      nr.replaceKey("/Supplement",
+                    QPDFObjectHandle::newInteger(csupp > rosSupp ? csupp : rosSupp));
       enc.getDict().replaceKey("/CIDSystemInfo", nr);
       ctx.issue("CMAP_ROS_SYNCED",
                 "aligned embedded CMap /CIDSystemInfo dictionary with the CIDFont", true);
@@ -985,6 +1003,17 @@ void fixEmbeddedCMap(Ctx& ctx, QPDFObjectHandle type0) {
         text.erase(lineStart, uc + 7 - lineStart);
         changed = true;
         if (enc.getDict().hasKey("/UseCMap")) enc.getDict().removeKey("/UseCMap");
+      }
+    } else if (enc.getDict().hasKey("/UseCMap")) {
+      QPDFObjectHandle ref = enc.getDict().getKey("/UseCMap");
+      std::string refName = ref.isName() ? ref.getName() : std::string();
+      if (ref.isStream() && ref.getDict().getKey("/CMapName").isName()) {
+        refName = ref.getDict().getKey("/CMapName").getName();
+      }
+      if (refName.find("Identity") == std::string::npos) {
+        enc.getDict().removeKey("/UseCMap");
+        ctx.issue("CMAP_USECMAP_REMOVED",
+                  "removed /UseCMap reference not used by the embedded CMap program", true);
       }
     }
     size_t wm = text.find("/WMode");

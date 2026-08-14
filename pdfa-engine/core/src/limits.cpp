@@ -4,9 +4,11 @@
 #include <qpdf/QPDFPageObjectHelper.hh>
 #include <qpdf/QPDFTokenizer.hh>
 
+#include <cctype>
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
+#include <map>
 #include <memory>
 #include <functional>
 #include <set>
@@ -14,6 +16,7 @@
 #include <vector>
 
 #include "ctx.hh"
+#include "images.hh"
 #include "passes.hh"
 #include "util.hh"
 
@@ -60,14 +63,94 @@ std::string shortenName(const std::string& n) {
   return n.substr(0, kMaxName - 9) + suffix;
 }
 
+std::string lzwDecode(const std::string& in, bool& ok) {
+  ok = false;
+  std::vector<std::string> table;
+  auto reset = [&]() {
+    table.clear();
+    for (int i = 0; i < 258; ++i) {
+      table.push_back(i < 256 ? std::string(1, static_cast<char>(i)) : std::string());
+    }
+  };
+  reset();
+  int width = 9;
+  std::string out, prev;
+  size_t bitpos = 0;
+  auto next = [&](int& code) -> bool {
+    if (bitpos + width > in.size() * 8) return false;
+    code = 0;
+    for (int b = 0; b < width; ++b) {
+      size_t p = bitpos + b;
+      code = (code << 1) |
+             ((static_cast<unsigned char>(in[p / 8]) >> (7 - p % 8)) & 1);
+    }
+    bitpos += width;
+    return true;
+  };
+  int code = 0;
+  while (next(code)) {
+    if (code == 256) {
+      reset();
+      width = 9;
+      prev.clear();
+      continue;
+    }
+    if (code == 257) {
+      ok = true;
+      return out;
+    }
+    std::string entry;
+    if (code >= 0 && code < static_cast<int>(table.size()) && code < 256) {
+      entry = table[code];
+    } else if (code >= 258 && code < static_cast<int>(table.size())) {
+      entry = table[code];
+    } else if (code == static_cast<int>(table.size()) && !prev.empty()) {
+      entry = prev + prev[0];
+    } else {
+      return out;
+    }
+    if (out.size() + entry.size() > 100000000) return out;
+    out += entry;
+    if (!prev.empty()) table.push_back(prev + entry[0]);
+    prev = entry;
+    if (table.size() >= (1u << width) - 1 && width < 12) ++width;
+  }
+  ok = true;
+  return out;
+}
+
 class ContentFixFilter : public QPDFObjectHandle::TokenFilter {
  public:
-  ContentFixFilter(bool pdf14, bool limits23)
+  ContentFixFilter(bool pdf14, bool limits23, bool scrubActualText = false,
+                   int* iiFixed = nullptr, int* puaFixed = nullptr)
       : pdf14(pdf14), limits(pdf14 || limits23),
-        maxStr(pdf14 ? kMaxString1 : kMaxString23) {}
+        maxStr(pdf14 ? kMaxString1 : kMaxString23), scrubActualText(scrubActualText),
+        iiFixed(iiFixed), puaFixed(puaFixed) {}
 
   void handleToken(QPDFTokenizer::Token const& token) override {
     QPDFTokenizer::token_type_e type = token.getType();
+    if (inImageDict) {
+      if (type == QPDFTokenizer::tt_word && token.getValue() == "ID") return;
+      if (type == QPDFTokenizer::tt_inline_image) {
+        processInlineImage(token.getRawValue());
+        inImageDict = false;
+        swallowEI = true;
+        return;
+      }
+      if (type == QPDFTokenizer::tt_word && token.getValue() == "EI") {
+        write("BI " + iiText + " EI\n");
+        iiText.clear();
+        inImageDict = false;
+        return;
+      }
+      iiText += token.getRawValue();
+      return;
+    }
+    if (swallowEI) {
+      if (type == QPDFTokenizer::tt_space) return;
+      swallowEI = false;
+      if (type == QPDFTokenizer::tt_word && token.getValue() == "EI") return;
+    }
     if (type == QPDFTokenizer::tt_name) {
       flushHeld();
       heldName = token;
@@ -100,7 +183,7 @@ class ContentFixFilter : public QPDFObjectHandle::TokenFilter {
       heldTrail.push_back(token);
       return;
     }
-    if (type == QPDFTokenizer::tt_word && token.getValue() == "ri" && haveName && pdf14) {
+    if (type == QPDFTokenizer::tt_word && token.getValue() == "ri" && haveName) {
       if (kValidRi.count(heldName.getValue()) == 0) {
         heldName = QPDFTokenizer::Token(QPDFTokenizer::tt_name, "/RelativeColorimetric");
       }
@@ -111,42 +194,20 @@ class ContentFixFilter : public QPDFObjectHandle::TokenFilter {
     if (type == QPDFTokenizer::tt_word && token.getValue() == "BI") {
       flushHeld();
       inImageDict = true;
-      pendingKey.clear();
-      writeToken(token);
+      iiText.clear();
       return;
     }
-    if (inImageDict) {
-      if (type == QPDFTokenizer::tt_inline_image ||
-          (type == QPDFTokenizer::tt_word && token.getValue() == "EI")) {
+    if (type == QPDFTokenizer::tt_string && scrubActualText && haveName &&
+        heldName.getValue() == "/ActualText") {
+      bool changed = false;
+      std::string cleaned = stripPuaUtf8(
+          QPDFObjectHandle::newString(token.getValue()).getUTF8Value(), changed);
+      if (changed) {
         flushHeld();
-        inImageDict = false;
-        pendingKey.clear();
-        writeToken(token);
+        write(QPDFObjectHandle::newUnicodeString(cleaned).unparse());
+        if (puaFixed) ++(*puaFixed);
         return;
       }
-      if (haveName && !pendingKey.empty()) {
-        std::string key = pendingKey;
-        pendingKey.clear();
-        if (key == "/Intent" && kValidRi.count(heldName.getValue()) == 0) {
-          heldName = QPDFTokenizer::Token(QPDFTokenizer::tt_name, "/RelativeColorimetric");
-        }
-        flushHeld();
-        return;
-      }
-      if (haveName) {
-        pendingKey = heldName.getValue();
-        flushHeld();
-      }
-      if (!pendingKey.empty()) {
-        std::string key = pendingKey;
-        pendingKey.clear();
-        if ((key == "/I" || key == "/Interpolate") && token.getValue() == "true") {
-          writeToken(QPDFTokenizer::Token(QPDFTokenizer::tt_word, "false"));
-          return;
-        }
-      }
-      writeToken(token);
-      return;
     }
     if (type == QPDFTokenizer::tt_bad) {
       std::string raw = token.getRawValue();
@@ -240,10 +301,123 @@ class ContentFixFilter : public QPDFObjectHandle::TokenFilter {
     heldTrail.clear();
   }
 
+  void processInlineImage(const std::string& data) {
+    std::string dictText = iiText;
+    iiText.clear();
+    auto passthrough = [&]() { write("BI " + dictText + " ID\n" + data + "\nEI\n"); };
+    QPDFObjectHandle dict;
+    try {
+      dict = QPDFObjectHandle::parse("<<" + dictText + ">>");
+    } catch (...) {
+      passthrough();
+      return;
+    }
+    if (!dict.isDictionary()) {
+      passthrough();
+      return;
+    }
+    bool changed = false;
+    for (const char* ik : {"/Intent"}) {
+      if (dict.getKey(ik).isName() && kValidRi.count(dict.getKey(ik).getName()) == 0) {
+        dict.replaceKey(ik, QPDFObjectHandle::newName("/RelativeColorimetric"));
+        changed = true;
+      }
+    }
+    for (const char* bk : {"/I", "/Interpolate"}) {
+      if (dict.getKey(bk).isBool() && dict.getKey(bk).getBoolValue()) {
+        dict.replaceKey(bk, QPDFObjectHandle::newBool(false));
+        changed = true;
+      }
+    }
+    static const std::map<std::string, std::string> kToAbbrev = {
+        {"/AHx", "/AHx"}, {"/ASCIIHexDecode", "/AHx"},
+        {"/A85", "/A85"}, {"/ASCII85Decode", "/A85"},
+        {"/Fl", "/Fl"}, {"/FlateDecode", "/Fl"},
+        {"/RL", "/RL"}, {"/RunLengthDecode", "/RL"},
+        {"/CCF", "/CCF"}, {"/CCITTFaxDecode", "/CCF"},
+        {"/DCT", "/DCT"}, {"/DCTDecode", "/DCT"}};
+    QPDFObjectHandle f = dict.getKey("/F");
+    if (f.isNull()) f = dict.getKey("/Filter");
+    std::vector<std::string> names;
+    if (f.isName()) names.push_back(f.getName());
+    if (f.isArray()) {
+      for (int i = 0; i < f.getArrayNItems(); ++i) names.push_back(nameOf(f.getArrayItem(i)));
+    }
+    std::string newData = data;
+    std::vector<std::string> outNames;
+    bool filterChanged = false;
+    bool lzwSeen = false;
+    for (const std::string& n : names) {
+      std::string lower;
+      for (char c : n) lower += static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+      auto it = kToAbbrev.find(n);
+      if (it != kToAbbrev.end()) {
+        outNames.push_back(it->second);
+        if (it->second != n) filterChanged = true;
+      } else if (lower.find("lzw") != std::string::npos) {
+        lzwSeen = true;
+        outNames.push_back("/LZW?");
+        filterChanged = true;
+      } else {
+        passthrough();
+        return;
+      }
+    }
+    if (lzwSeen) {
+      if (names.size() != 1) {
+        passthrough();
+        return;
+      }
+      bool ok = false;
+      std::string raw = lzwDecode(data, ok);
+      if (!ok || raw.empty()) {
+        passthrough();
+        return;
+      }
+      std::string packed = flateCompress(raw);
+      if (!packed.empty() && packed.size() < raw.size()) {
+        newData = packed;
+        outNames.assign(1, "/Fl");
+      } else {
+        newData = raw;
+        outNames.clear();
+      }
+      dict.removeKey("/DP");
+      dict.removeKey("/DecodeParms");
+      changed = true;
+    }
+    if (filterChanged || changed) {
+      dict.removeKey("/F");
+      dict.removeKey("/Filter");
+      dict.removeKey("/L");
+      dict.removeKey("/Length");
+      if (outNames.size() == 1) {
+        dict.replaceKey("/F", QPDFObjectHandle::newName(outNames[0]));
+      } else if (outNames.size() > 1) {
+        QPDFObjectHandle arr = QPDFObjectHandle::newArray();
+        for (const std::string& n : outNames) arr.appendItem(QPDFObjectHandle::newName(n));
+        dict.replaceKey("/F", arr);
+      }
+      std::string out = "BI";
+      for (const std::string& k : dict.getKeys()) {
+        out += " " + k + " " + dict.getKey(k).unparse();
+      }
+      out += " ID\n" + newData + "\nEI\n";
+      write(out);
+      if (iiFixed) ++(*iiFixed);
+      return;
+    }
+    passthrough();
+  }
+
   bool pdf14;
   bool limits;
   size_t maxStr;
+  bool scrubActualText;
+  int* iiFixed;
+  int* puaFixed;
   bool inImageDict = false;
+  bool swallowEI = false;
   bool haveName = false;
   int qDepth = 0;
   int qSuppressed = 0;
@@ -251,7 +425,7 @@ class ContentFixFilter : public QPDFObjectHandle::TokenFilter {
   int dictDepth = 0;
   QPDFTokenizer::Token heldName{QPDFTokenizer::tt_bad, ""};
   std::vector<QPDFTokenizer::Token> heldTrail;
-  std::string pendingKey;
+  std::string iiText;
 };
 
 QPDFObjectHandle clampScalar(QPDFObjectHandle v, LimitStats& st, bool& changed) {
@@ -356,10 +530,15 @@ bool streamDecodable(QPDFObjectHandle s) {
   }
 }
 
+bool wantPuaScrub(Ctx& ctx) {
+  return (ctx.isA() && ctx.part >= 4) || ctx.opt.ua;
+}
+
 void attachFilter(Ctx& ctx, QPDFObjectHandle s, bool pdf14, bool limits23) {
   if (streamDecodable(s)) {
-    s.addTokenFilter(
-        std::shared_ptr<QPDFObjectHandle::TokenFilter>(new ContentFixFilter(pdf14, limits23)));
+    s.addTokenFilter(std::shared_ptr<QPDFObjectHandle::TokenFilter>(
+        new ContentFixFilter(pdf14, limits23, wantPuaScrub(ctx), &ctx.inlineImagesFixed,
+                             &ctx.contentPuaFixed)));
   } else {
     ctx.issue("CONTENT_UNDECODABLE", "content stream could not be decoded; left as-is", false);
   }
@@ -647,14 +826,39 @@ void passLimits(Ctx& ctx) {
     if (contents.isStream()) {
       pageOk = streamDecodable(contents);
     } else if (contents.isArray()) {
-      for (int ci = 0; ci < contents.getArrayNItems() && pageOk; ++ci) {
+      QPDFObjectHandle kept = QPDFObjectHandle::newArray();
+      bool dropped = false;
+      for (int ci = 0; ci < contents.getArrayNItems(); ++ci) {
         QPDFObjectHandle part = contents.getArrayItem(ci);
-        if (part.isStream()) pageOk = streamDecodable(part);
+        if (part.isStream()) {
+          if (pageOk) pageOk = streamDecodable(part);
+          kept.appendItem(part);
+        } else {
+          dropped = true;
+        }
+      }
+      if (dropped) {
+        page.replaceKey("/Contents", kept);
+        ctx.issue("CONTENT_MISSING_REPLACED",
+                  "removed unresolvable entries from the page /Contents array", true);
+      }
+      if (kept.getArrayNItems() == 0) pageOk = false;
+    } else {
+      pageOk = false;
+      if (page.hasKey("/Contents")) {
+        page.replaceKey("/Contents",
+                        ctx.pdf.makeIndirectObject(
+                            QPDFObjectHandle::newStream(&ctx.pdf, std::string())));
+        ctx.issue("CONTENT_MISSING_REPLACED",
+                  "page /Contents did not resolve to a usable stream; replaced with an "
+                  "empty content stream",
+                  true);
       }
     }
     if (pageOk) {
       ph.addContentTokenFilter(std::shared_ptr<QPDFObjectHandle::TokenFilter>(
-          new ContentFixFilter(pdf14, limits23)));
+          new ContentFixFilter(pdf14, limits23, wantPuaScrub(ctx), &ctx.inlineImagesFixed,
+                               &ctx.contentPuaFixed)));
     } else {
       ctx.issue("CONTENT_UNDECODABLE", "page content stream could not be decoded; left as-is",
                 false);

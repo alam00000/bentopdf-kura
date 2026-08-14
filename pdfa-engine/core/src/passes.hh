@@ -25,4 +25,5 @@ void passGlyphClean(Ctx& ctx);
 void passMetadata(Ctx& ctx);
 void passLimits(Ctx& ctx);
 void passTagging(Ctx& ctx);
+void passSemanticRepair(Ctx& ctx);
 }

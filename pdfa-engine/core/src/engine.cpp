@@ -401,6 +401,19 @@ Result convert(const unsigned char* data, std::size_t size, const Options& opt) 
     if (!ctx.failed()) passLimits(ctx);
     lap("limits");
     if (!ctx.failed() && !opt.verifyOnly) serialize(ctx);
+    if (!ctx.failed() && ctx.inlineImagesFixed) {
+      ctx.issue("INLINE_IMAGE_FILTER_FIXED",
+                "re-encoded " + std::to_string(ctx.inlineImagesFixed) +
+                    " inline image(s) with non-conforming filters",
+                true);
+    }
+    if (!ctx.failed() && ctx.contentPuaFixed) {
+      ctx.issue("ACTUALTEXT_PUA_REMOVED",
+                "removed private-use-area characters from " +
+                    std::to_string(ctx.contentPuaFixed) +
+                    " ActualText value(s) in content streams",
+                true);
+    }
     if (!ctx.failed() && !opt.verifyOnly && opt.signDocument) {
       std::string signErr;
       if (!applySignature(opt, res.pdf, signErr)) {

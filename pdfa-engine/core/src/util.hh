@@ -2,10 +2,63 @@
 
 #include <qpdf/QPDFObjGen.hh>
 #include <qpdf/QPDFObjectHandle.hh>
+#include <cstdint>
 #include <set>
 #include <string>
 
 namespace pdfa {
+inline bool validUtf8(const std::string& s) {
+  size_t i = 0;
+  while (i < s.size()) {
+    unsigned char c = static_cast<unsigned char>(s[i]);
+    int len;
+    uint32_t cp;
+    if (c < 0x80) { len = 1; cp = c; }
+    else if ((c & 0xE0) == 0xC0) { len = 2; cp = c & 0x1F; }
+    else if ((c & 0xF0) == 0xE0) { len = 3; cp = c & 0x0F; }
+    else if ((c & 0xF8) == 0xF0) { len = 4; cp = c & 0x07; }
+    else return false;
+    if (i + len > s.size()) return false;
+    for (int j = 1; j < len; ++j) {
+      unsigned char cc = static_cast<unsigned char>(s[i + j]);
+      if ((cc & 0xC0) != 0x80) return false;
+      cp = (cp << 6) | (cc & 0x3F);
+    }
+    if (len == 2 && cp < 0x80) return false;
+    if (len == 3 && cp < 0x800) return false;
+    if (len == 4 && cp < 0x10000) return false;
+    if (cp > 0x10FFFF || (cp >= 0xD800 && cp <= 0xDFFF)) return false;
+    i += len;
+  }
+  return true;
+}
+
+inline bool isPuaCodepoint(uint32_t cp) {
+  return (cp >= 0xE000 && cp <= 0xF8FF) || (cp >= 0xF0000 && cp <= 0xFFFFD) ||
+         (cp >= 0x100000 && cp <= 0x10FFFD);
+}
+
+inline std::string stripPuaUtf8(const std::string& utf8, bool& changed) {
+  std::string out;
+  size_t i = 0;
+  while (i < utf8.size()) {
+    unsigned char c = static_cast<unsigned char>(utf8[i]);
+    int len = c < 0x80 ? 1 : ((c & 0xE0) == 0xC0 ? 2 : ((c & 0xF0) == 0xE0 ? 3 : 4));
+    if (i + len > utf8.size()) break;
+    uint32_t cp = c < 0x80 ? c : (c & (0xFF >> (len + 1)));
+    for (int j = 1; j < len; ++j) {
+      cp = (cp << 6) | (static_cast<unsigned char>(utf8[i + j]) & 0x3F);
+    }
+    if (isPuaCodepoint(cp)) {
+      changed = true;
+    } else {
+      out.append(utf8, i, len);
+    }
+    i += len;
+  }
+  return out;
+}
+
 inline bool nameIs(QPDFObjectHandle o, const std::string& n) {
   return o.isName() && o.getName() == n;
 }

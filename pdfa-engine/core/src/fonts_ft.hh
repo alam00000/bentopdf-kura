@@ -143,6 +143,15 @@ inline FT_UInt glyphForCode(FT_Face face, int code, const SimpleEncoding& enc, b
   }
   for (int i = 0; i < face->num_charmaps; ++i) {
     FT_CharMap cm = face->charmaps[i];
+    if (cm->encoding == FT_ENCODING_ADOBE_CUSTOM ||
+        cm->encoding == FT_ENCODING_ADOBE_STANDARD) {
+      FT_Set_Charmap(face, cm);
+      FT_UInt gid = FT_Get_Char_Index(face, static_cast<FT_ULong>(code));
+      if (gid) return gid;
+    }
+  }
+  for (int i = 0; i < face->num_charmaps; ++i) {
+    FT_CharMap cm = face->charmaps[i];
     if (cm->platform_id == TT_PLATFORM_MACINTOSH) {
       FT_Set_Charmap(face, cm);
       FT_UInt gid = FT_Get_Char_Index(face, code);
