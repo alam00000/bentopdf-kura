@@ -77,7 +77,19 @@ void printReport(const pdfa::Options& opt, const pdfa::Result& res,
     json += "{\"code\":\"" + jsonEscape(is.code) + "\",\"detail\":\"" + jsonEscape(is.detail) +
             "\",\"fixed\":" + (is.fixed ? "true" : "false") + "}";
   }
-  json += "]}";
+  json += "]";
+  if (opt.analyze) {
+    json += ",\"analysis\":[";
+    bool firstA = true;
+    for (const pdfa::Issue& is : res.analysis) {
+      if (!firstA) json += ",";
+      firstA = false;
+      json += "{\"code\":\"" + jsonEscape(is.code) + "\",\"detail\":\"" +
+              jsonEscape(is.detail) + "\"}";
+    }
+    json += "]";
+  }
+  json += "}";
   std::cout << json << std::endl;
 }
 
@@ -391,6 +403,10 @@ int main(int argc, char** argv) {
       haveLevel = true;
     } else if (arg == "--check") {
       opt.verifyOnly = true;
+    } else if (arg == "--analyze") {
+      opt.analyze = true;
+    } else if (arg == "--outline-fonts") {
+      opt.outlineFonts = true;
     } else if (arg == "--ocr") {
       ocr = true;
     } else if (arg == "--ocr-engine" && i + 1 < argc) {

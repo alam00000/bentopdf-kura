@@ -372,6 +372,8 @@ Result convert(const unsigned char* data, std::size_t size, const Options& opt) 
                    std::chrono::duration<double>(now - tmark).count());
       tmark = now;
     };
+    if (opt.analyze) passAnalyze(ctx);
+    lap("analyze");
     passStructure(ctx);
     lap("structure");
     if (!ctx.failed()) passPages(ctx);
@@ -385,6 +387,8 @@ Result convert(const unsigned char* data, std::size_t size, const Options& opt) 
     lap("color");
     if (!ctx.failed()) passPrint(ctx);
     lap("print");
+    if (!ctx.failed()) passOutlineFonts(ctx);
+    lap("outline");
     if (!ctx.failed()) passFonts(ctx);
     lap("fonts");
     if (!ctx.failed()) passGlyphClean(ctx);

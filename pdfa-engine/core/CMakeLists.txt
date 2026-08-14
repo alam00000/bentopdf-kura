@@ -15,6 +15,8 @@ endif()
 
 add_library(pdfa_core STATIC
   src/engine.cpp
+  src/analyze.cpp
+  src/outline.cpp
   src/einvoice.cpp
   src/einvoice_read.cpp
   src/sign.cpp

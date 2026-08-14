@@ -12,6 +12,8 @@ QPDFObjectHandle buildIccStream(Ctx& ctx, const unsigned char* data, unsigned in
 void sanitizeAdditionalActions(Ctx& ctx, QPDFObjectHandle dict, const std::string& where,
                                bool aaAllowed);
 
+void passAnalyze(Ctx& ctx);
+void passOutlineFonts(Ctx& ctx);
 void passStructure(Ctx& ctx);
 void passPages(Ctx& ctx);
 void passImageResolution(Ctx& ctx);

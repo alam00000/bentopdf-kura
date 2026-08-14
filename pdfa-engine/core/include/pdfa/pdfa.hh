@@ -35,6 +35,8 @@ struct Options {
   std::string attachXmlName;
   std::string facturxProfile;
   bool verifyOnly = false;
+  bool analyze = false;
+  bool outlineFonts = false;
   std::string embedSource;
   std::string embedSourceName;
   std::string embedSourceMime;
@@ -72,6 +74,7 @@ struct Result {
   bool ok = false;
   std::vector<unsigned char> pdf;
   std::vector<Issue> issues;
+  std::vector<Issue> analysis;
   std::string error;
   std::string errorCode;
   std::string suggestedLevel;

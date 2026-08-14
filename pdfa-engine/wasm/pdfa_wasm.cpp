@@ -56,6 +56,8 @@ emscripten::val convertJs(emscripten::val data, const std::string& level,
   opt.destProfile = optBytes(opts, "destProfile");
   opt.attachXml = optBytes(opts, "attachXml");
   opt.verifyOnly = optBool(opts, "check");
+  opt.analyze = optBool(opts, "analyze");
+  opt.outlineFonts = optBool(opts, "outlineFonts");
   opt.embedSource = optBytes(opts, "embedSource");
   opt.embedSourceName = optString(opts, "embedSourceName");
   opt.embedSourceMime = optString(opts, "embedSourceMime");
@@ -96,6 +98,17 @@ emscripten::val convertJs(emscripten::val data, const std::string& level,
     issues.set(n++, item);
   }
   result.set("issues", issues);
+  if (opt.analyze) {
+    emscripten::val analysis = emscripten::val::array();
+    size_t an = 0;
+    for (const pdfa::Issue& is : res.analysis) {
+      emscripten::val item = emscripten::val::object();
+      item.set("code", is.code);
+      item.set("detail", is.detail);
+      analysis.set(an++, item);
+    }
+    result.set("analysis", analysis);
+  }
   if (opt.verifyOnly) {
     result.set("mode", std::string("check"));
     result.set("compliant", res.compliant);
