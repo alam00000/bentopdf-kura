@@ -14,16 +14,17 @@ self.onmessage = async (e) => {
     const t0 = performance.now();
     const r = mod.convert(new Uint8Array(bytes), level, opts || {});
     const ms = Math.round(performance.now() - t0);
+    const analysisList = (r.analysis || []).map((a) => ({ code: a.code, detail: a.detail }));
     if (r.ok && r.mode === 'check') {
       self.postMessage({
         id, ok: true, ms, mode: 'check',
-        compliant: r.compliant, findings: r.findings,
+        compliant: r.compliant, findings: r.findings, analysisList,
         issueList: (r.issues || []).map((i) => ({ code: i.code, detail: i.detail })),
       });
     } else if (r.ok) {
       const pdf = r.pdf.slice().buffer;
       self.postMessage(
-        { id, ok: true, pdf, ms, issues: r.issues.length, engine: r.engine,
+        { id, ok: true, pdf, ms, issues: r.issues.length, engine: r.engine, analysisList,
           issueList: (r.issues || []).map((i) => ({ code: i.code, detail: i.detail })) },
         [pdf]
       );

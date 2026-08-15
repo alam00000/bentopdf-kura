@@ -65,6 +65,7 @@ emscripten::val convertJs(emscripten::val data, const std::string& level,
   opt.defaultCmykProfile = optBytes(opts, "defaultCmyk");
   opt.defaultGrayProfile = optBytes(opts, "defaultGray");
   opt.rasterizeAllPages = optBool(opts, "rasterizePages");
+  opt.preflightProfile = optString(opts, "profile");
   {
     emscripten::val dpi = opts.isUndefined() || opts.isNull() ? emscripten::val::undefined()
                                                              : opts["rasterDpi"];
@@ -98,7 +99,7 @@ emscripten::val convertJs(emscripten::val data, const std::string& level,
     issues.set(n++, item);
   }
   result.set("issues", issues);
-  if (opt.analyze) {
+  if (opt.analyze || !opt.preflightProfile.empty()) {
     emscripten::val analysis = emscripten::val::array();
     size_t an = 0;
     for (const pdfa::Issue& is : res.analysis) {
