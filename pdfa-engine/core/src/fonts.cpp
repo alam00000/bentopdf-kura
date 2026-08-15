@@ -2094,7 +2094,7 @@ void passFonts(Ctx& ctx) {
         }
       }
       syncSimpleFontWidths(ctx, lib, f);
-      if (ctx.isA() && ctx.part == 1) {
+      if ((ctx.isA() && ctx.part == 1) || ctx.isE()) {
         if (subtype == "/Type1" || subtype == "/MMType1") ensureCharSet(ctx, lib, f);
       } else if (ctx.part >= 2 || !ctx.isA()) {
         QPDFObjectHandle fd = f.getKey("/FontDescriptor");
@@ -2126,7 +2126,7 @@ void passFonts(Ctx& ctx) {
       syncRosWithPredefined(ctx, f);
       ensureCidToGidMap(ctx, f);
       syncCidFontWidths(ctx, lib, f);
-      if (ctx.isA() && ctx.part == 1) {
+      if ((ctx.isA() && ctx.part == 1) || ctx.isE()) {
         ensureCidSet(ctx, lib, f);
       } else {
         QPDFObjectHandle df = f.getKey("/DescendantFonts");

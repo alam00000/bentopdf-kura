@@ -62,6 +62,12 @@ void fixPageBoxes(Ctx& ctx, QPDFPageObjectHelper& ph, bool& boxAdded, bool& boxF
   }
   Box crop = readBox(ph.getAttribute("/CropBox", true));
   Box effCrop = crop.ok ? clampTo(crop, media) : media;
+  if (crop.ok && effCrop.ok &&
+      (effCrop.x1 != crop.x1 || effCrop.y1 != crop.y1 || effCrop.x2 != crop.x2 ||
+       effCrop.y2 != crop.y2)) {
+    page.replaceKey("/CropBox", boxArray(effCrop));
+    boxFixed = true;
+  }
   Box trim = readBox(page.getKey("/TrimBox"));
   Box art = readBox(page.getKey("/ArtBox"));
   if (trim.ok && art.ok) {
@@ -202,8 +208,46 @@ void buildDPartTree(Ctx& ctx) {
 }
 }
 
+namespace {
+void unifySeparations(Ctx& ctx) {
+  std::map<std::string, QPDFObjectHandle> first;
+  std::vector<std::pair<QPDFObjectHandle, std::string>> dups;
+  for (QPDFObjectHandle obj : ctx.pdf.getAllObjects()) {
+    if (!obj.isArray() || obj.getArrayNItems() < 4 ||
+        !nameIs(obj.getArrayItem(0), "/Separation")) {
+      continue;
+    }
+    std::string name = nameOf(obj.getArrayItem(1));
+    if (name.size() < 2 || name == "/None") continue;
+    auto it = first.find(name);
+    if (it == first.end()) {
+      first[name] = obj;
+    } else if (obj.getObjGen() != it->second.getObjGen()) {
+      dups.push_back({obj, name});
+    }
+  }
+  int unified = 0;
+  for (auto& [obj, name] : dups) {
+    QPDFObjectHandle ref = first[name];
+    std::string a = obj.unparseResolved();
+    std::string b = ref.unparseResolved();
+    if (a == b) continue;
+    while (obj.getArrayNItems() > 0) obj.eraseItem(obj.getArrayNItems() - 1);
+    for (int i = 0; i < ref.getArrayNItems(); ++i) obj.appendItem(ref.getArrayItem(i));
+    ++unified;
+  }
+  if (unified) {
+    ctx.issue("SEPARATION_UNIFIED",
+              "unified " + std::to_string(unified) +
+                  " inconsistent representation(s) of same-name separation colorants",
+              true);
+  }
+}
+}
+
 void passPrint(Ctx& ctx) {
   if (!ctx.isX()) return;
+  unifySeparations(ctx);
   QPDFPageDocumentHelper dh(ctx.pdf);
   bool boxAdded = false, boxFixed = false;
   for (auto& ph : dh.getAllPages()) {

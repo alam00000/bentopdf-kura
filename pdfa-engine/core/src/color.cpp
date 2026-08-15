@@ -633,6 +633,13 @@ void fixIccIdenticalToIntent(Ctx& ctx, QPDFObjectHandle keepIntent) {
       anyIccCmyk = true;
       break;
     }
+    if (obj.isArray() && obj.getArrayNItems() >= 2 &&
+        nameIs(obj.getArrayItem(0), "/ICCBased") && obj.getArrayItem(1).isStream() &&
+        obj.getArrayItem(1).getDict().getKey("/N").isInteger() &&
+        obj.getArrayItem(1).getDict().getKey("/N").getIntValue() == 4) {
+      anyIccCmyk = true;
+      break;
+    }
   }
   if (anyIccCmyk) {
     int opm = 0;
@@ -940,6 +947,9 @@ void passColorPrint(Ctx& ctx, ColorUsage& usage) {
       ctx.issue("DEFAULT_RGB_INJECTED",
                 "mapped DeviceRGB usage to sRGB via /DefaultRGB (colour-managed print)", true);
     }
+  }
+  if (ctx.isX() || ctx.isVT()) {
+    fixIccIdenticalToIntent(ctx, keepIntent);
   }
   if (ctx.isE() && anchor != "CMYK" && !usage.cmykScopes.empty()) {
     QPDFObjectHandle cmyk = buildIccStream(ctx, kCmykIcc, kCmykIccLen, 4);
