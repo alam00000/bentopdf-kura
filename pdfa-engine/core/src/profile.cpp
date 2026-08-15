@@ -694,6 +694,9 @@ struct FontFacts {
   std::string fontProgram;
   std::vector<double> widths;
   int firstChar = 0;
+  double ascentEm = 0.80;
+  double descentEm = -0.20;
+  bool hasVMetrics = false;
   bool ftValid = true;
   bool ftLoaded = false;
   int fsType = 0;
@@ -768,6 +771,11 @@ struct Events {
   bool hasTransferCurve = false;
   bool hasHalftoneDict = false;
   bool hasPostScriptXObject = false;
+  bool tpBlend = false;
+  bool tpSMaskImg = false;
+  bool tpSMaskGs = false;
+  bool tpAlphaFill = false;
+  bool tpAlphaStroke = false;
   bool hasTransparencyAnywhere = false;
   bool encrypted = false;
   bool damaged = false;
@@ -884,6 +892,7 @@ struct EvScanner : QPDFObjectHandle::ParserCallbacks {
   int biW = 0, biH = 0, biBpc = 0;
   bool biMask = false;
   std::string biLastKey;
+  QPDFObjectHandle curFont;
 
   EvScanner(QPDFObjectHandle resources, Events& events, int pageNum, const Gs& initial)
       : gs(initial), res(resources), ev(events), page(pageNum) {}
@@ -1078,6 +1087,17 @@ struct EvScanner : QPDFObjectHandle::ParserCallbacks {
       if (flags.isInteger()) {
         ff.hasFlags = true;
         ff.symbolic = (flags.getIntValue() & 4) != 0;
+      }
+      QPDFObjectHandle asc = desc.getKey("/Ascent");
+      QPDFObjectHandle dsc = desc.getKey("/Descent");
+      if (asc.isNumber() && dsc.isNumber()) {
+        double av = asc.getNumericValue() / 1000.0;
+        double dv = dsc.getNumericValue() / 1000.0;
+        if (av > 0 && av < 2 && dv > -1 && dv <= 0) {
+          ff.ascentEm = av;
+          ff.descentEm = dv;
+          ff.hasVMetrics = true;
+        }
       }
     }
     ff.hasToUnicode = fnt.getKey("/ToUnicode").isStream();
@@ -1303,7 +1323,7 @@ struct EvScanner : QPDFObjectHandle::ParserCallbacks {
             gs.fontName = bf.substr(1);
           }
           if (fnt.isIndirect()) gs.fontOg = fnt.getObjGen();
-          recordFont(fnt);
+          curFont = fnt;
         }
       }
     } else if (op == "gs") {
@@ -1333,6 +1353,7 @@ struct EvScanner : QPDFObjectHandle::ParserCallbacks {
     } else if (op == "B" || op == "B*" || op == "b" || op == "b*") {
       addPaint(true, true);
     } else if (op == "Tj" || op == "TJ" || op == "'" || op == "\"") {
+      if (curFont.isInitialized() && curFont.isDictionary()) recordFont(curFont);
       TextEvent e;
       e.sizePt = gs.fontSize * gs.tmScale * matScale(gs.ctm);
       e.renderMode = gs.renderMode;
@@ -1349,8 +1370,33 @@ struct EvScanner : QPDFObjectHandle::ParserCallbacks {
       e.bytes = lastString.substr(0, 256);
       double tx = gs.ctm.a * tmX + gs.ctm.c * tmY + gs.ctm.e;
       double ty = gs.ctm.b * tmX + gs.ctm.d * tmY + gs.ctm.f;
-      double h = e.sizePt > 0 ? e.sizePt : 12;
-      e.bbox = {tx, ty, tx + h * 4, ty + h, true};
+      double sz = e.sizePt > 0 ? e.sizePt : 12;
+      const FontFacts* ff = nullptr;
+      for (const FontFacts& f : ev.fonts) {
+        if (f.og == gs.fontOg) {
+          ff = &f;
+          break;
+        }
+      }
+      double advEm = 0;
+      if (ff && !ff->cid && !ff->widths.empty()) {
+        for (unsigned char c : lastString) {
+          int wi = static_cast<int>(c) - ff->firstChar;
+          advEm += (wi >= 0 && wi < static_cast<int>(ff->widths.size()) &&
+                    ff->widths[wi] >= 0)
+                       ? ff->widths[wi] / 1000.0
+                       : 0.5;
+        }
+      } else {
+        int glyphs = ff && ff->cid ? static_cast<int>(lastString.size()) / 2
+                                   : static_cast<int>(lastString.size());
+        advEm = glyphs * 0.5;
+      }
+      double adv = advEm * sz;
+      double asc = (ff ? ff->ascentEm : 0.80) * sz;
+      double dsc = (ff ? ff->descentEm : -0.20) * sz;
+      e.bbox = {std::min(tx, tx + adv), ty + dsc, std::max(tx, tx + adv), ty + asc,
+                true};
       recordSpot(e.color);
       ev.texts.push_back(e);
     } else if (op == "Do" && !lastName.empty()) {
@@ -1559,6 +1605,18 @@ bool isWhite(const std::vector<double>& c, const ColorInfo& ci) {
   return !c.empty();
 }
 
+int colorantCount(const std::vector<double>& c, const ColorInfo& ci) {
+  if (ci.cls == "cmyk" || ci.cls == "separation" || ci.cls == "devicen") {
+    return nonZeroComps(c);
+  }
+  if (ci.cls == "gray") return (!c.empty() && (1.0 - c[0]) > 0.001) ? 1 : 0;
+  if (ci.cls == "icc") {
+    if (c.size() == 4) return nonZeroComps(c);
+    if (c.size() == 1) return (1.0 - c[0]) > 0.001 ? 1 : 0;
+  }
+  return isWhite(c, ci) ? 0 : 1;
+}
+
 bool blackOnly(const std::vector<double>& c, const ColorInfo& ci) {
   if (ci.cls == "separation" || ci.cls == "devicen") {
     return (ci.spot == "Black" || ci.spot == "All") && !c.empty() && c[0] > 0.999;
@@ -1700,12 +1758,20 @@ bool evalColorAtom(const PfAtom& a, const std::vector<double>& comps, const Colo
       t == "CSGST_S::NumberOfColoraWhichAreNonZero" ||
       t == "CSGST_F::NumberOfColoraWhichAreNonZero" ||
       t == "CSGST_F::NumberOfColoraWhichAreNonZeroFill") {
-    return cmpNum(nonZeroComps(comps), a.op, numVal(a));
+    return cmpNum(colorantCount(comps, ci), a.op, numVal(a));
   }
   if (t == "CSCOLOR::NrOfComponents") return cmpNum(ci.declaredComps, a.op, numVal(a));
   if (t == "CSCOLOR::ObjectHasNonZeroValuesAndLowe") {
-    double m = maxComp(comps) * 100.0;
-    return nonZeroComps(comps) > 0 && cmpNum(m, a.op, numVal(a));
+    double ink = -1;
+    if (ci.cls == "gray" && !comps.empty()) ink = 1.0 - comps[0];
+    else if (ci.cls == "cmyk" || ci.cls == "separation" || ci.cls == "devicen") {
+      ink = maxComp(comps);
+    } else if (ci.cls == "icc") {
+      if (comps.size() == 1) ink = 1.0 - comps[0];
+      else if (comps.size() == 4) ink = maxComp(comps);
+    }
+    if (ink <= 0.001) return false;
+    return cmpNum(ink * 100.0, a.op, numVal(a));
   }
   if (t == "CSCOLOR::ObjectIsWhite") return cmpBool(isWhite(comps, ci), a.op);
   if (t == "CSCOLOR::ObjectUsesBlackOnly") return cmpBool(blackOnly(comps, ci), a.op);
@@ -1842,8 +1908,12 @@ bool evalGsExtraAtom(const PfAtom& a, const GsExtra& x, bool stroke, bool& handl
   }
   if (t == "CSGST_G::HasBlackPointCompeEntry") return cmpBool(x.hasBPC, a.op);
   if (t == "CSHALFTONE::HasHalftoneOriginEntry") return cmpBool(x.hasHalftoneOrigin, a.op);
-  if (t == "CSGST_F::ConstantAlphaFill") return cmpNum(x.alphaFill, a.op, numVal(a));
-  if (t == "CSGST_S::ConstantAlphaStroke") return cmpNum(x.alphaStroke, a.op, numVal(a));
+  if (t == "CSGST_F::ConstantAlphaFill") {
+    return !stroke && cmpNum(x.alphaFill, a.op, numVal(a));
+  }
+  if (t == "CSGST_S::ConstantAlphaStroke") {
+    return stroke && cmpNum(x.alphaStroke, a.op, numVal(a));
+  }
   if (t == "CSGST_G::BelongsToTransparencyGroup") {
     return cmpBool(x.hasSMask || x.alphaFill < 1.0 || x.alphaStroke < 1.0 ||
                        (x.blendMode != "Normal" && x.blendMode != "Compatible"),
@@ -1927,7 +1997,15 @@ bool evalPaintAtom(const PfAtom& a, const PaintEvent& e, const Events& ev,
     if (sh) return sr;
   }
   const std::string& t = a.token;
-  if (t == "CSGST_S::LineWidth") return e.stroke && cmpNum(e.width, a.op, numVal(a));
+  if (t == "CSGST_S::LineWidth") {
+    if (e.stroke) return cmpNum(e.width, a.op, numVal(a));
+    if (e.fillOp && e.bbox.valid) {
+      double w = e.bbox.x1 - e.bbox.x0, h = e.bbox.y1 - e.bbox.y0;
+      double mn = std::min(w, h), mx = std::max(w, h);
+      if (mn >= 0.5 && mx >= mn * 6) return cmpNum(mn, a.op, numVal(a));
+    }
+    return false;
+  }
   if (t == "CSGST_S::IsOverPrintEnabledStroke" || t == "CSGST_F::IsOverPrintEnabledFill" ||
       t == "CSGST_G::IsOverPrintEnabled") {
     return cmpBool(effectiveOverprint(e.overprint, e.opm, e.color, e.comps), a.op);
@@ -2116,7 +2194,7 @@ bool evalFontAtom(const PfAtom& a, const FontFacts& f, const Events& ev,
   if (t == "CSFONT::IsEmbedded") return cmpBool(f.embedded, a.op);
   if (t == "CSFONT::FontIsNotEmbedded") return cmpBool(!f.embedded, a.op);
   if (t == "CSFONT::FontTypeIsType3") return cmpBool(f.type3, a.op);
-  if (t == "CSFONT::FontTypeIsTrueType") return cmpBool(f.trueType, a.op);
+  if (t == "CSFONT::FontTypeIsTrueType") return cmpBool(f.trueType && !f.cid, a.op);
   if (t == "CSFONT::FontTypeIsCID") return cmpBool(f.cid, a.op);
   if (t == "CSFONT::FlagKeyisSympolic") return cmpBool(f.hasFlags && f.symbolic, a.op);
   if (t == "CSFONT::CIDFonDictinContaiACIDToGWith") {
@@ -2124,11 +2202,22 @@ bool evalFontAtom(const PfAtom& a, const FontFacts& f, const Events& ev,
   }
 
   if (t == "CSFONT::FontNameIsUniqueThroughout") {
-    int same = 0;
+    auto stripSubset = [](const std::string& n) {
+      if (n.size() > 7 && n[6] == '+') {
+        bool tag = true;
+        for (int i = 0; i < 6; ++i) {
+          if (!std::isupper(static_cast<unsigned char>(n[i]))) tag = false;
+        }
+        if (tag) return n.substr(7);
+      }
+      return n;
+    };
+    std::string base = stripSubset(f.baseFont);
+    std::set<std::string> distinct;
     for (const FontFacts& o : ev.fonts) {
-      if (o.baseFont == f.baseFont) ++same;
+      if (stripSubset(o.baseFont) == base) distinct.insert(o.baseFont);
     }
-    return cmpBool(same <= 1, a.op);
+    return cmpBool(distinct.size() <= 1, a.op);
   }
   if (t == "CSFONT::FontNameIsUTFEncoded") {
     bool ok = true;
@@ -2150,7 +2239,8 @@ bool evalFontAtom(const PfAtom& a, const FontFacts& f, const Events& ev,
   if (t == "CSFONT::CharacterRevertsToNotdef") return cmpBool(f.anyUndefinedGlyph, a.op);
   if (t == "CSFONT::AllTextCanBeMappedToUnicode") return cmpBool(f.allUsedMapped, a.op);
   if (t == "CSFONT::SymbolTrueTyFontHasEncoodDict") {
-    return cmpBool(f.trueType && f.symbolic && (f.hasEncodingDict || !f.encodingName.empty()),
+    return cmpBool(f.trueType && !f.cid && f.symbolic &&
+                       (f.hasEncodingDict || !f.encodingName.empty()),
                    a.op);
   }
   if (t == "CSFONT::NonSymbolTrueTyFontSpecifMacR") {
@@ -2640,6 +2730,28 @@ void passProfile(Ctx& ctx, const unsigned char* inputData, std::size_t inputSize
         if (nameIs(sd.getKey("/Subtype"), "/PS") || !sd.getKey("/PS").isNull()) {
           ev.hasPostScriptXObject = true;
         }
+        if (sd.getKey("/SMask").isStream() && sd.getKey("/Width").isInteger()) {
+          ev.tpSMaskImg = true;
+        }
+      }
+      if (obj.isDictionary()) {
+        bool gstateLike = nameIs(obj.getKey("/Type"), "/ExtGState") ||
+                          !obj.getKey("/BM").isNull() || obj.getKey("/ca").isNumber() ||
+                          obj.getKey("/CA").isNumber();
+        if (gstateLike) {
+          QPDFObjectHandle bm = obj.getKey("/BM");
+          std::string bmn =
+              nameOf(bm.isArray() && bm.getArrayNItems() ? bm.getArrayItem(0) : bm);
+          if (!bmn.empty() && bmn != "/Normal" && bmn != "/Compatible") ev.tpBlend = true;
+          QPDFObjectHandle sm = obj.getKey("/SMask");
+          if (sm.isDictionary()) ev.tpSMaskGs = true;
+          if (obj.getKey("/ca").isNumber() && obj.getKey("/ca").getNumericValue() < 1.0) {
+            ev.tpAlphaFill = true;
+          }
+          if (obj.getKey("/CA").isNumber() && obj.getKey("/CA").getNumericValue() < 1.0) {
+            ev.tpAlphaStroke = true;
+          }
+        }
       }
     }
   }
@@ -2751,13 +2863,24 @@ void passProfile(Ctx& ctx, const unsigned char* inputData, std::size_t inputSize
       pf.empty = ev.images.size() == imgBefore && ev.paints.size() == paintBefore &&
                  ev.texts.size() == textBefore;
       auto addPlates = [&pf](const std::vector<double>& comps, const ColorInfo& ci) {
+        auto addCMYK = [&]() {
+          pf.plates.insert("Cyan");
+          pf.plates.insert("Magenta");
+          pf.plates.insert("Yellow");
+          pf.plates.insert("Black");
+        };
         if (ci.cls == "cmyk" && comps.size() == 4) {
           const char* names[4] = {"Cyan", "Magenta", "Yellow", "Black"};
           for (int ch = 0; ch < 4; ++ch) {
             if (comps[ch] > 0.001) pf.plates.insert(names[ch]);
           }
-        } else if (ci.cls == "gray" || (ci.cls == "icc" && ci.declaredComps == 1) ||
-                   (ci.cls == "cal" && comps.size() == 1)) {
+        } else if (ci.cls == "icc" || ci.cls == "cal" || ci.cls == "lab") {
+          bool white = !comps.empty();
+          for (double v : comps) {
+            if (v < 0.999) white = false;
+          }
+          if (!white) addCMYK();
+        } else if (ci.cls == "gray") {
           if (!comps.empty() && comps[0] < 0.999) pf.plates.insert("Black");
         } else if (ci.cls == "separation" || ci.cls == "devicen") {
           for (size_t i = 0; i < ci.colorants.size(); ++i) {
@@ -2794,7 +2917,7 @@ void passProfile(Ctx& ctx, const unsigned char* inputData, std::size_t inputSize
         }
       };
       auto bigEnough = [](const Box& b) {
-        if (!b.valid) return true;
+        if (!b.valid) return false;
         return (b.x1 - b.x0) >= 28.35 && (b.y1 - b.y0) >= 28.35;
       };
       for (size_t i = paintBefore; i < ev.paints.size(); ++i) {
@@ -3483,7 +3606,42 @@ void passProfile(Ctx& ctx, const unsigned char* inputData, std::size_t inputSize
   std::vector<bool> usedPaint(ev.paints.size(), false);
   std::vector<bool> usedText(ev.texts.size(), false);
   std::vector<bool> usedImage(ev.images.size(), false);
+  auto presenceHit = [&](const PfRule& rule) -> int {
+    std::vector<const PfAtom*> at;
+    for (const std::string& cid : rule.condIds) {
+      auto it = prof.conds.find(cid);
+      if (it == prof.conds.end()) continue;
+      for (const PfAtom& a : it->second.atoms) at.push_back(&a);
+    }
+    if (at.size() != 1) return -1;
+    const std::string& t = at[0]->token;
+    const std::string& op = at[0]->op;
+    bool pos = op == "is_true";
+    bool listNot = op == "is_not_contained_in" || op == "not_contains";
+    if (t == "CSIMAGE::HasSMaskEntry" && pos && ev.tpSMaskImg) return 1;
+    if (t == "CSGST_G::HasSMaskEntry" && pos && ev.tpSMaskGs) return 1;
+    if (t == "CSGST_G::BlendMode" && listNot && ev.tpBlend) return 1;
+    return -1;
+  };
   for (const PfRule& rule : prof.rules) {
+    {
+      int ph = presenceHit(rule);
+      if (ph >= 0) {
+        if (ph > 0) {
+          std::vector<const PfCondition*> pc;
+          for (const std::string& cid : rule.condIds) {
+            auto it = prof.conds.find(cid);
+            if (it != prof.conds.end()) pc.push_back(&it->second);
+          }
+          const char* sv[] = {"", "Info", "Warning", "Error"};
+          int s = rule.severity < 4 && rule.severity > 0 ? rule.severity : 1;
+          ctx.res.analysis.push_back(
+              {"PROFILE_HIT",
+               std::string(sv[s]) + ": " + displayName(rule, pc) + " (1 hit(s))", false});
+        }
+        continue;
+      }
+    }
     std::vector<const PfCondition*> conds;
     std::vector<const PfAtom*> atoms;
     for (const std::string& cid : rule.condIds) {
