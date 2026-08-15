@@ -533,7 +533,6 @@ bool regionFlattenPage(Ctx& ctx, QPDFPageObjectHelper& ph, int pageIndex) {
   double tx0 = std::max(mx1, scan.x0 - margin), ty0 = std::max(my1, scan.y0 - margin);
   double tx1 = std::min(mx2, scan.x1 + margin), ty1 = std::min(my2, scan.y1 + margin);
   double regionArea = (tx1 - tx0) * (ty1 - ty0);
-
   if (regionArea >= pw * phh * 0.55) return false;
 
   int w = 0, h = 0;
