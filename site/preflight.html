@@ -1,0 +1,406 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Kura Preflight</title>
+<style>
+  :root {
+    --accent: #0A7AFF;
+    --accent-press: #0063D1;
+    --close: #FF5F57; --min: #FEBC2E; --zoom: #28C840;
+    --win-bg: rgba(242, 242, 247, 0.72);
+    --toolbar-bg: rgba(255, 255, 255, 0.28);
+    --ink: rgba(0, 0, 0, 0.88);
+    --ink-2: rgba(60, 60, 67, 0.6);
+    --ink-3: rgba(60, 60, 67, 0.33);
+    --hairline: rgba(0, 0, 0, 0.09);
+    --row-hover: rgba(0, 0, 0, 0.04);
+    --row-sel: rgba(10, 122, 255, 0.14);
+    --field-bg: rgba(255, 255, 255, 0.72);
+    --field-border: rgba(0, 0, 0, 0.12);
+    --ok: #1DB954; --bad: #E5484D; --warn: #E8A013;
+    --chip-bg: rgba(10, 122, 255, 0.12);
+    --shadow: 0 24px 68px 6px rgba(20, 35, 60, 0.42), 0 1px 3px rgba(0,0,0,.18);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --win-bg: rgba(38, 38, 42, 0.68);
+      --toolbar-bg: rgba(255, 255, 255, 0.05);
+      --ink: rgba(255, 255, 255, 0.92);
+      --ink-2: rgba(235, 235, 245, 0.62);
+      --ink-3: rgba(235, 235, 245, 0.32);
+      --hairline: rgba(255, 255, 255, 0.1);
+      --row-hover: rgba(255, 255, 255, 0.055);
+      --row-sel: rgba(10, 132, 255, 0.28);
+      --field-bg: rgba(255, 255, 255, 0.085);
+      --field-border: rgba(255, 255, 255, 0.16);
+      --chip-bg: rgba(10, 132, 255, 0.22);
+      --accent: #0A84FF;
+      --shadow: 0 26px 80px 8px rgba(0, 0, 0, 0.6), 0 1px 3px rgba(0,0,0,.5);
+    }
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
+    -webkit-font-smoothing: antialiased;
+    color: var(--ink);
+    display: grid; place-items: center;
+    padding: 40px 16px;
+    background:
+      radial-gradient(120% 90% at 15% 8%,  #7fb6f0 0%, transparent 55%),
+      radial-gradient(110% 95% at 88% 12%, #b7a7f5 0%, transparent 52%),
+      radial-gradient(130% 110% at 50% 108%, #67d4c0 0%, transparent 58%),
+      linear-gradient(180deg, #5f8fd9 0%, #7a9fe0 45%, #6fbcd4 100%);
+    background-attachment: fixed;
+  }
+  @media (prefers-color-scheme: dark) {
+    body {
+      background:
+        radial-gradient(120% 90% at 15% 8%,  #17335f 0%, transparent 55%),
+        radial-gradient(110% 95% at 88% 12%, #3a2c66 0%, transparent 52%),
+        radial-gradient(130% 110% at 50% 108%, #0f4a42 0%, transparent 58%),
+        linear-gradient(180deg, #101d33 0%, #16233c 55%, #0d2733 100%);
+      background-attachment: fixed;
+    }
+  }
+  .window {
+    width: min(880px, 100%);
+    background: var(--win-bg);
+    backdrop-filter: blur(38px) saturate(1.7);
+    -webkit-backdrop-filter: blur(38px) saturate(1.7);
+    border-radius: 14px;
+    border: 0.5px solid rgba(255,255,255,0.35);
+    box-shadow: var(--shadow);
+    overflow: hidden;
+    display: flex; flex-direction: column;
+    max-height: calc(100vh - 80px);
+  }
+  .titlebar {
+    display: flex; align-items: center;
+    padding: 12px 14px;
+    background: var(--toolbar-bg);
+    border-bottom: 0.5px solid var(--hairline);
+  }
+  .lights { display: flex; gap: 8px; }
+  .light { width: 12px; height: 12px; border-radius: 50%; }
+  .title { flex: 1; text-align: center; font-size: 13px; font-weight: 600; margin-right: 52px; }
+  .title .sub { color: var(--ink-2); font-weight: 400; }
+  .tabs {
+    display: flex; gap: 4px; padding: 8px 14px 0;
+    border-bottom: 0.5px solid var(--hairline);
+  }
+  .tab {
+    padding: 7px 16px 9px; font-size: 13px; border: none; background: none; color: var(--ink-2);
+    border-bottom: 2px solid transparent; cursor: pointer; font-weight: 500;
+    font-family: inherit;
+  }
+  .tab.active { color: var(--ink); border-bottom-color: var(--accent); }
+  .content { flex: 1; overflow: auto; min-height: 340px; }
+  .drop {
+    margin: 14px; padding: 26px 14px; border: 1.5px dashed var(--field-border);
+    border-radius: 10px; text-align: center; color: var(--ink-2); font-size: 13px;
+    cursor: pointer; transition: border-color .15s, background .15s;
+  }
+  .drop.armed { border-color: var(--accent); background: var(--chip-bg); color: var(--ink); }
+  .drop strong { color: var(--ink); }
+  .filechip {
+    display: none; align-items: center; gap: 8px; margin: 14px; padding: 10px 12px;
+    background: var(--field-bg); border: 0.5px solid var(--field-border); border-radius: 9px;
+    font-size: 13px;
+  }
+  .filechip.show { display: flex; }
+  .filechip .x { margin-left: auto; cursor: pointer; color: var(--ink-2); border: none; background: none; font-size: 15px; }
+  .cat { border-bottom: 0.5px solid var(--hairline); }
+  .cathead {
+    display: flex; align-items: center; gap: 7px; padding: 8px 16px;
+    font-size: 13px; font-weight: 600; cursor: pointer; user-select: none;
+    background: var(--toolbar-bg);
+  }
+  .cathead .tri { transition: transform .15s; font-size: 10px; color: var(--ink-2); }
+  .cat.closed .tri { transform: rotate(-90deg); }
+  .cat.closed .rows { display: none; }
+  .row {
+    display: flex; align-items: center; gap: 9px; padding: 8px 16px 8px 34px;
+    font-size: 13px; cursor: pointer;
+  }
+  .row:hover { background: var(--row-hover); }
+  .row.sel { background: var(--row-sel); box-shadow: inset 2.5px 0 0 var(--accent); font-weight: 600; }
+  .row .ico { font-size: 14px; width: 18px; text-align: center; }
+  .rowdesc {
+    display: none; margin: 0 16px 8px 34px; padding: 9px 12px;
+    background: var(--field-bg); border: 0.5px solid var(--field-border);
+    border-radius: 8px; font-size: 12px; color: var(--ink-2); line-height: 1.45;
+  }
+  .rowdesc.show { display: block; }
+  .results { padding: 14px 16px; display: none; }
+  .results.show { display: block; }
+  .verdict {
+    display: flex; align-items: center; gap: 10px; padding: 12px 14px; border-radius: 10px;
+    font-size: 14px; font-weight: 600; margin-bottom: 12px;
+    background: var(--field-bg); border: 0.5px solid var(--field-border);
+  }
+  .verdict .big { font-size: 20px; }
+  .hit {
+    display: flex; gap: 9px; padding: 7px 4px; font-size: 13px; line-height: 1.4;
+    border-bottom: 0.5px solid var(--hairline); align-items: baseline;
+  }
+  .hit:last-child { border-bottom: none; }
+  .sev { font-size: 12px; flex: none; width: 62px; font-weight: 600; }
+  .sev.Error { color: var(--bad); } .sev.Warning { color: var(--warn); } .sev.Info { color: var(--accent); }
+  .sev.fixed { color: var(--ok); } .sev.note { color: var(--ink-2); }
+  .footer {
+    display: flex; align-items: center; gap: 10px; padding: 12px 16px;
+    border-top: 0.5px solid var(--hairline); background: var(--toolbar-bg);
+  }
+  .status { font-size: 12px; color: var(--ink-2); flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .btn {
+    font-size: 13px; font-weight: 600; padding: 8px 18px; border-radius: 8px;
+    border: 0.5px solid var(--field-border); background: var(--field-bg); color: var(--ink);
+    cursor: pointer; font-family: inherit;
+  }
+  .btn:disabled { opacity: 0.45; cursor: default; }
+  .btn.primary { background: var(--accent); border-color: transparent; color: #fff; }
+  .btn.primary:active:not(:disabled) { background: var(--accent-press); }
+  .spin {
+    display: none; width: 14px; height: 14px; border-radius: 50%;
+    border: 2px solid var(--ink-3); border-top-color: var(--accent);
+    animation: spin .7s linear infinite;
+  }
+  .spin.show { display: block; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  a.back { position: fixed; top: 14px; left: 18px; font-size: 12px; color: rgba(255,255,255,.85); text-decoration: none; }
+</style>
+</head>
+<body>
+<a class="back" href="./index.html">&#8592; Standards Converter</a>
+<div class="window">
+  <div class="titlebar">
+    <div class="lights">
+      <span class="light" style="background:var(--close)"></span>
+      <span class="light" style="background:var(--min)"></span>
+      <span class="light" style="background:var(--zoom)"></span>
+    </div>
+    <div class="title">Preflight <span class="sub">&mdash; Kura Engine</span></div>
+  </div>
+  <div class="tabs">
+    <button class="tab active" id="tabProfiles">Profiles</button>
+    <button class="tab" id="tabResults">Results</button>
+  </div>
+  <div class="content" id="content">
+    <div class="drop" id="drop"><strong>Drop a PDF here</strong> or click to choose a file</div>
+    <div class="filechip" id="filechip">
+      <span>&#128196;</span><span id="filename"></span>
+      <button class="x" id="clearfile" title="Remove">&#10005;</button>
+    </div>
+    <input type="file" id="fileinput" accept="application/pdf,.pdf" hidden>
+    <div id="profilelist"></div>
+    <div class="results" id="results"></div>
+  </div>
+  <div class="footer">
+    <div class="status" id="status">Everything runs locally in your browser. No file ever leaves this machine.</div>
+    <div class="spin" id="spin"></div>
+    <button class="btn" id="analyzeBtn" disabled>Analyze</button>
+    <button class="btn primary" id="fixBtn" disabled>Analyze and fix</button>
+  </div>
+</div>
+<script type="module">
+import { PROFILES } from './preflight-profiles.js';
+
+const worker = new Worker('./worker.js', { type: 'module' });
+const $ = (id) => document.getElementById(id);
+let fileBytes = null, fileName = '', selected = null, reqId = 0;
+const pending = new Map();
+
+function el(tag, className, text) {
+  const n = document.createElement(tag);
+  if (className) n.className = className;
+  if (text !== undefined) n.textContent = text;
+  return n;
+}
+
+function profIcon(p) {
+  if (p.level) return '\u{1F4D0}';
+  if (p.json && p.json.fixes && p.json.fixes.length) return '\u{1F527}';
+  return '\u{1F50D}';
+}
+
+function renderProfiles() {
+  const host = $('profilelist');
+  host.textContent = '';
+  for (const cat of PROFILES.categories) {
+    const catEl = el('div', 'cat');
+    const head = el('div', 'cathead');
+    head.appendChild(el('span', 'tri', '▼'));
+    head.appendChild(el('span', null, cat.name));
+    head.onclick = () => catEl.classList.toggle('closed');
+    catEl.appendChild(head);
+    const rows = el('div', 'rows');
+    for (const p of cat.profiles) {
+      const row = el('div', 'row');
+      row.appendChild(el('span', 'ico', profIcon(p)));
+      row.appendChild(el('span', null, p.name));
+      const desc = el('div', 'rowdesc', p.description || '');
+      row.onclick = () => {
+        document.querySelectorAll('.row.sel').forEach(r => r.classList.remove('sel'));
+        document.querySelectorAll('.rowdesc.show').forEach(r => r.classList.remove('show'));
+        row.classList.add('sel');
+        desc.classList.add('show');
+        selected = p;
+        updateButtons();
+      };
+      rows.appendChild(row);
+      rows.appendChild(desc);
+    }
+    catEl.appendChild(rows);
+    host.appendChild(catEl);
+  }
+}
+
+function updateButtons() {
+  const ready = fileBytes && selected;
+  $('analyzeBtn').disabled = !ready;
+  $('fixBtn').disabled = !ready;
+  if (fileBytes && selected) {
+    $('status').textContent = fileName + ' → ' + selected.name + ' — ready.';
+  } else if (fileBytes && !selected) {
+    $('status').textContent = 'File loaded. Now select a profile below to enable Analyze.';
+  } else if (!fileBytes && selected) {
+    $('status').textContent = selected.name + ' selected. Add a PDF to enable Analyze.';
+  } else {
+    $('status').textContent = 'Everything runs locally in your browser. No file ever leaves this machine.';
+  }
+}
+
+function setFile(f) {
+  const r = new FileReader();
+  r.onload = () => {
+    fileBytes = r.result;
+    fileName = f.name;
+    $('filename').textContent = f.name + ' (' + (f.size / 1048576).toFixed(1) + ' MB)';
+    $('filechip').classList.add('show');
+    $('drop').style.display = 'none';
+    updateButtons();
+  };
+  r.readAsArrayBuffer(f);
+}
+
+$('drop').onclick = () => $('fileinput').click();
+$('fileinput').onchange = (e) => e.target.files[0] && setFile(e.target.files[0]);
+document.addEventListener('dragover', (e) => { e.preventDefault(); $('drop').classList.add('armed'); });
+document.addEventListener('dragleave', () => $('drop').classList.remove('armed'));
+document.addEventListener('drop', (e) => {
+  e.preventDefault();
+  $('drop').classList.remove('armed');
+  if (e.dataTransfer.files[0]) setFile(e.dataTransfer.files[0]);
+});
+$('clearfile').onclick = () => {
+  fileBytes = null; fileName = '';
+  $('filechip').classList.remove('show');
+  $('drop').style.display = '';
+  updateButtons();
+};
+
+function showTab(which) {
+  $('tabProfiles').classList.toggle('active', which === 'profiles');
+  $('tabResults').classList.toggle('active', which === 'results');
+  $('profilelist').style.display = which === 'profiles' ? '' : 'none';
+  $('results').classList.toggle('show', which === 'results');
+  const dropVisible = which === 'profiles';
+  $('drop').style.display = (dropVisible && !fileBytes) ? '' : 'none';
+  $('filechip').classList.toggle('show', dropVisible && !!fileBytes);
+}
+$('tabProfiles').onclick = () => showTab('profiles');
+$('tabResults').onclick = () => showTab('results');
+
+function run(fix) {
+  if (!fileBytes || !selected) return;
+  $('spin').classList.add('show');
+  $('analyzeBtn').disabled = true;
+  $('fixBtn').disabled = true;
+  $('status').textContent = fix ? 'Analyzing and fixing…' : 'Analyzing…';
+  const id = ++reqId;
+  const level = selected.level || '2b';
+  const opts = {};
+  if (!fix) { opts.check = true; opts.analyze = true; }
+  if (selected.ua) opts.ua = true;
+  if (selected.json) opts.profile = JSON.stringify(selected.json);
+  pending.set(id, { fix });
+  const bytes = fileBytes.slice(0);
+  worker.postMessage({ id, bytes, level, opts }, [bytes]);
+}
+$('analyzeBtn').onclick = () => run(false);
+$('fixBtn').onclick = () => run(true);
+
+function addHit(host, sevLabel, sevClass, text) {
+  const h = el('div', 'hit');
+  h.appendChild(el('span', 'sev ' + sevClass, sevLabel));
+  h.appendChild(el('span', null, text));
+  host.appendChild(h);
+}
+
+function verdictRow(icon, color, text) {
+  const v = el('div', 'verdict');
+  const big = el('span', 'big', icon);
+  if (color) big.style.color = color;
+  v.appendChild(big);
+  v.appendChild(el('span', null, text));
+  return v;
+}
+
+worker.onmessage = (e) => {
+  const m = e.data;
+  const ctx = pending.get(m.id);
+  if (!ctx) return;
+  pending.delete(m.id);
+  $('spin').classList.remove('show');
+  updateButtons();
+  const R = $('results');
+  R.textContent = '';
+  if (!m.ok) {
+    R.appendChild(verdictRow('⛔', null,
+      (m.errorCode || 'Error') + ': ' + (m.error || 'processing failed')));
+    $('status').textContent = 'Failed.';
+    showTab('results');
+    return;
+  }
+  const analysis = m.analysisList || [];
+  const hits = analysis.filter(a => a.code === 'PROFILE_HIT');
+  const unsup = analysis.filter(a => a.code === 'PROFILE_RULE_UNSUPPORTED');
+  if (ctx.fix) {
+    const steps = m.issueList || [];
+    R.appendChild(verdictRow('✔', 'var(--ok)',
+      'Fixed and converted — ' + steps.length + ' repair step(s) applied in ' + m.ms + ' ms'));
+    for (const i of steps) addHit(R, 'fixed', 'fixed', i.detail);
+    if (m.pdf) {
+      const blob = new Blob([m.pdf], { type: 'application/pdf' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = fileName.replace(/\.pdf$/i, '') + '-fixed.pdf';
+      a.click();
+      $('status').textContent = 'Download started: ' + a.download;
+    }
+  } else {
+    const bad = hits.some(h => h.detail.startsWith('Error'));
+    const warn = hits.some(h => h.detail.startsWith('Warning'));
+    const icon = hits.length === 0 ? '✔' : bad ? '✖' : warn ? '⚠️' : 'ℹ️';
+    const color = hits.length === 0 ? 'var(--ok)' : bad ? 'var(--bad)' : 'var(--warn)';
+    R.appendChild(verdictRow(icon, color,
+      hits.length === 0 ? 'No problems found — checked in ' + m.ms + ' ms'
+                        : hits.length + ' finding(s) — checked in ' + m.ms + ' ms'));
+    for (const h of hits) {
+      const sev = h.detail.split(':')[0];
+      const cls = (sev === 'Error' || sev === 'Warning' || sev === 'Info') ? sev : 'Info';
+      addHit(R, sev, cls, h.detail.slice(sev.length + 2));
+    }
+    for (const u of unsup) addHit(R, 'note', 'note', u.detail);
+    $('status').textContent = hits.length === 0 ? 'Clean.' : hits.length + ' finding(s).';
+  }
+  showTab('results');
+};
+
+renderProfiles();
+</script>
+</body>
+</html>
