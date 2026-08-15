@@ -39,7 +39,7 @@ struct Ctx {
   bool needTagging() const { return isA() && conf == 'A'; }
   std::string docLang() const { return opt.docLang.empty() ? "en" : opt.docLang; }
   bool allowEmbeddedFiles() const {
-    return (isA() && (part == 3 || conf == 'F' || conf == 'E')) || isE();
+    return isA() && (part == 3 || conf == 'F' || conf == 'E');
   }
   bool allow3D() const { return conf == 'E' || isE(); }
 

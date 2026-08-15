@@ -2,6 +2,8 @@
 #include <qpdf/QPDFPageDocumentHelper.hh>
 #include <qpdf/QPDFPageObjectHelper.hh>
 
+#include <lcms2.h>
+
 #include <ft2build.h>
 #include FT_FREETYPE_H
 #include FT_TRUETYPE_TABLES_H
@@ -17,10 +19,16 @@
 #include <string>
 #include <vector>
 
+#include "images.hh"
 #include "passes.hh"
 #include "util.hh"
 
 namespace pdfa {
+extern const unsigned char kSrgbIcc[];
+extern const unsigned int kSrgbIccLen;
+extern const unsigned char kCmykIcc[];
+extern const unsigned int kCmykIccLen;
+
 namespace {
 struct PfAtom {
   std::string token;
@@ -412,26 +420,72 @@ bool parsePreflightXml(const std::string& text, PfProfile& out) {
     if (!rule.id.empty() && rule.id[0] == 'R') out.rules.push_back(rule);
     pos = end + 1;
   }
+  std::map<std::string, std::vector<std::pair<int, std::string>>> rulesetDefs;
   pos = text.find("<rulesets>");
   if (pos != std::string::npos) {
     size_t end = text.find("</rulesets>", pos);
-    size_t p = pos;
+    size_t sp = pos;
     while (true) {
-      p = text.find("<rule check_severity=\"", p);
-      if (p == std::string::npos || p > end) break;
-      int sev = text[p + 22] - '0';
-      size_t open = text.find('>', p);
-      size_t close = text.find("</rule>", open);
-      std::string rid = text.substr(open + 1, close - open - 1);
-      for (auto& r : out.rules) {
-        if (r.id == rid) r.severity = sev;
+      sp = text.find("<ruleset>", sp);
+      if (sp == std::string::npos || sp > end) break;
+      size_t send = text.find("</ruleset>", sp);
+      std::string sid = tagText(text, "id1", sp, send);
+      size_t p = sp;
+      while (true) {
+        p = text.find("<rule check_severity=\"", p);
+        if (p == std::string::npos || p > send) break;
+        int sev = text[p + 22] - '0';
+        size_t open = text.find('>', p);
+        size_t close = text.find("</rule>", open);
+        rulesetDefs[sid].push_back({sev, text.substr(open + 1, close - open - 1)});
+        p = close + 1;
       }
-      p = close + 1;
+      sp = send + 1;
     }
   }
   size_t ppos = text.find("<profile>");
+  std::set<std::string> activeRuleIds;
+  std::map<std::string, int> activeSev;
   if (ppos != std::string::npos) {
     out.name = unescape(tagText(text, "name", ppos, text.size()));
+    size_t pend = text.find("</profile>", ppos);
+    size_t rp = ppos;
+    while (true) {
+      rp = text.find("<ruleset>", rp);
+      if (rp == std::string::npos || (pend != std::string::npos && rp > pend)) break;
+      size_t rclose = text.find("</ruleset>", rp);
+      std::string sid = text.substr(rp + 9, rclose - rp - 9);
+      size_t b = sid.find_first_not_of(" \t\r\n");
+      if (b != std::string::npos) {
+        sid = sid.substr(b, sid.find_last_not_of(" \t\r\n") - b + 1);
+      }
+      auto it = rulesetDefs.find(sid);
+      if (it != rulesetDefs.end()) {
+        for (const auto& [sev, rid] : it->second) {
+          activeRuleIds.insert(rid);
+          activeSev[rid] = sev;
+        }
+      }
+      rp = rclose + 1;
+    }
+  }
+  if (!activeRuleIds.empty()) {
+    std::vector<PfRule> kept;
+    for (auto& r : out.rules) {
+      if (activeRuleIds.count(r.id)) {
+        r.severity = activeSev[r.id];
+        kept.push_back(r);
+      }
+    }
+    out.rules = kept;
+  } else {
+    for (const auto& [sid, entries] : rulesetDefs) {
+      for (const auto& [sev, rid] : entries) {
+        for (auto& r : out.rules) {
+          if (r.id == rid) r.severity = sev;
+        }
+      }
+    }
   }
   return !out.rules.empty();
 }
@@ -541,6 +595,7 @@ struct ImageEvent {
   bool overprint = false;
   int opm = 0;
   bool transparency = false;
+  QPDFObjectHandle obj;
   std::set<std::string> filters;
   ColorInfo color;
   int page = 0;
@@ -740,10 +795,15 @@ struct EvScanner : QPDFObjectHandle::ParserCallbacks {
   Events& ev;
   int page;
   std::vector<std::pair<std::string, Gs>> draws;
+  std::vector<std::pair<std::string, Gs>> patternUses;
+  std::vector<std::pair<QPDFObjectHandle, Gs>> type3Uses;
   Box pathBox;
   int pathNodes = 0;
   bool pathIsClip = false;
   double tmX = 0, tmY = 0;
+  int biW = 0, biH = 0, biBpc = 0;
+  bool biMask = false;
+  std::string biLastKey;
 
   EvScanner(QPDFObjectHandle resources, Events& events, int pageNum, const Gs& initial)
       : gs(initial), res(resources), ev(events), page(pageNum) {}
@@ -840,6 +900,13 @@ struct EvScanner : QPDFObjectHandle::ParserCallbacks {
   }
 
   void addPaint(bool stroke, bool fill) {
+    if (std::getenv("KURA_EV_DEBUG") && (fill || stroke)) {
+      std::string c;
+      for (double v : (fill ? gs.fill : gs.stroke)) c += std::to_string(v).substr(0, 4) + " ";
+      std::fprintf(stderr, "[ev] %s cls=%s comps=[%s] opF=%d opS=%d\n",
+                   fill ? "fill" : "stroke", (fill ? gs.fillColor : gs.strokeColor).cls.c_str(),
+                   c.c_str(), gs.overprintFill ? 1 : 0, gs.overprintStroke ? 1 : 0);
+    }
     if (stroke) {
       PaintEvent e;
       e.width = gs.lineWidth * matScale(gs.ctm);
@@ -970,9 +1037,78 @@ struct EvScanner : QPDFObjectHandle::ParserCallbacks {
   }
 
   std::string lastString;
+  bool inBI = false;
+  std::vector<std::string> biNames;
+  std::vector<double> biNums;
+  std::string biCsName;
 
   void handleObject(QPDFObjectHandle obj, size_t, size_t) override {
+    if (obj.isInlineImage()) {
+      ImageEvent e;
+      e.page = page;
+      for (size_t i = 0; i + 1 <= biNames.size(); ++i) {
+      }
+      e.width = biW;
+      e.height = biH;
+      e.bpc = biBpc > 0 ? biBpc : 8;
+      e.mask = biMask;
+      if (!biCsName.empty()) {
+        e.color = classifyColor(QPDFObjectHandle::newName(biCsName), res);
+      }
+      double wpt = std::hypot(gs.ctm.a, gs.ctm.b);
+      double hpt = std::hypot(gs.ctm.c, gs.ctm.d);
+      if (e.width > 0 && e.height > 0 && wpt > 0.01 && hpt > 0.01) {
+        e.ppi = std::max(e.width * 72.0 / wpt, e.height * 72.0 / hpt);
+      }
+      {
+        const Mat& m = gs.ctm;
+        double xs[4] = {m.e, m.a + m.e, m.c + m.e, m.a + m.c + m.e};
+        double ys[4] = {m.f, m.b + m.f, m.d + m.f, m.b + m.d + m.f};
+        e.bbox = {*std::min_element(xs, xs + 4), *std::min_element(ys, ys + 4),
+                  *std::max_element(xs, xs + 4), *std::max_element(ys, ys + 4), true};
+      }
+      e.clip = gs.clip;
+      ev.images.push_back(e);
+      inBI = false;
+      biW = biH = biBpc = 0;
+      biMask = false;
+      biCsName.clear();
+      biLastKey.clear();
+      return;
+    }
     if (!obj.isOperator()) {
+      if (inBI) {
+        if (obj.isName()) {
+          std::string n = obj.getName();
+          if (biLastKey.empty() && (n == "/W" || n == "/Width" || n == "/H" ||
+                                    n == "/Height" || n == "/BPC" ||
+                                    n == "/BitsPerComponent" || n == "/CS" ||
+                                    n == "/ColorSpace" || n == "/IM" || n == "/ImageMask" ||
+                                    n == "/F" || n == "/Filter" || n == "/D" || n == "/DP")) {
+            biLastKey = n;
+          } else if (!biLastKey.empty()) {
+            if (biLastKey == "/CS" || biLastKey == "/ColorSpace") biCsName = n;
+            biLastKey.clear();
+          }
+          return;
+        }
+        if (obj.isNumber() && !biLastKey.empty()) {
+          double v = obj.getNumericValue();
+          if (biLastKey == "/W" || biLastKey == "/Width") biW = static_cast<int>(v);
+          else if (biLastKey == "/H" || biLastKey == "/Height") biH = static_cast<int>(v);
+          else if (biLastKey == "/BPC" || biLastKey == "/BitsPerComponent") {
+            biBpc = static_cast<int>(v);
+          }
+          biLastKey.clear();
+          return;
+        }
+        if (obj.isBool() && (biLastKey == "/IM" || biLastKey == "/ImageMask")) {
+          biMask = obj.getBoolValue();
+          biLastKey.clear();
+          return;
+        }
+        biLastKey.clear();
+      }
       if (obj.isName()) lastName = obj.getName();
       else if (obj.isNumber()) nums.push_back(obj.getNumericValue());
       else if (obj.isString()) lastString += obj.getStringValue();
@@ -984,6 +1120,13 @@ struct EvScanner : QPDFObjectHandle::ParserCallbacks {
       return;
     }
     std::string op = obj.getOperatorValue();
+    if (op == "BI") {
+      inBI = true;
+      biLastKey.clear();
+      nums.clear();
+      lastName.clear();
+      return;
+    }
     if (op == "q") stack.push_back(gs);
     else if (op == "Q") {
       if (!stack.empty()) {
@@ -1094,6 +1237,10 @@ struct EvScanner : QPDFObjectHandle::ParserCallbacks {
     } else if (op == "sc" || op == "scn" || op == "SC" || op == "SCN") {
       if (!nums.empty()) setColor(op == "SC" || op == "SCN",
                                   static_cast<int>(nums.size() > 4 ? 4 : nums.size()));
+      if ((op == "scn" || op == "SCN") && !lastName.empty()) {
+        const ColorInfo& ci = op == "SCN" ? gs.strokeColor : gs.fillColor;
+        if (ci.cls == "pattern") patternUses.push_back({lastName, gs});
+      }
     } else if (op == "S" || op == "s") {
       addPaint(true, false);
     } else if (op == "f" || op == "F" || op == "f*") {
@@ -1140,6 +1287,50 @@ void scanEvents(QPDFObjectHandle contents, QPDFObjectHandle res, const Gs& initi
     QPDFObjectHandle::parseContentStream(contents, &scan);
   } catch (...) {
     return;
+  }
+  if (res.isDictionary()) {
+    QPDFObjectHandle patd = res.getKey("/Pattern");
+    for (const auto& pu : scan.patternUses) {
+      if (!patd.isDictionary()) break;
+      QPDFObjectHandle pat = patd.getKey(pu.first);
+      if (!pat.isStream() || !seen.enter(pat)) continue;
+      QPDFObjectHandle pd = pat.getDict();
+      Gs inner = pu.second;
+      inner.fillColor = ColorInfo();
+      inner.strokeColor = ColorInfo();
+      QPDFObjectHandle mtx = pd.getKey("/Matrix");
+      if (mtx.isArray() && mtx.getArrayNItems() == 6) {
+        Mat m{numOf(mtx.getArrayItem(0), 1), numOf(mtx.getArrayItem(1), 0),
+              numOf(mtx.getArrayItem(2), 0), numOf(mtx.getArrayItem(3), 1),
+              numOf(mtx.getArrayItem(4), 0), numOf(mtx.getArrayItem(5), 0)};
+        inner.ctm = mul(m, inner.ctm);
+      }
+      QPDFObjectHandle pres = pd.getKey("/Resources");
+      scanEvents(pat, pres.isDictionary() ? pres : res, inner, page, depth + 1, seen, ev);
+    }
+    for (const auto& tu : scan.type3Uses) {
+      QPDFObjectHandle cp = tu.first.getKey("/CharProcs");
+      if (!cp.isDictionary() || !seen.enter(tu.first)) continue;
+      QPDFObjectHandle fm = tu.first.getKey("/FontMatrix");
+      Gs inner = tu.second;
+      if (fm.isArray() && fm.getArrayNItems() == 6) {
+        Mat m{numOf(fm.getArrayItem(0), 0.001), numOf(fm.getArrayItem(1), 0),
+              numOf(fm.getArrayItem(2), 0), numOf(fm.getArrayItem(3), 0.001),
+              numOf(fm.getArrayItem(4), 0), numOf(fm.getArrayItem(5), 0)};
+        Mat scale{inner.fontSize, 0, 0, inner.fontSize, 0, 0};
+        inner.ctm = mul(m, mul(scale, inner.ctm));
+      }
+      QPDFObjectHandle t3res = tu.first.getKey("/Resources");
+      int glyphs = 0;
+      for (const std::string& gk : cp.getKeys()) {
+        if (++glyphs > 40) break;
+        QPDFObjectHandle proc = cp.getKey(gk);
+        if (proc.isStream() && seen.enter(proc)) {
+          scanEvents(proc, t3res.isDictionary() ? t3res : res, inner, page, depth + 1,
+                     seen, ev);
+        }
+      }
+    }
   }
   QPDFObjectHandle xod = res.isDictionary() ? res.getKey("/XObject")
                                             : QPDFObjectHandle::newNull();
@@ -1190,6 +1381,7 @@ void scanEvents(QPDFObjectHandle contents, QPDFObjectHandle res, const Gs& initi
       e.overprint = d.second.overprintFill;
       e.opm = d.second.opm;
       e.transparency = d.second.transparency;
+      e.obj = xo;
       ev.images.push_back(e);
     } else if (sub == "/Form") {
       if (!seen.enter(xo)) continue;
@@ -1208,6 +1400,19 @@ void scanEvents(QPDFObjectHandle contents, QPDFObjectHandle res, const Gs& initi
 }
 
 double numVal(const PfAtom& a) {
+  for (const std::string& v : a.vals) {
+    size_t n = v.size();
+    if (n > 2) {
+      std::string suf = v.substr(n - 2);
+      if (suf == "mm" || suf == "cm" || suf == "in" || suf == "pt") {
+        double x = std::atof(v.c_str());
+        if (suf == "mm") return x * 72.0 / 25.4;
+        if (suf == "cm") return x * 72.0 / 2.54;
+        if (suf == "in") return x * 72.0;
+        return x;
+      }
+    }
+  }
   return a.vals.empty() ? 0.0 : std::atof(a.vals[0].c_str());
 }
 
@@ -1241,7 +1446,11 @@ double maxComp(const std::vector<double>& c) {
   return m;
 }
 
-bool isWhite(const std::vector<double>& c) {
+bool isWhite(const std::vector<double>& c, const ColorInfo& ci) {
+  if (ci.cls == "separation" || ci.cls == "devicen" || ci.cls == "pattern") {
+    if (c.empty()) return false;
+    return maxComp(c) < 0.001;
+  }
   if (c.size() == 4) return maxComp(c) < 0.001;
   for (double v : c) {
     if (v < 0.999) return false;
@@ -1249,9 +1458,29 @@ bool isWhite(const std::vector<double>& c) {
   return !c.empty();
 }
 
-bool blackOnly(const std::vector<double>& c) {
-  if (c.size() == 4) return c[3] > 0.001 && c[0] < 0.001 && c[1] < 0.001 && c[2] < 0.001;
-  if (c.size() == 1) return c[0] < 0.999;
+bool blackOnly(const std::vector<double>& c, const ColorInfo& ci) {
+  if (ci.cls == "separation" || ci.cls == "devicen") {
+    return (ci.spot == "Black" || ci.spot == "All") && !c.empty() && c[0] > 0.999;
+  }
+  if (ci.cls == "rgb" || ci.cls == "lab") return false;
+  if (ci.cls == "icc" && ci.declaredComps == 3) return false;
+  if (c.size() == 4) return c[3] > 0.999 && c[0] < 0.001 && c[1] < 0.001 && c[2] < 0.001;
+  if (c.size() == 1) return c[0] < 0.001;
+  return false;
+}
+
+bool processOnly(const ColorInfo& ci) {
+  if (ci.cls == "cmyk" || ci.cls == "gray") return true;
+  if (ci.cls == "icc" && (ci.declaredComps == 4 || ci.declaredComps == 1)) return true;
+  if (ci.cls == "separation" || ci.cls == "devicen") {
+    if (ci.colorants.empty()) return false;
+    for (const std::string& c : ci.colorants) {
+      if (c != "Cyan" && c != "Magenta" && c != "Yellow" && c != "Black" && c != "Gray") {
+        return false;
+      }
+    }
+    return true;
+  }
   return false;
 }
 
@@ -1264,6 +1493,9 @@ double totalInk(const std::vector<double>& c) {
 double blackPercent(const std::vector<double>& c, const ColorInfo& ci) {
   if (ci.cls == "cmyk" && c.size() == 4) return c[3] * 100.0;
   if (ci.cls == "gray" && c.size() == 1) return (1.0 - c[0]) * 100.0;
+  if ((ci.cls == "separation" || ci.cls == "devicen") && ci.spot == "Black" && !c.empty()) {
+    return c[0] * 100.0;
+  }
   return -1;
 }
 
@@ -1272,11 +1504,22 @@ bool is100Black(const std::vector<double>& c, const ColorInfo& ci) {
     return c[3] > 0.999 && c[0] < 0.001 && c[1] < 0.001 && c[2] < 0.001;
   }
   if (ci.cls == "gray" && c.size() == 1) return c[0] < 0.001;
+  if ((ci.cls == "separation" || ci.cls == "devicen") && ci.spot == "Black") {
+    return !c.empty() && c[0] > 0.999;
+  }
   return false;
 }
 
 bool spotIsRegistration(const ColorInfo& ci) {
   return ci.spot == "All" || ci.spot == "Registration" || ci.spot == "all";
+}
+
+bool effectiveOverprint(bool op, int opm, const ColorInfo& ci,
+                        const std::vector<double>& comps) {
+  (void)opm;
+  (void)ci;
+  (void)comps;
+  return op;
 }
 
 bool spotIsProcess(const std::string& s) {
@@ -1363,10 +1606,20 @@ bool evalColorAtom(const PfAtom& a, const std::vector<double>& comps, const Colo
     double m = maxComp(comps) * 100.0;
     return nonZeroComps(comps) > 0 && cmpNum(m, a.op, numVal(a));
   }
-  if (t == "CSCOLOR::ObjectIsWhite") return cmpBool(isWhite(comps), a.op);
-  if (t == "CSCOLOR::ObjectUsesBlackOnly") return cmpBool(blackOnly(comps), a.op);
+  if (t == "CSCOLOR::ObjectIsWhite") return cmpBool(isWhite(comps, ci), a.op);
+  if (t == "CSCOLOR::ObjectUsesBlackOnly") return cmpBool(blackOnly(comps, ci), a.op);
   if (t == "CSCOLOR::ObjectIs100_Black") return cmpBool(is100Black(comps, ci), a.op);
   if (t == "CSCOLOR::ObjectUsesBlackWithAPercenOf") {
+    bool onlyBlackInk = false;
+    if (ci.cls == "gray") onlyBlackInk = true;
+    else if (ci.cls == "cmyk" && comps.size() == 4) {
+      onlyBlackInk = comps[0] < 0.001 && comps[1] < 0.001 && comps[2] < 0.001 &&
+                     comps[3] > 0.001;
+    } else if ((ci.cls == "separation" || ci.cls == "devicen") &&
+               (ci.spot == "Black" || ci.spot == "All")) {
+      onlyBlackInk = !comps.empty() && comps[0] > 0.001;
+    }
+    if (!onlyBlackInk) return false;
     double bp = blackPercent(comps, ci);
     return bp >= 0 && cmpNum(bp, a.op, numVal(a));
   }
@@ -1376,8 +1629,9 @@ bool evalColorAtom(const PfAtom& a, const std::vector<double>& comps, const Colo
     return cmpNum(cmy, a.op, numVal(a));
   }
   if (t == "CSCOLOR::IsDeviceGray") return cmpBool(ci.cls == "gray", a.op);
-  if (t == "CSCOLOR::IsDeviceCMYK" || t == "CSCOLOR::ObjectUsesCMYKOnly_noSpotColo") {
-    return cmpBool(ci.cls == "cmyk", a.op);
+  if (t == "CSCOLOR::IsDeviceCMYK") return cmpBool(ci.cls == "cmyk", a.op);
+  if (t == "CSCOLOR::ObjectUsesCMYKOnly_noSpotColo") {
+    return cmpBool(processOnly(ci), a.op);
   }
   if (t == "CSCOLOR::IsDeviceRGB") return cmpBool(ci.cls == "rgb", a.op);
   if (t == "CSCOLOR::UsesICCbasedCMYK") {
@@ -1387,8 +1641,23 @@ bool evalColorAtom(const PfAtom& a, const std::vector<double>& comps, const Colo
     return cmpBool(ci.cls == "icc" && ci.declaredComps == 3, a.op);
   }
   if (t == "CSCOLOR::NumberOfNonZeroCMYKComponents") {
-    if (ci.cls != "cmyk" || comps.size() != 4) return false;
-    return cmpNum(nonZeroComps(comps), a.op, numVal(a));
+    if (ci.cls == "cmyk" && comps.size() == 4) {
+      return cmpNum(nonZeroComps(comps), a.op, numVal(a));
+    }
+    if ((ci.cls == "separation" || ci.cls == "devicen") && processOnly(ci)) {
+      std::set<std::string> nz;
+      for (size_t i = 0; i < ci.colorants.size() && i < comps.size(); ++i) {
+        if (comps[i] > 0.001) nz.insert(ci.colorants[i]);
+      }
+      if (ci.colorants.size() == 1 && comps.size() >= 1 && comps[0] > 0.001) {
+        nz.insert(ci.colorants[0]);
+      }
+      return cmpNum(static_cast<double>(nz.size()), a.op, numVal(a));
+    }
+    if (ci.cls == "gray" && !comps.empty()) {
+      return cmpNum(comps[0] < 0.999 ? 1 : 0, a.op, numVal(a));
+    }
+    return false;
   }
   if (t == "CSCOLOR::IsLabColorSpace") return cmpBool(ci.cls == "lab", a.op);
   if (t == "CSCOLOR::IsICCBasedColorSpace") return cmpBool(ci.cls == "icc", a.op);
@@ -1560,7 +1829,7 @@ bool evalPaintAtom(const PfAtom& a, const PaintEvent& e, const Events& ev,
   if (t == "CSGST_S::LineWidth") return e.stroke && cmpNum(e.width, a.op, numVal(a));
   if (t == "CSGST_S::IsOverPrintEnabledStroke" || t == "CSGST_F::IsOverPrintEnabledFill" ||
       t == "CSGST_G::IsOverPrintEnabled") {
-    return cmpBool(e.overprint, a.op);
+    return cmpBool(effectiveOverprint(e.overprint, e.opm, e.color, e.comps), a.op);
   }
   if (t == "CSGST_G::IsIllustratorOverPrintMode") return cmpBool(e.opm == 1, a.op);
   if (t == "CSGST_S::TotalAmountOfInk" || t == "CSGST_F::TotalAmountOfInk" ||
@@ -1635,7 +1904,7 @@ bool evalTextAtom(const PfAtom& a, const TextEvent& e, const Events& ev,
   if (t == "CONTSTM::IsText") return cmpBool(true, a.op);
   if (t == "CSGST_S::IsOverPrintEnabledStroke" || t == "CSGST_F::IsOverPrintEnabledFill" ||
       t == "CSGST_G::IsOverPrintEnabled") {
-    return cmpBool(e.overprint, a.op);
+    return cmpBool(effectiveOverprint(e.overprint, e.opm, e.color, e.comps), a.op);
   }
   if (t == "CSGST_G::IsIllustratorOverPrintMode") return cmpBool(e.opm == 1, a.op);
   if (t == "CSGST_S::TotalAmountOfInk" || t == "CSGST_F::TotalAmountOfInk" ||
@@ -1656,7 +1925,7 @@ bool evalTextAtom(const PfAtom& a, const TextEvent& e, const Events& ev,
   if (s2) return r;
   std::string ns = t.substr(0, t.find(':'));
   if (ns == "CSGST_S" || ns == "CSGST_F" || ns == "CSGST_G" || ns == "CONTSTM" ||
-      ns == "SIFTER" || ns == "CSHALFTONE") {
+      ns == "SIFTER" || ns == "CSHALFTONE" || ns == "CSIMAGE") {
     return cmpBool(false, a.op);
   }
   supported = false;
@@ -1688,7 +1957,7 @@ bool evalImageAtom(const PfAtom& a, const ImageEvent& e, const Events& ev,
   }
   if (t == "CSGST_S::IsOverPrintEnabledStroke" || t == "CSGST_F::IsOverPrintEnabledFill" ||
       t == "CSGST_G::IsOverPrintEnabled") {
-    return cmpBool(e.overprint, a.op);
+    return cmpBool(effectiveOverprint(e.overprint, e.opm, e.color, {}), a.op);
   }
   if (t == "CSGST_G::IsIllustratorOverPrintMode") return cmpBool(e.opm == 1, a.op);
   if (t == "CSGST_G::HasTransparency" || t == "CSGST_S::HasTransparency" ||
@@ -1708,6 +1977,13 @@ bool evalImageAtom(const PfAtom& a, const ImageEvent& e, const Events& ev,
   bool s2 = true;
   bool r = evalColorAtom(a, std::vector<double>(), e.color, s2);
   if (s2) return r;
+  {
+    std::string ns2 = t.substr(0, t.find(':'));
+    if (ns2 == "CSGST_S" || ns2 == "CSGST_F" || ns2 == "CSGST_G" || ns2 == "CONTSTM" ||
+        ns2 == "SIFTER" || ns2 == "CSHALFTONE" || ns2 == "CSTEXT") {
+      return cmpBool(false, a.op);
+    }
+  }
   supported = false;
   return false;
 }
@@ -2020,10 +2296,26 @@ bool evalPageAtom(const PfAtom& a, const PageFacts& p, bool& supported) {
   if (t == "PAGE::DetectVisualDifferences") return cmpBool(false, a.op);
   if (t == "PAGE::PageDescriptionNotValid") return cmpBool(false, a.op);
   if (t == "PAGE::PageUsesSpecificPlates") {
-    for (const std::string& pl : p.plates) {
-      if (cmpStr(pl, a.op, a.vals)) return true;
+    double value = a.vals.empty() ? 0 : std::atof(a.vals[0].c_str());
+    size_t nameStart = 4;
+    if (a.vals.size() > 3) {
+      int n = std::atoi(a.vals[3].c_str());
+      if (n <= 0 || nameStart + n > a.vals.size() + 1) nameStart = 4;
     }
-    return false;
+    static const std::set<std::string> kProcess = {"Cyan", "Magenta", "Yellow", "Black"};
+    bool used = false;
+    for (size_t i = nameStart; i < a.vals.size(); ++i) {
+      const std::string& want = a.vals[i];
+      if (want == "@spot") {
+        for (const std::string& pl : p.plates) {
+          if (!kProcess.count(pl)) used = true;
+        }
+      } else if (p.plates.count(want)) {
+        used = true;
+      }
+    }
+    double coverage = used ? 100.0 : 0.0;
+    return cmpNum(coverage, a.op, value);
   }
   supported = false;
   return false;
@@ -2265,15 +2557,81 @@ void passProfile(Ctx& ctx, const unsigned char* inputData, std::size_t inputSize
       pf.imageCount = static_cast<int>(ev.images.size() - imgBefore);
       pf.empty = ev.images.size() == imgBefore && ev.paints.size() == paintBefore &&
                  ev.texts.size() == textBefore;
+      auto addPlates = [&pf](const std::vector<double>& comps, const ColorInfo& ci) {
+        if (ci.cls == "cmyk" && comps.size() == 4) {
+          const char* names[4] = {"Cyan", "Magenta", "Yellow", "Black"};
+          for (int ch = 0; ch < 4; ++ch) {
+            if (comps[ch] > 0.001) pf.plates.insert(names[ch]);
+          }
+        } else if (ci.cls == "gray" || (ci.cls == "icc" && ci.declaredComps == 1) ||
+                   (ci.cls == "cal" && comps.size() == 1)) {
+          if (!comps.empty() && comps[0] < 0.999) pf.plates.insert("Black");
+        } else if (ci.cls == "separation" || ci.cls == "devicen") {
+          for (size_t i = 0; i < ci.colorants.size(); ++i) {
+            double tint = i < comps.size() ? comps[i] : (comps.empty() ? 1.0 : comps[0]);
+            if (tint <= 0.001) continue;
+            const std::string& c = ci.colorants[i];
+            if (c == "All" || c == "Registration") {
+              pf.plates.insert("Cyan");
+              pf.plates.insert("Magenta");
+              pf.plates.insert("Yellow");
+              pf.plates.insert("Black");
+            } else {
+              pf.plates.insert(c);
+            }
+          }
+        } else if (!comps.empty()) {
+          bool white = true, grayish = true;
+          for (double v : comps) {
+            if (v < 0.999) white = false;
+          }
+          for (size_t i = 1; i < comps.size(); ++i) {
+            if (std::abs(comps[i] - comps[0]) > 0.02) grayish = false;
+          }
+          if (!white) {
+            if (grayish) {
+              pf.plates.insert("Black");
+            } else {
+              pf.plates.insert("Cyan");
+              pf.plates.insert("Magenta");
+              pf.plates.insert("Yellow");
+              pf.plates.insert("Black");
+            }
+          }
+        }
+      };
       for (size_t i = paintBefore; i < ev.paints.size(); ++i) {
-        if (ev.paints[i].transparency) pf.hasTransObj = true;
-        const ColorInfo& ci = ev.paints[i].color;
-        for (const std::string& c : ci.colorants) pf.plates.insert(c);
-        if (ci.cls == "cmyk" || ci.cls == "gray") pf.plates.insert("Black");
+        const PaintEvent& pe = ev.paints[i];
+        if (pe.transparency) pf.hasTransObj = true;
+        if (pe.noPaint) continue;
+        addPlates(pe.comps, pe.color);
       }
       for (size_t i = textBefore; i < ev.texts.size(); ++i) {
-        if (ev.texts[i].transparency) pf.hasTransObj = true;
-        for (const std::string& c : ev.texts[i].color.colorants) pf.plates.insert(c);
+        const TextEvent& te = ev.texts[i];
+        if (te.transparency) pf.hasTransObj = true;
+        if (te.renderMode == 3) continue;
+        addPlates(te.comps, te.color);
+      }
+      for (size_t i = imgBefore; i < ev.images.size(); ++i) {
+        const ImageEvent& ie = ev.images[i];
+        const ColorInfo& ci = ie.color;
+        if (ie.mask) {
+          addPlates(ev.paints.empty() ? std::vector<double>{0.0}
+                                      : std::vector<double>{0.0},
+                    ColorInfo{"gray", "", "", {}, 1});
+        } else if (ci.cls == "gray" || (ci.cls == "icc" && ci.declaredComps == 1)) {
+          pf.plates.insert("Black");
+        } else if (ci.cls == "separation" || ci.cls == "devicen") {
+          for (const std::string& c : ci.colorants) {
+            if (c == "All" || c == "Registration") continue;
+            pf.plates.insert(c);
+          }
+        } else {
+          pf.plates.insert("Cyan");
+          pf.plates.insert("Magenta");
+          pf.plates.insert("Yellow");
+          pf.plates.insert("Black");
+        }
       }
       ev.pages.push_back(pf);
     }
@@ -2288,25 +2646,147 @@ void passProfile(Ctx& ctx, const unsigned char* inputData, std::size_t inputSize
         if (a.token.rfind("PAGE::EffectiveInkCoverage", 0) == 0) needInk = true;
       }
     }
-    if (needInk && ctx.opt.rasterizePage) {
+    if (needInk) {
+      cmsHPROFILE rgbP = cmsOpenProfileFromMem(kSrgbIcc, kSrgbIccLen);
+      cmsHPROFILE cmykP = cmsOpenProfileFromMem(kCmykIcc, kCmykIccLen);
+      cmsHTRANSFORM tDbl = nullptr, t8 = nullptr;
+      if (rgbP && cmykP) {
+        tDbl = cmsCreateTransform(rgbP, TYPE_RGB_DBL, cmykP, TYPE_CMYK_DBL,
+                                  INTENT_RELATIVE_COLORIMETRIC,
+                                  cmsFLAGS_BLACKPOINTCOMPENSATION);
+        t8 = cmsCreateTransform(rgbP, TYPE_RGB_8, cmykP, TYPE_CMYK_8,
+                                INTENT_RELATIVE_COLORIMETRIC,
+                                cmsFLAGS_BLACKPOINTCOMPENSATION);
+      }
+      auto rgbInk = [&](double r, double g, double b) {
+        if (!tDbl) return (3.0 - r - g - b) * 100.0;
+        double in[3] = {r, g, b};
+        double out[4] = {0, 0, 0, 0};
+        cmsDoTransform(tDbl, in, out, 1);
+        return out[0] + out[1] + out[2] + out[3];
+      };
+      auto inkOf = [&](const std::vector<double>& c, const ColorInfo& ci) -> double {
+        if (c.empty()) return 0;
+        if (ci.cls == "cmyk" || (ci.cls == "icc" && ci.declaredComps == 4 && c.size() == 4)) {
+          double sum = 0;
+          for (double v : c) sum += v;
+          return sum * 100.0;
+        }
+        if (ci.cls == "gray" || (ci.cls == "icc" && ci.declaredComps == 1) ||
+            (ci.cls == "cal" && c.size() == 1)) {
+          return (1.0 - c[0]) * 100.0;
+        }
+        if (ci.cls == "separation" || ci.cls == "devicen") {
+          double sum = 0;
+          for (double v : c) sum += v;
+          return sum * 100.0;
+        }
+        if ((ci.cls == "rgb" || ci.cls == "cal" || ci.cls == "icc") && c.size() >= 3) {
+          return rgbInk(c[0], c[1], c[2]);
+        }
+        return 0;
+      };
+      struct InkObj {
+        double ink;
+        Box bbox;
+        bool cmyk;
+        std::vector<double> comps;
+        bool overprint;
+        int opm;
+        bool spot;
+      };
+      std::map<int, std::vector<InkObj>> perPage;
+      for (const PaintEvent& e : ev.paints) {
+        if (e.noPaint || e.x.alphaFill <= 0.001) continue;
+        perPage[e.page].push_back({inkOf(e.comps, e.color), e.bbox,
+                                   e.color.cls == "cmyk", e.comps, e.overprint, e.opm,
+                                   e.color.cls == "separation" || e.color.cls == "devicen"});
+      }
+      for (const TextEvent& e : ev.texts) {
+        if (e.renderMode == 3) continue;
+        perPage[e.page].push_back({inkOf(e.comps, e.color), e.bbox,
+                                   e.color.cls == "cmyk", e.comps, e.overprint, false,
+                                   e.color.cls == "separation" || e.color.cls == "devicen"});
+      }
+      for (const ImageEvent& e : ev.images) {
+        double best = 0;
+        RawImage raw = e.obj.isStream() ? decodeImage(e.obj) : RawImage();
+        if (raw.ok && raw.width > 0 && raw.height > 0 && raw.comps > 0) {
+          size_t px = static_cast<size_t>(raw.width) * raw.height;
+          size_t stride = px > 20000 ? px / 20000 : 1;
+          const unsigned char* d =
+              reinterpret_cast<const unsigned char*>(raw.samples.data());
+          size_t avail = raw.samples.size() / raw.comps;
+          for (size_t i = 0; i < avail && i < px; i += stride) {
+            const unsigned char* p = d + i * raw.comps;
+            double ink = 0;
+            if (raw.comps == 4) ink = (p[0] + p[1] + p[2] + p[3]) / 255.0 * 100.0;
+            else if (raw.comps == 3) ink = rgbInk(p[0] / 255.0, p[1] / 255.0, p[2] / 255.0);
+            else if (raw.comps == 1) {
+              ink = e.color.cls == "separation" ? p[0] / 255.0 * 100.0
+                                                : (255 - p[0]) / 255.0 * 100.0;
+            }
+            best = std::max(best, ink);
+          }
+        } else if (e.color.cls == "cmyk" || (e.color.cls == "icc" && e.color.declaredComps == 4)) {
+          best = -1;
+        }
+        if (best >= 0) {
+          perPage[e.page].push_back({best, e.bbox, false, {}, e.overprint, 0, false});
+        }
+      }
       for (PageFacts& pf : ev.pages) {
-        int w = 0, h = 0;
-        std::string rgb;
-        if (!ctx.opt.rasterizePage(pf.page - 1, 72.0, w, h, rgb)) continue;
-        if (w <= 0 || h <= 0 || rgb.size() < static_cast<size_t>(w) * h * 3) continue;
         double maxTac = 0;
-        const unsigned char* px = reinterpret_cast<const unsigned char*>(rgb.data());
-        for (size_t i = 0; i + 2 < rgb.size(); i += 3) {
-          double r = px[i] / 255.0, g = px[i + 1] / 255.0, b = px[i + 2] / 255.0;
-          double k = 1.0 - std::max({r, g, b});
-          double denom = 1.0 - k;
-          double c = denom > 1e-6 ? (1.0 - r - k) / denom : 0;
-          double m = denom > 1e-6 ? (1.0 - g - k) / denom : 0;
-          double y = denom > 1e-6 ? (1.0 - b - k) / denom : 0;
-          maxTac = std::max(maxTac, (c + m + y + k) * 100.0);
+        auto& objs = perPage[pf.page];
+        for (const InkObj& o : objs) maxTac = std::max(maxTac, o.ink);
+        if (objs.size() <= 2000) {
+          for (const InkObj& o : objs) {
+            if (!o.overprint) continue;
+            for (const InkObj& u : objs) {
+              if (&o == &u || !boxesIntersect(o.bbox, u.bbox)) continue;
+              double combined;
+              if (o.spot) {
+                combined = o.ink + u.ink;
+              } else if (o.cmyk && o.opm == 1 && u.cmyk && o.comps.size() == 4 &&
+                         u.comps.size() == 4) {
+                combined = 0;
+                for (int ch = 0; ch < 4; ++ch) {
+                  combined += (o.comps[ch] > 0.001 ? o.comps[ch] : u.comps[ch]) * 100.0;
+                }
+              } else {
+                continue;
+              }
+              maxTac = std::max(maxTac, std::min(combined, 400.0));
+            }
+          }
         }
         pf.inkCoverage = maxTac;
       }
+      if (ctx.opt.rasterizePage && t8) {
+        for (PageFacts& pf : ev.pages) {
+          int w = 0, h = 0;
+          std::string rgb;
+          if (!ctx.opt.rasterizePage(pf.page - 1, 72.0, w, h, rgb)) continue;
+          if (w <= 0 || h <= 0 || rgb.size() < static_cast<size_t>(w) * h * 3) continue;
+          std::vector<unsigned char> cmykRow(static_cast<size_t>(w) * 4);
+          double maxTac = pf.inkCoverage < 0 ? 0 : pf.inkCoverage;
+          const unsigned char* px = reinterpret_cast<const unsigned char*>(rgb.data());
+          for (int row = 0; row < h; ++row) {
+            cmsDoTransform(t8, px + static_cast<size_t>(row) * w * 3, cmykRow.data(),
+                           static_cast<cmsUInt32Number>(w));
+            for (int i = 0; i < w; ++i) {
+              double ink = (cmykRow[i * 4] + cmykRow[i * 4 + 1] + cmykRow[i * 4 + 2] +
+                            cmykRow[i * 4 + 3]) / 255.0 * 100.0;
+              if (ink > maxTac) maxTac = ink;
+            }
+          }
+          pf.inkCoverage = maxTac;
+        }
+      }
+      if (tDbl) cmsDeleteTransform(tDbl);
+      if (t8) cmsDeleteTransform(t8);
+      if (rgbP) cmsCloseProfile(rgbP);
+      if (cmykP) cmsCloseProfile(cmykP);
     }
     auto finish = [&](auto& vec) {
       for (auto& e : vec) {
@@ -2499,6 +2979,9 @@ void passProfile(Ctx& ctx, const unsigned char* inputData, std::size_t inputSize
   }
 
   const char* sevName[] = {"", "Info", "Warning", "Error"};
+  std::vector<bool> usedPaint(ev.paints.size(), false);
+  std::vector<bool> usedText(ev.texts.size(), false);
+  std::vector<bool> usedImage(ev.images.size(), false);
   for (const PfRule& rule : prof.rules) {
     std::vector<const PfCondition*> conds;
     std::vector<const PfAtom*> atoms;
@@ -2528,14 +3011,20 @@ void passProfile(Ctx& ctx, const unsigned char* inputData, std::size_t inputSize
       if (dom == Domain::kNone) dom = sawAny ? Domain::kText : Domain::kFont;
       else if (dom != Domain::kText) mixed = true;
     }
+    bool anyFallback = false;
     if (dom == Domain::kNone && sawAny) {
       dom = Domain::kPaint;
+      anyFallback = true;
       for (const PfAtom* a : atoms) {
         bool positive = a->op == "is_true";
-        if (positive && a->token == "CONTSTM::IsText") dom = Domain::kText;
+        if (positive && a->token == "CONTSTM::IsText") {
+          dom = Domain::kText;
+          anyFallback = false;
+        }
         if (positive && (a->token == "CONTSTM::IsImage" || a->token == "CONTSTM::IsImageMask" ||
                          a->token == "CONTSTM::IsBitmapImageOrImageMask")) {
           dom = Domain::kImage;
+          anyFallback = false;
         }
       }
     }
@@ -2544,19 +3033,30 @@ void passProfile(Ctx& ctx, const unsigned char* inputData, std::size_t inputSize
     std::set<int> pages;
 
     int curPage = 0;
+    std::string unsupTok;
     auto evalAtom = [&](const PfAtom& a, const void* e) -> bool {
+      bool wasSupported = supported;
       if (atomDomain(a.token) == Domain::kDoc) return evalDocAtom(a, ev, supported);
       if (atomDomain(a.token) == Domain::kPage && dom != Domain::kPage) {
         const PageFacts* p = pageFor(ev, curPage);
         return p ? evalPageAtom(a, *p, supported) : false;
       }
       switch (dom) {
-        case Domain::kPaint:
-          return evalPaintAtom(a, *static_cast<const PaintEvent*>(e), ev, supported);
-        case Domain::kText:
-          return evalTextAtom(a, *static_cast<const TextEvent*>(e), ev, supported);
-        case Domain::kImage:
-          return evalImageAtom(a, *static_cast<const ImageEvent*>(e), ev, supported);
+        case Domain::kPaint: {
+          bool r = evalPaintAtom(a, *static_cast<const PaintEvent*>(e), ev, supported);
+          if (wasSupported && !supported) unsupTok = a.token;
+          return r;
+        }
+        case Domain::kText: {
+          bool r = evalTextAtom(a, *static_cast<const TextEvent*>(e), ev, supported);
+          if (wasSupported && !supported) unsupTok = a.token;
+          return r;
+        }
+        case Domain::kImage: {
+          bool r = evalImageAtom(a, *static_cast<const ImageEvent*>(e), ev, supported);
+          if (wasSupported && !supported) unsupTok = a.token;
+          return r;
+        }
         case Domain::kPage:
           return evalPageAtom(a, *static_cast<const PageFacts*>(e), supported);
         case Domain::kAnnot:
@@ -2586,20 +3086,35 @@ void passProfile(Ctx& ctx, const unsigned char* inputData, std::size_t inputSize
       return combined;
     };
 
-    auto sweep = [&](auto& collection) {
-      for (const auto& e : collection) {
+    auto sweep = [&](auto& collection, std::vector<bool>* used) {
+      for (size_t i = 0; i < collection.size(); ++i) {
         if (!supported) return;
+        if (used && (*used)[i]) continue;
+        const auto& e = collection[i];
         curPage = e.page;
         if (ruleMatches(&e)) {
           ++hits;
           pages.insert(e.page);
+          if (used) (*used)[i] = true;
         }
       }
     };
-    if (supported && dom == Domain::kPaint) sweep(ev.paints);
-    else if (supported && dom == Domain::kText) sweep(ev.texts);
-    else if (supported && dom == Domain::kImage) sweep(ev.images);
-    else if (supported && dom == Domain::kPage) sweep(ev.pages);
+    if (supported && dom == Domain::kPaint && anyFallback) {
+      sweep(ev.paints, &usedPaint);
+      if (supported) {
+        dom = Domain::kText;
+        sweep(ev.texts, &usedText);
+      }
+      if (supported) {
+        dom = Domain::kImage;
+        sweep(ev.images, &usedImage);
+      }
+      dom = Domain::kPaint;
+    } else if (supported && dom == Domain::kPaint) {
+      sweep(ev.paints, &usedPaint);
+    } else if (supported && dom == Domain::kText) sweep(ev.texts, &usedText);
+    else if (supported && dom == Domain::kImage) sweep(ev.images, &usedImage);
+    else if (supported && dom == Domain::kPage) sweep(ev.pages, nullptr);
     else if (supported && dom == Domain::kAnnot) {
       for (const auto& e : ev.annots) {
         if (!supported) break;
@@ -2620,7 +3135,9 @@ void passProfile(Ctx& ctx, const unsigned char* inputData, std::size_t inputSize
     if (!supported) {
       ctx.res.analysis.push_back(
           {"PROFILE_RULE_UNSUPPORTED",
-           rule.name + ": uses checks Kura cannot evaluate yet", false});
+           rule.name + ": uses checks Kura cannot evaluate yet" +
+               (unsupTok.empty() ? "" : " (" + unsupTok + ")"),
+           false});
       continue;
     }
     if (hits) {
