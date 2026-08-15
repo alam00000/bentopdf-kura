@@ -37,7 +37,9 @@ struct Options {
   bool verifyOnly = false;
   bool analyze = false;
   bool outlineFonts = false;
+  bool linearize = false;
   std::string preflightProfile;
+  std::vector<std::pair<std::string, std::vector<std::string>>> profileFixOps;
   std::string embedSource;
   std::string embedSourceName;
   std::string embedSourceMime;

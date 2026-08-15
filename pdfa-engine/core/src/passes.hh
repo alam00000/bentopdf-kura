@@ -14,8 +14,9 @@ void sanitizeAdditionalActions(Ctx& ctx, QPDFObjectHandle dict, const std::strin
 
 void passAnalyze(Ctx& ctx);
 void passOutlineFonts(Ctx& ctx);
-void passProfile(Ctx& ctx, std::size_t inputSize);
+void passProfile(Ctx& ctx, const unsigned char* inputData, std::size_t inputSize);
 void applyProfileFixes(Options& opt, std::vector<Issue>& notes);
+void passProfileFixups(Ctx& ctx);
 void passStructure(Ctx& ctx);
 void passPages(Ctx& ctx);
 void passImageResolution(Ctx& ctx);

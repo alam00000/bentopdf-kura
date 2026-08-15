@@ -144,7 +144,7 @@ void serialize(Ctx& ctx) {
   const bool signing = static_cast<bool>(ctx.opt.signDocument);
   w.setOutputMemory();
   w.setPreserveEncryption(false);
-  w.setLinearization(false);
+  w.setLinearization(ctx.opt.linearize && !signing);
   w.setNewlineBeforeEndstream(true);
   w.setDeterministicID(true);
   w.setCompressStreams(true);
@@ -375,7 +375,8 @@ Result convert(const unsigned char* data, std::size_t size, const Options& optIn
       tmark = now;
     };
     if (opt.analyze) passAnalyze(ctx);
-    if (!opt.preflightProfile.empty()) passProfile(ctx, size);
+    if (!opt.preflightProfile.empty()) passProfile(ctx, data, size);
+    if (!opt.profileFixOps.empty() && !opt.verifyOnly) passProfileFixups(ctx);
     lap("analyze");
     passStructure(ctx);
     lap("structure");
