@@ -1,0 +1,66 @@
+{
+  "kura-profile": 1,
+  "name": "Report hairlines",
+  "description": "Finds strokes too thin to print reliably, graded by rendered width.",
+  "checks": [
+    {
+      "name": "Stroke thinner than 0.125 pt",
+      "severity": "error",
+      "all": [
+        {
+          "prop": "stroke.width",
+          "op": "<=",
+          "value": 0.125
+        }
+      ]
+    },
+    {
+      "name": "Stroke between 0.125 and 0.25 pt",
+      "severity": "warning",
+      "all": [
+        {
+          "prop": "stroke.width",
+          "op": "<=",
+          "value": 0.25
+        },
+        {
+          "prop": "stroke.width",
+          "op": ">",
+          "value": 0.125
+        }
+      ]
+    },
+    {
+      "name": "Stroke between 0.25 and 0.5 pt",
+      "severity": "info",
+      "all": [
+        {
+          "prop": "stroke.width",
+          "op": "<=",
+          "value": 0.5
+        },
+        {
+          "prop": "stroke.width",
+          "op": ">",
+          "value": 0.25
+        }
+      ]
+    },
+    {
+      "name": "Thin stroke using more than one ink",
+      "severity": "error",
+      "all": [
+        {
+          "prop": "stroke.width",
+          "op": "<=",
+          "value": 0.25
+        },
+        {
+          "prop": "paint.inkCount",
+          "op": ">",
+          "value": 1
+        }
+      ]
+    }
+  ]
+}

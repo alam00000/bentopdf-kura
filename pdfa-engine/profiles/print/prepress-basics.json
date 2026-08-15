@@ -1,0 +1,66 @@
+{
+  "kura-profile": 1,
+  "name": "Prepress basics",
+  "description": "First-pass checks a prepress operator runs before anything else.",
+  "checks": [
+    {
+      "name": "Hairline",
+      "severity": "error",
+      "all": [
+        {
+          "prop": "stroke.width",
+          "op": "<=",
+          "value": 0.125
+        }
+      ]
+    },
+    {
+      "name": "Multi-ink hairline (registration risk)",
+      "severity": "error",
+      "all": [
+        {
+          "prop": "stroke.width",
+          "op": "<=",
+          "value": 0.25
+        },
+        {
+          "prop": "paint.inkCount",
+          "op": ">",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "name": "Type below 4 pt",
+      "severity": "warning",
+      "all": [
+        {
+          "prop": "text.size",
+          "op": "<",
+          "value": 4
+        },
+        {
+          "prop": "text.size",
+          "op": ">",
+          "value": 0.01
+        }
+      ]
+    },
+    {
+      "name": "Image below 250 ppi",
+      "severity": "warning",
+      "all": [
+        {
+          "prop": "image.ppi",
+          "op": "<",
+          "value": 250
+        },
+        {
+          "prop": "image.ppi",
+          "op": ">",
+          "value": 0
+        }
+      ]
+    }
+  ]
+}

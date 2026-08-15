@@ -165,6 +165,10 @@ void buildDPartTree(Ctx& ctx) {
   QPDFObjectHandle dpartRoot = QPDFObjectHandle::newDictionary();
   dpartRoot.replaceKey("/Type", QPDFObjectHandle::newName("/DPartRoot"));
   dpartRoot.replaceKey("/DPartRootNode", rootRef);
+  QPDFObjectHandle nodeNames = QPDFObjectHandle::newArray();
+  nodeNames.appendItem(QPDFObjectHandle::newName("/Root"));
+  nodeNames.appendItem(QPDFObjectHandle::newName("/Record"));
+  dpartRoot.replaceKey("/NodeNameList", nodeNames);
   QPDFObjectHandle dpartRootRef = ctx.pdf.makeIndirectObject(dpartRoot);
   rootDPart.replaceKey("/Parent", dpartRootRef);
 

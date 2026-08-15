@@ -37,6 +37,7 @@ struct Options {
   bool verifyOnly = false;
   bool analyze = false;
   bool outlineFonts = false;
+  std::string preflightProfile;
   std::string embedSource;
   std::string embedSourceName;
   std::string embedSourceMime;

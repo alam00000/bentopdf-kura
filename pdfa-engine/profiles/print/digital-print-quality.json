@@ -1,0 +1,45 @@
+{
+  "kura-profile": 1,
+  "name": "Digital print quality",
+  "description": "The checks a short-run digital job usually fails: soft images, weak lines, heavy black.",
+  "checks": [
+    {
+      "name": "Image too soft for print (under 150 ppi)",
+      "severity": "error",
+      "all": [
+        {
+          "prop": "image.ppi",
+          "op": "<",
+          "value": 150
+        },
+        {
+          "prop": "image.ppi",
+          "op": ">",
+          "value": 0
+        }
+      ]
+    },
+    {
+      "name": "Line too thin to hold on press",
+      "severity": "error",
+      "all": [
+        {
+          "prop": "stroke.width",
+          "op": "<=",
+          "value": 0.125
+        }
+      ]
+    },
+    {
+      "name": "Rich black on small output",
+      "severity": "warning",
+      "all": [
+        {
+          "prop": "paint.richBlackCmyPercent",
+          "op": ">",
+          "value": 0
+        }
+      ]
+    }
+  ]
+}
