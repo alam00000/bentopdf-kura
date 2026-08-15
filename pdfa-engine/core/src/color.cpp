@@ -839,7 +839,7 @@ bool injectDefaultSpace(Ctx& ctx, std::vector<QPDFObjectHandle>& scopes, const c
 
 void passColorPrint(Ctx& ctx, ColorUsage& usage) {
   QPDFObjectHandle root = ctx.pdf.getRoot();
-  std::string wantSubtype = ctx.isE() ? "/GTS_PDFE" : "/GTS_PDFX";
+  std::string wantSubtype = ctx.isE() ? "/ISO_PDFE1" : "/GTS_PDFX";
 
   std::string anchor;
   QPDFObjectHandle keepIntent;

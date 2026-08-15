@@ -1318,4 +1318,125 @@ void passProfile(Ctx& ctx, std::size_t inputSize) {
     }
   }
 }
+
+namespace {
+struct PfFix {
+  std::string op;
+  std::vector<std::string> params;
+};
+
+std::vector<PfFix> collectFixes(const std::string& text) {
+  std::vector<PfFix> fixes;
+  size_t firstCh = text.find_first_not_of(" \t\r\n");
+  bool isJson = firstCh != std::string::npos && text[firstCh] == '{';
+  if (isJson) {
+    JsonParser jp(text);
+    Json root = jp.parse();
+    if (!jp.ok || root.type != Json::kObj) return fixes;
+    const Json* fx = root.get("fixes");
+    if (!fx || fx->type != Json::kArr) return fixes;
+    for (const Json& f : fx->arr) {
+      if (f.type != Json::kObj) continue;
+      const Json* op = f.get("op");
+      if (!op || op->type != Json::kStr) continue;
+      PfFix fix;
+      fix.op = op->str;
+      const Json* params = f.get("params");
+      if (params && params->type == Json::kArr) {
+        for (const Json& p : params->arr) {
+          if (p.type == Json::kStr) fix.params.push_back(p.str);
+          else if (p.type == Json::kNum) {
+            char buf[40];
+            std::snprintf(buf, sizeof(buf), "%g", p.num);
+            fix.params.push_back(buf);
+          }
+        }
+      }
+      fixes.push_back(fix);
+    }
+    return fixes;
+  }
+  size_t pos = 0;
+  while ((pos = text.find("<ffeat>", pos)) != std::string::npos) {
+    size_t end = text.find("</ffeat>", pos);
+    if (end == std::string::npos) break;
+    PfFix fix;
+    fix.op = text.substr(pos + 7, end - pos - 7);
+    size_t pstart = text.find("<fparams>", end);
+    size_t nextf = text.find("<ffeat>", end);
+    if (pstart != std::string::npos && (nextf == std::string::npos || pstart < nextf)) {
+      size_t pend = text.find("</fparams>", pstart);
+      size_t p = pstart;
+      while (pend != std::string::npos) {
+        p = text.find("<fparam", p);
+        if (p == std::string::npos || p > pend) break;
+        size_t gt = text.find('>', p);
+        size_t close = text.find("</fparam>", gt);
+        if (gt == std::string::npos || close == std::string::npos || close > pend) break;
+        fix.params.push_back(text.substr(gt + 1, close - gt - 1));
+        p = close + 1;
+      }
+    }
+    fixes.push_back(fix);
+    pos = end + 1;
+  }
+  return fixes;
+}
+
+std::string lower(std::string s) {
+  for (char& c : s) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+  return s;
+}
+}
+
+void applyProfileFixes(Options& opt, std::vector<Issue>& notes) {
+  std::vector<PfFix> fixes = collectFixes(opt.preflightProfile);
+  if (fixes.empty()) return;
+  static const std::set<std::string> coveredByConversion = {
+      "removenotdef", "embeddoutputintent", "correctpageboxes", "fixglyphwidthinfo",
+      "removenoncompliantpdfametadata", "pdfversion", "usflttencdnnencddstrms",
+      "objctcmprssnoptns", "removejavascript", "halftones", "embedmissingfonts",
+      "subsetfonts", "syncdocinfo",
+  };
+  std::map<std::string, int> unsupported;
+  double dsTarget = 0;
+  bool outline = false;
+  for (const PfFix& f : fixes) {
+    std::string op = lower(f.op);
+    if (op == "dsrcmpclrimgs" || op == "dsrcmpgscimgs" || op == "dsrcmpmchimgs") {
+      double target = f.params.size() > 1 ? std::atof(f.params[1].c_str()) : 0;
+      if (target > 0) dsTarget = std::max(dsTarget, target);
+      continue;
+    }
+    if (op == "convertfontstooutlines") {
+      outline = true;
+      continue;
+    }
+    if (coveredByConversion.count(op)) {
+      notes.push_back({"PROFILE_FIX_COVERED",
+                       f.op + ": performed as part of standard conversion", true});
+      continue;
+    }
+    ++unsupported[f.op];
+  }
+  if (dsTarget > 0) {
+    if (opt.imageMaxPpi <= 0 || dsTarget < opt.imageMaxPpi) opt.imageMaxPpi = dsTarget;
+    char buf[120];
+    std::snprintf(buf, sizeof(buf),
+                  "image downsampling enabled at %g ppi from the profile's fix steps",
+                  dsTarget);
+    notes.push_back({"PROFILE_FIX_APPLIED", buf, true});
+  }
+  if (outline) {
+    opt.outlineFonts = true;
+    notes.push_back({"PROFILE_FIX_APPLIED",
+                     "font outlining enabled from the profile's fix steps", true});
+  }
+  for (const auto& [op, n] : unsupported) {
+    notes.push_back({"PROFILE_FIX_UNSUPPORTED",
+                     op + ": fix operation Kura cannot run yet" +
+                         (n > 1 ? " (x" + std::to_string(n) + ")" : ""),
+                     false});
+  }
+}
 }

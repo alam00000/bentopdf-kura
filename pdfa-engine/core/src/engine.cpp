@@ -259,8 +259,10 @@ bool issueIsNormalization(const std::string& code) {
          code == "OUTPUT_INTENT_PRESENT";
 }
 
-Result convert(const unsigned char* data, std::size_t size, const Options& opt) {
+Result convert(const unsigned char* data, std::size_t size, const Options& optIn) {
   Result res;
+  Options opt = optIn;
+  if (!opt.preflightProfile.empty() && !opt.verifyOnly) applyProfileFixes(opt, res.analysis);
   std::string wrapped;
   if (size > 4 && data[0] == 0xFF && data[1] == 0xD8) {
     wrapped = wrapJpegAsPdf(data, size);
