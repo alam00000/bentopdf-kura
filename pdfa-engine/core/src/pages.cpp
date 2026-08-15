@@ -4,6 +4,7 @@
 #include <qpdf/QPDFPageObjectHelper.hh>
 
 #include <cmath>
+#include <functional>
 #include <set>
 #include <string>
 #include <vector>
@@ -374,6 +375,89 @@ std::string invisibleTextLayer(QPDFPageObjectHelper& ph, int& runs) {
   return std::string(reinterpret_cast<const char*>(b->getBuffer()), b->getSize());
 }
 
+namespace {
+struct TMat {
+  double a = 1, b = 0, c = 0, d = 1, e = 0, f = 0;
+};
+TMat tmul(const TMat& m, const TMat& n) {
+  return {m.a * n.a + m.b * n.c,       m.a * n.b + m.b * n.d,
+          m.c * n.a + m.d * n.c,       m.c * n.b + m.d * n.d,
+          m.e * n.a + m.f * n.c + n.e, m.e * n.b + m.f * n.d + n.f};
+}
+
+struct TransBBox : QPDFObjectHandle::ParserCallbacks {
+  QPDFObjectHandle res;
+  bool found = false;
+  double x0 = 1e9, y0 = 1e9, x1 = -1e9, y1 = -1e9;
+  TMat ctm;
+  std::vector<TMat> stack;
+  std::vector<double> nums;
+  std::string lastName;
+  bool transp = false;
+  std::vector<bool> transpStack;
+  double px0 = 1e9, py0 = 1e9, px1 = -1e9, py1 = -1e9;
+
+  explicit TransBBox(QPDFObjectHandle r) : res(r) {}
+
+  void addPt(double x, double y) {
+    double tx = ctm.a * x + ctm.c * y + ctm.e;
+    double ty = ctm.b * x + ctm.d * y + ctm.f;
+    px0 = std::min(px0, tx); py0 = std::min(py0, ty);
+    px1 = std::max(px1, tx); py1 = std::max(py1, ty);
+  }
+  void grow() {
+    if (px1 < px0) return;
+    x0 = std::min(x0, px0); y0 = std::min(y0, py0);
+    x1 = std::max(x1, px1); y1 = std::max(y1, py1);
+    found = true;
+  }
+  void resetPath() { px0 = py0 = 1e9; px1 = py1 = -1e9; }
+
+  void handleObject(QPDFObjectHandle obj, size_t, size_t) override {
+    if (!obj.isOperator()) {
+      if (obj.isName()) lastName = obj.getName();
+      else if (obj.isNumber()) nums.push_back(obj.getNumericValue());
+      return;
+    }
+    std::string op = obj.getOperatorValue();
+    size_t n = nums.size();
+    if (op == "q") { stack.push_back(ctm); transpStack.push_back(transp); }
+    else if (op == "Q") {
+      if (!stack.empty()) { ctm = stack.back(); stack.pop_back(); }
+      if (!transpStack.empty()) { transp = transpStack.back(); transpStack.pop_back(); }
+    } else if (op == "cm" && n >= 6) {
+      ctm = tmul(TMat{nums[n-6], nums[n-5], nums[n-4], nums[n-3], nums[n-2], nums[n-1]}, ctm);
+    } else if (op == "gs" && res.isDictionary()) {
+      QPDFObjectHandle egs = res.getKey("/ExtGState");
+      QPDFObjectHandle g = egs.isDictionary() ? egs.getKey(lastName) : QPDFObjectHandle::newNull();
+      if (g.isDictionary()) {
+        bool t = false;
+        if (g.getKey("/ca").isNumber() && g.getKey("/ca").getNumericValue() < 1.0) t = true;
+        if (g.getKey("/CA").isNumber() && g.getKey("/CA").getNumericValue() < 1.0) t = true;
+        if (!g.getKey("/SMask").isNull() && !nameIs(g.getKey("/SMask"), "/None")) t = true;
+        QPDFObjectHandle bm = g.getKey("/BM");
+        std::string bmn = nameOf(bm.isArray() && bm.getArrayNItems() ? bm.getArrayItem(0) : bm);
+        if (!bmn.empty() && bmn != "/Normal" && bmn != "/Compatible") t = true;
+        if (t) transp = true;
+      }
+    } else if (op == "m" || op == "l") { if (n >= 2) addPt(nums[n-2], nums[n-1]); }
+    else if (op == "c" && n >= 6) { addPt(nums[n-6], nums[n-5]); addPt(nums[n-4], nums[n-3]); addPt(nums[n-2], nums[n-1]); }
+    else if (op == "v" || op == "y") { if (n >= 4) { addPt(nums[n-4], nums[n-3]); addPt(nums[n-2], nums[n-1]); } }
+    else if (op == "re" && n >= 4) { addPt(nums[n-4], nums[n-3]); addPt(nums[n-4]+nums[n-2], nums[n-3]+nums[n-1]); }
+    else if (op == "S" || op == "s" || op == "f" || op == "F" || op == "f*" ||
+             op == "B" || op == "B*" || op == "b" || op == "b*" || op == "n") {
+      if (transp) grow();
+      resetPath();
+    } else if (op == "Do") {
+      if (transp) { addPt(0, 0); addPt(1, 1); grow(); resetPath(); }
+    }
+    nums.clear();
+    lastName.clear();
+  }
+  void handleEOF() override {}
+};
+}
+
 bool rasterFlattenPage(Ctx& ctx, QPDFPageObjectHelper& ph, int pageIndex, bool preserveText) {
   int w = 0, h = 0;
   std::string rgb;
@@ -422,6 +506,132 @@ bool rasterFlattenPage(Ctx& ctx, QPDFPageObjectHelper& ph, int pageIndex, bool p
   page.replaceKey("/Contents",
                   ctx.pdf.makeIndirectObject(QPDFObjectHandle::newStream(&ctx.pdf, content)));
   if (page.getKey("/Group").isDictionary()) page.removeKey("/Group");
+  return true;
+}
+
+bool regionFlattenPage(Ctx& ctx, QPDFPageObjectHelper& ph, int pageIndex) {
+  QPDFObjectHandle page = ph.getObjectHandle();
+  QPDFObjectHandle res = ph.getAttribute("/Resources", true);
+  if (!res.isDictionary()) return false;
+  QPDFObjectHandle media = ph.getAttribute("/MediaBox", true);
+  double mx1 = 0, my1 = 0, mx2 = 612, my2 = 792;
+  if (media.isArray() && media.getArrayNItems() == 4) {
+    mx1 = numOf(media.getArrayItem(0), 0); my1 = numOf(media.getArrayItem(1), 0);
+    mx2 = numOf(media.getArrayItem(2), 612); my2 = numOf(media.getArrayItem(3), 792);
+  }
+  double pw = mx2 - mx1, phh = my2 - my1;
+  if (pw <= 1 || phh <= 1) return false;
+
+  TransBBox scan(res);
+  try {
+    QPDFObjectHandle::parseContentStream(page.getKey("/Contents"), &scan);
+  } catch (...) {
+    return false;
+  }
+  if (!scan.found || scan.x1 <= scan.x0 || scan.y1 <= scan.y0) return false;
+  double margin = std::min(pw, phh) * 0.02;
+  double tx0 = std::max(mx1, scan.x0 - margin), ty0 = std::max(my1, scan.y0 - margin);
+  double tx1 = std::min(mx2, scan.x1 + margin), ty1 = std::min(my2, scan.y1 + margin);
+  double regionArea = (tx1 - tx0) * (ty1 - ty0);
+
+  if (regionArea >= pw * phh * 0.55) return false;
+
+  int w = 0, h = 0;
+  std::string rgb;
+  if (!ctx.opt.rasterizePage(pageIndex, ctx.opt.rasterDpi, w, h, rgb)) return false;
+  if (w <= 0 || h <= 0 || rgb.size() < static_cast<size_t>(w) * h * 3) return false;
+
+  std::set<QPDFObjGen> seenG;
+  std::function<void(QPDFObjectHandle, int)> neutralize = [&](QPDFObjectHandle r, int depth) {
+    if (depth > 12 || !r.isDictionary()) return;
+    QPDFObjectHandle egs = r.getKey("/ExtGState");
+    if (egs.isDictionary()) {
+      for (const std::string& k : egs.getKeys()) {
+        QPDFObjectHandle g = egs.getKey(k);
+        if (!g.isDictionary()) continue;
+        g.replaceKey("/ca", QPDFObjectHandle::newReal(1.0, 3));
+        g.replaceKey("/CA", QPDFObjectHandle::newReal(1.0, 3));
+        g.replaceKey("/BM", QPDFObjectHandle::newName("/Normal"));
+        if (!g.getKey("/SMask").isNull()) g.replaceKey("/SMask", QPDFObjectHandle::newName("/None"));
+      }
+    }
+    QPDFObjectHandle xod = r.getKey("/XObject");
+    if (xod.isDictionary()) {
+      for (const std::string& k : xod.getKeys()) {
+        QPDFObjectHandle xo = xod.getKey(k);
+        if (!xo.isStream() || (xo.isIndirect() && !seenG.insert(xo.getObjGen()).second)) continue;
+        QPDFObjectHandle d = xo.getDict();
+        if (d.getKey("/SMask").isStream()) d.removeKey("/SMask");
+        if (nameIs(d.getKey("/Subtype"), "/Form")) {
+          neutralize(d.getKey("/Resources"), depth + 1);
+        }
+      }
+    }
+  };
+  neutralize(res, 0);
+
+  QPDFObjectHandle img = QPDFObjectHandle::newStream(&ctx.pdf, rgb);
+  QPDFObjectHandle id = img.getDict();
+  id.replaceKey("/Type", QPDFObjectHandle::newName("/XObject"));
+  id.replaceKey("/Subtype", QPDFObjectHandle::newName("/Image"));
+  id.replaceKey("/Width", QPDFObjectHandle::newInteger(w));
+  id.replaceKey("/Height", QPDFObjectHandle::newInteger(h));
+  id.replaceKey("/ColorSpace", QPDFObjectHandle::newName("/DeviceRGB"));
+  id.replaceKey("/BitsPerComponent", QPDFObjectHandle::newInteger(8));
+
+  std::string baseContent;
+  {
+    QPDFObjectHandle contents = page.getKey("/Contents");
+    std::vector<QPDFObjectHandle> streams;
+    if (contents.isStream()) streams.push_back(contents);
+    else if (contents.isArray()) {
+      for (int i = 0; i < contents.getArrayNItems(); ++i) {
+        if (contents.getArrayItem(i).isStream()) streams.push_back(contents.getArrayItem(i));
+      }
+    }
+    if (streams.empty()) return false;
+    for (QPDFObjectHandle s : streams) {
+      try {
+        auto b = s.getStreamData(qpdf_dl_all);
+        baseContent.append(reinterpret_cast<const char*>(b->getBuffer()), b->getSize());
+        baseContent += "\n";
+      } catch (...) {
+        return false;
+      }
+    }
+  }
+  QPDFObjectHandle base = QPDFObjectHandle::newStream(&ctx.pdf, baseContent);
+  QPDFObjectHandle bd = base.getDict();
+  bd.replaceKey("/Type", QPDFObjectHandle::newName("/XObject"));
+  bd.replaceKey("/Subtype", QPDFObjectHandle::newName("/Form"));
+  bd.replaceKey("/FormType", QPDFObjectHandle::newInteger(1));
+  QPDFObjectHandle bbox = QPDFObjectHandle::newArray();
+  for (double v : {mx1, my1, mx2, my2}) bbox.appendItem(QPDFObjectHandle::newReal(v, 3));
+  bd.replaceKey("/BBox", bbox);
+  bd.replaceKey("/Resources", res);
+
+  QPDFObjectHandle newRes = QPDFObjectHandle::newDictionary();
+  QPDFObjectHandle xo = QPDFObjectHandle::newDictionary();
+  xo.replaceKey("/KuraBase", ctx.pdf.makeIndirectObject(base));
+  xo.replaceKey("/FlatIm", ctx.pdf.makeIndirectObject(img));
+  newRes.replaceKey("/XObject", xo);
+
+  char buf[512];
+  std::snprintf(buf, sizeof(buf),
+                "q %.3f %.3f m %.3f %.3f l %.3f %.3f l %.3f %.3f l h\n"
+                "%.3f %.3f m %.3f %.3f l %.3f %.3f l %.3f %.3f l h W n /KuraBase Do Q\n"
+                "q %.3f %.3f %.3f %.3f re W n %.4f 0 0 %.4f %.4f %.4f cm /FlatIm Do Q\n",
+                mx1, my1, mx2, my1, mx2, my2, mx1, my2,
+                tx0, ty0, tx1, ty0, tx1, ty1, tx0, ty1,
+                tx0, ty0, tx1 - tx0, ty1 - ty0, pw, phh, mx1, my1);
+  page.replaceKey("/Resources", newRes);
+  page.replaceKey("/Contents",
+                  ctx.pdf.makeIndirectObject(QPDFObjectHandle::newStream(&ctx.pdf, std::string(buf))));
+  if (page.getKey("/Group").isDictionary()) page.removeKey("/Group");
+  ctx.issue("TRANSPARENCY_REGION_FLATTENED",
+            "flattened transparency in a confined region and kept the rest of the page as "
+            "vector (sharp text and line art preserved)",
+            true);
   return true;
 }
 
@@ -917,7 +1127,8 @@ void passPages(Ctx& ctx) {
       bool allOk = true;
       for (size_t i = 0; i < pages.size(); ++i) {
         if (i < rep.pages.size() && rep.pages[i]) {
-          if (rasterFlattenPage(ctx, pages[i], static_cast<int>(i), true)) {
+          if (regionFlattenPage(ctx, pages[i], static_cast<int>(i)) ||
+              rasterFlattenPage(ctx, pages[i], static_cast<int>(i), true)) {
             ++rastered;
           } else {
             allOk = false;
