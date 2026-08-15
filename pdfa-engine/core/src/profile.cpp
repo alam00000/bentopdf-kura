@@ -6,6 +6,7 @@
 #include <cmath>
 #include <cstring>
 #include <cstdio>
+#include <functional>
 #include <map>
 #include <set>
 #include <string>
@@ -30,6 +31,7 @@ struct PfRule {
   std::string id;
   std::string name;
   int severity = 1;
+  int logic = 0;
   std::vector<std::string> condIds;
 };
 
@@ -47,6 +49,14 @@ std::string tagText(const std::string& s, const std::string& tag, size_t from,
   size_t c = s.find("</" + tag + ">", o);
   if (c == std::string::npos || c > limit) return std::string();
   return s.substr(o, c - o);
+}
+
+std::string canonToken(std::string t) {
+  size_t p = t.find("::");
+  if (p != std::string::npos && p + 2 < t.size()) {
+    t[p + 2] = static_cast<char>(std::toupper(static_cast<unsigned char>(t[p + 2])));
+  }
+  return t;
 }
 
 std::string unescape(std::string v) {
@@ -217,6 +227,28 @@ std::string kuraOpMap(const std::string& op) {
   return op;
 }
 
+std::string propToToken(const std::string& prop) {
+  auto it = kuraPropMap().find(prop);
+  if (it != kuraPropMap().end()) return it->second;
+  static const std::map<std::string, std::string> head = {
+      {"paint", "grp_37816"}, {"stroke", "grp_45919"}, {"fill", "grp_75736"},
+      {"gstate", "grp_57935"}, {"text", "grp_37222"}, {"font", "CSFONT"},
+      {"image", "grp_7226"}, {"page", "grp_46892"}, {"doc", "grp_86055"}, {"docinfo", "grp_7639"},
+      {"annot", "grp_3254"}, {"content", "grp_78804"}, {"outputIntent", "grp_75300"},
+      {"layers", "grp_34967"}, {"halftone", "grp_13332"}, {"icc", "grp_2412"},
+      {"syntax", "grp_79118"}, {"contentSyntax", "grp_78948"}, {"structure", "grp_12910"},
+      {"certificate", "grp_88767"}, {"vt", "grp_2184"}, {"compare", "grp_92045"},
+      {"tagging", "grp_54741"}, {"form", "grp_28738"}, {"postscript", "grp_62682"},
+  };
+  size_t dot = prop.find('.');
+  if (dot == std::string::npos) return "REMOVED" + prop;
+  auto hit = head.find(prop.substr(0, dot));
+  if (hit == head.end()) return "REMOVED" + prop;
+  std::string tail = prop.substr(dot + 1);
+  if (!tail.empty()) tail[0] = static_cast<char>(std::toupper(static_cast<unsigned char>(tail[0])));
+  return hit->second + "::" + tail;
+}
+
 bool parseKuraJson(const std::string& text, PfProfile& out) {
   JsonParser jp(text);
   Json root = jp.parse();
@@ -235,16 +267,28 @@ bool parseKuraJson(const std::string& text, PfProfile& out) {
     const Json* sev = c.get("severity");
     std::string sv = sev ? sev->str : "info";
     rule.severity = sv == "error" ? 3 : (sv == "warning" ? 2 : 1);
-    const Json* all = c.get("all");
-    if (!all || all->type != Json::kArr) continue;
-    PfCondition cond;
-    for (const Json& a : all->arr) {
+    const Json* any = c.get("any");
+    std::vector<const Json*> groups;
+    if (any && any->type == Json::kArr) {
+      rule.logic = 1;
+      for (const Json& g : any->arr) {
+        const Json* ga = g.get("all");
+        if (ga && ga->type == Json::kArr) groups.push_back(ga);
+      }
+    } else {
+      const Json* all = c.get("all");
+      if (all && all->type == Json::kArr) groups.push_back(all);
+    }
+    if (groups.empty()) continue;
+    int gi = 0;
+    for (const Json* grp : groups) {
+      PfCondition cond;
+    for (const Json& a : grp->arr) {
       if (a.type != Json::kObj) continue;
       PfAtom atom;
       const Json* prop = a.get("prop");
       if (!prop) continue;
-      auto it = kuraPropMap().find(prop->str);
-      atom.token = it != kuraPropMap().end() ? it->second : ("REMOVED" + prop->str);
+      atom.token = propToToken(prop->str);
       const Json* op = a.get("op");
       atom.op = kuraOpMap(op ? op->str : "==");
       const Json* val = a.get("value");
@@ -262,9 +306,10 @@ bool parseKuraJson(const std::string& text, PfProfile& out) {
       }
       cond.atoms.push_back(atom);
     }
-    std::string cid = "C" + rule.id;
-    out.conds[cid] = cond;
-    rule.condIds.push_back(cid);
+      std::string cid = "C" + rule.id + "_" + std::to_string(gi++);
+      out.conds[cid] = cond;
+      rule.condIds.push_back(cid);
+    }
     out.rules.push_back(rule);
   }
   return !out.rules.empty();
@@ -288,7 +333,7 @@ bool parsePreflightXml(const std::string& text, PfProfile& out) {
       size_t aend = text.find("</atom>", apos);
       if (aend == std::string::npos || aend > end) break;
       PfAtom atom;
-      atom.token = tagText(text, "token", apos, aend);
+      atom.token = canonToken(tagText(text, "token", apos, aend));
       std::string op = tagText(text, "operator", apos, aend);
       if (op.rfind("op.", 0) == 0) op = op.substr(4);
       atom.op = op;
@@ -317,6 +362,8 @@ bool parsePreflightXml(const std::string& text, PfProfile& out) {
     PfRule rule;
     rule.id = tagText(text, "id1", pos, end);
     rule.name = unescape(tagText(text, "name", pos, end));
+    size_t lp = text.find("condition_logic=\"", pos);
+    if (lp != std::string::npos && lp < end) rule.logic = text[lp + 17] - '0';
     size_t cpos = text.find("<conditions>", pos);
     size_t cend = text.find("</conditions>", pos);
     if (cpos != std::string::npos && cend != std::string::npos && cend < end) {
@@ -375,11 +422,21 @@ double matScale(const Mat& m) {
   return (std::hypot(m.a, m.b) + std::hypot(m.c, m.d)) / 2.0;
 }
 
+struct ColorInfo {
+  std::string cls = "gray";
+  std::string spot;
+  int declaredComps = 1;
+};
+
 struct PaintEvent {
   double width = 0;
   std::vector<double> comps;
   int page = 0;
   bool stroke = false;
+  ColorInfo color;
+  bool overprint = false;
+  int opm = 0;
+  bool transparency = false;
 };
 
 struct TextEvent {
@@ -387,13 +444,31 @@ struct TextEvent {
   int renderMode = 0;
   std::vector<double> comps;
   int page = 0;
+  ColorInfo color;
+  bool overprint = false;
+  bool transparency = false;
 };
 
 struct ImageEvent {
   double ppi = 0;
   int bpc = 8;
+  int width = 0;
+  int height = 0;
   bool mask = false;
+  bool hasSMask = false;
   std::set<std::string> filters;
+  ColorInfo color;
+  int page = 0;
+};
+
+struct PageFacts {
+  bool hasMediaBox = false;
+  bool hasCropBox = false;
+  bool cropEqualsMedia = true;
+  bool scaled = false;
+  bool rotated = false;
+  bool empty = true;
+  int imageCount = 0;
   int page = 0;
 };
 
@@ -401,9 +476,17 @@ struct Events {
   std::vector<PaintEvent> paints;
   std::vector<TextEvent> texts;
   std::vector<ImageEvent> images;
+  std::vector<PageFacts> pages;
+  std::set<std::string> baseFonts;
+  std::set<std::string> annotTypes;
+  std::set<std::string> spotPlates;
   double filesize = 0;
   int pagesWithMediaBox = 0;
   int pageCount = 0;
+  bool hasOutputIntent = false;
+  int outputIntentCount = 0;
+  std::string iccColorSpace;
+  std::string iccProfileId;
 };
 
 struct Gs {
@@ -414,7 +497,62 @@ struct Gs {
   double tmScale = 1.0;
   std::vector<double> fill{0};
   std::vector<double> stroke{0};
+  ColorInfo fillColor;
+  ColorInfo strokeColor;
+  bool overprintFill = false;
+  bool overprintStroke = false;
+  int opm = 0;
+  bool transparency = false;
 };
+
+ColorInfo classifyColor(QPDFObjectHandle cs, QPDFObjectHandle res, int depth = 0) {
+  ColorInfo ci;
+  if (depth > 4) return ci;
+  if (cs.isName()) {
+    std::string n = cs.getName();
+    if (n == "/DeviceGray" || n == "/G") { ci.cls = "gray"; ci.declaredComps = 1; }
+    else if (n == "/DeviceRGB" || n == "/RGB") { ci.cls = "rgb"; ci.declaredComps = 3; }
+    else if (n == "/DeviceCMYK" || n == "/CMYK") { ci.cls = "cmyk"; ci.declaredComps = 4; }
+    else if (n == "/Pattern") { ci.cls = "pattern"; ci.declaredComps = 0; }
+    else if (res.isDictionary()) {
+      QPDFObjectHandle csd = res.getKey("/ColorSpace");
+      if (csd.isDictionary() && !csd.getKey(n).isNull()) {
+        return classifyColor(csd.getKey(n), res, depth + 1);
+      }
+    }
+    return ci;
+  }
+  if (!cs.isArray() || cs.getArrayNItems() < 1) return ci;
+  std::string fam = nameOf(cs.getArrayItem(0));
+  if (fam == "/ICCBased" && cs.getArrayNItems() >= 2 && cs.getArrayItem(1).isStream()) {
+    ci.cls = "icc";
+    QPDFObjectHandle nk = cs.getArrayItem(1).getDict().getKey("/N");
+    ci.declaredComps = nk.isInteger() ? static_cast<int>(nk.getIntValue()) : 3;
+  } else if (fam == "/CalRGB") { ci.cls = "cal"; ci.declaredComps = 3; }
+  else if (fam == "/CalGray") { ci.cls = "cal"; ci.declaredComps = 1; }
+  else if (fam == "/Lab") { ci.cls = "lab"; ci.declaredComps = 3; }
+  else if (fam == "/Separation" && cs.getArrayNItems() >= 2) {
+    ci.cls = "separation";
+    ci.declaredComps = 1;
+    std::string nm = nameOf(cs.getArrayItem(1));
+    if (nm.size() > 1) ci.spot = nm.substr(1);
+  } else if (fam == "/DeviceN" && cs.getArrayNItems() >= 2 &&
+             cs.getArrayItem(1).isArray()) {
+    ci.cls = "devicen";
+    ci.declaredComps = cs.getArrayItem(1).getArrayNItems();
+    QPDFObjectHandle names = cs.getArrayItem(1);
+    if (names.getArrayNItems() > 0) {
+      std::string nm = nameOf(names.getArrayItem(0));
+      if (nm.size() > 1) ci.spot = nm.substr(1);
+    }
+  } else if (fam == "/Indexed" || fam == "/I") {
+    if (cs.getArrayNItems() >= 2) return classifyColor(cs.getArrayItem(1), res, depth + 1);
+  } else if (fam == "/Pattern") {
+    ci.cls = "pattern";
+    ci.declaredComps = 0;
+  }
+  return ci;
+}
 
 struct EvScanner : QPDFObjectHandle::ParserCallbacks {
   Gs gs;
@@ -429,6 +567,36 @@ struct EvScanner : QPDFObjectHandle::ParserCallbacks {
   EvScanner(QPDFObjectHandle resources, Events& events, int pageNum, const Gs& initial)
       : gs(initial), res(resources), ev(events), page(pageNum) {}
 
+  void applyExtGState() {
+    if (lastName.empty() || !res.isDictionary()) return;
+    QPDFObjectHandle egs = res.getKey("/ExtGState");
+    if (!egs.isDictionary()) return;
+    QPDFObjectHandle g = egs.getKey(lastName);
+    if (!g.isDictionary()) return;
+    if (g.getKey("/LW").isNumber()) gs.lineWidth = g.getKey("/LW").getNumericValue();
+    if (g.getKey("/OP").isBool()) gs.overprintStroke = g.getKey("/OP").getBoolValue();
+    if (g.getKey("/op").isBool()) gs.overprintFill = g.getKey("/op").getBoolValue();
+    else if (g.getKey("/OP").isBool()) gs.overprintFill = g.getKey("/OP").getBoolValue();
+    if (g.getKey("/OPM").isInteger()) gs.opm = static_cast<int>(g.getKey("/OPM").getIntValue());
+    bool tr = false;
+    if (g.getKey("/CA").isNumber() && g.getKey("/CA").getNumericValue() < 1.0) tr = true;
+    if (g.getKey("/ca").isNumber() && g.getKey("/ca").getNumericValue() < 1.0) tr = true;
+    QPDFObjectHandle sm = g.getKey("/SMask");
+    if (!sm.isNull() && !nameIs(sm, "/None")) tr = true;
+    QPDFObjectHandle bm = g.getKey("/BM");
+    std::string bmName = nameOf(bm);
+    if (bm.isArray() && bm.getArrayNItems() > 0) bmName = nameOf(bm.getArrayItem(0));
+    if (!bmName.empty() && bmName != "/Normal" && bmName != "/Compatible") tr = true;
+    if (tr) gs.transparency = true;
+  }
+
+  void setSpace(bool stroke) {
+    if (lastName.empty()) return;
+    ColorInfo ci = classifyColor(QPDFObjectHandle::newName(lastName), res);
+    if (stroke) gs.strokeColor = ci;
+    else gs.fillColor = ci;
+  }
+
   void addPaint(bool stroke, bool fill) {
     if (stroke) {
       PaintEvent e;
@@ -436,13 +604,32 @@ struct EvScanner : QPDFObjectHandle::ParserCallbacks {
       e.comps = gs.stroke;
       e.page = page;
       e.stroke = true;
+      e.color = gs.strokeColor;
+      e.overprint = gs.overprintStroke;
+      e.opm = gs.opm;
+      e.transparency = gs.transparency;
+      recordSpot(e.color);
       ev.paints.push_back(e);
     }
     if (fill) {
       PaintEvent e;
       e.comps = gs.fill;
       e.page = page;
+      e.color = gs.fillColor;
+      recordSpot(e.color);
+      e.overprint = gs.overprintFill;
+      e.opm = gs.opm;
+      e.transparency = gs.transparency;
       ev.paints.push_back(e);
+    }
+  }
+
+  void recordSpot(const ColorInfo& ci) {
+    if ((ci.cls == "separation" || ci.cls == "devicen") && !ci.spot.empty() &&
+        ci.spot != "All" && ci.spot != "None" && ci.spot != "Registration" &&
+        ci.spot != "Cyan" && ci.spot != "Magenta" && ci.spot != "Yellow" &&
+        ci.spot != "Black" && ci.spot != "Gray" && ci.spot != "Grey") {
+      ev.spotPlates.insert(ci.spot);
     }
   }
 
@@ -475,20 +662,35 @@ struct EvScanner : QPDFObjectHandle::ParserCallbacks {
       gs.lineWidth = nums.back();
     } else if (op == "Tr" && !nums.empty()) {
       gs.renderMode = static_cast<int>(nums.back());
-    } else if (op == "Tf" && !nums.empty()) {
-      gs.fontSize = nums.back();
     } else if (op == "BT") {
       gs.tmScale = 1.0;
     } else if (op == "Tm" && nums.size() >= 6) {
       size_t n = nums.size();
       gs.tmScale = (std::hypot(nums[n - 6], nums[n - 5]) +
                     std::hypot(nums[n - 4], nums[n - 3])) / 2.0;
+    } else if (op == "Tf" && !lastName.empty() && res.isDictionary()) {
+      gs.fontSize = nums.empty() ? gs.fontSize : nums.back();
+      QPDFObjectHandle fd = res.getKey("/Font");
+      if (fd.isDictionary()) {
+        QPDFObjectHandle fnt = fd.getKey(lastName);
+        if (fnt.isDictionary()) {
+          std::string bf = nameOf(fnt.getKey("/BaseFont"));
+          if (bf.size() > 1) ev.baseFonts.insert(bf.substr(1));
+        }
+      }
+    } else if (op == "gs") {
+      applyExtGState();
     } else if (op == "g" || op == "G") {
       setColor(op == "G", 1);
+      (op == "G" ? gs.strokeColor : gs.fillColor) = ColorInfo{"gray", "", 1};
     } else if (op == "rg" || op == "RG") {
       setColor(op == "RG", 3);
+      (op == "RG" ? gs.strokeColor : gs.fillColor) = ColorInfo{"rgb", "", 3};
     } else if (op == "k" || op == "K") {
       setColor(op == "K", 4);
+      (op == "K" ? gs.strokeColor : gs.fillColor) = ColorInfo{"cmyk", "", 4};
+    } else if (op == "cs" || op == "CS") {
+      setSpace(op == "CS");
     } else if (op == "sc" || op == "scn" || op == "SC" || op == "SCN") {
       if (!nums.empty()) setColor(op == "SC" || op == "SCN",
                                   static_cast<int>(nums.size() > 4 ? 4 : nums.size()));
@@ -504,6 +706,9 @@ struct EvScanner : QPDFObjectHandle::ParserCallbacks {
       e.renderMode = gs.renderMode;
       e.comps = gs.fill;
       e.page = page;
+      e.color = gs.fillColor;
+      e.overprint = gs.overprintFill;
+      e.transparency = gs.transparency;
       ev.texts.push_back(e);
     } else if (op == "Do" && !lastName.empty()) {
       draws.push_back({lastName, gs});
@@ -551,6 +756,10 @@ void scanEvents(QPDFObjectHandle contents, QPDFObjectHandle res, const Gs& initi
                   ? static_cast<int>(dict.getKey("/Width").getIntValue()) : 0;
       int h = dict.getKey("/Height").isInteger()
                   ? static_cast<int>(dict.getKey("/Height").getIntValue()) : 0;
+      e.width = w;
+      e.height = h;
+      e.hasSMask = dict.getKey("/SMask").isStream();
+      e.color = classifyColor(dict.getKey("/ColorSpace"), res);
       double wpt = std::hypot(d.second.ctm.a, d.second.ctm.b);
       double hpt = std::hypot(d.second.ctm.c, d.second.ctm.d);
       if (w > 0 && h > 0 && wpt > 0.01 && hpt > 0.01) {
@@ -621,35 +830,183 @@ bool blackOnly(const std::vector<double>& c) {
   return false;
 }
 
-enum class Domain { kNone, kPaint, kText, kImage, kDoc };
+double totalInk(const std::vector<double>& c) {
+  double s = 0;
+  for (double v : c) s += v;
+  return s * 100.0;
+}
+
+double blackPercent(const std::vector<double>& c, const ColorInfo& ci) {
+  if (ci.cls == "cmyk" && c.size() == 4) return c[3] * 100.0;
+  if (ci.cls == "gray" && c.size() == 1) return (1.0 - c[0]) * 100.0;
+  return -1;
+}
+
+bool is100Black(const std::vector<double>& c, const ColorInfo& ci) {
+  if (ci.cls == "cmyk" && c.size() == 4) {
+    return c[3] > 0.999 && c[0] < 0.001 && c[1] < 0.001 && c[2] < 0.001;
+  }
+  if (ci.cls == "gray" && c.size() == 1) return c[0] < 0.001;
+  return false;
+}
+
+bool spotIsRegistration(const ColorInfo& ci) {
+  return ci.spot == "All" || ci.spot == "Registration" || ci.spot == "all";
+}
+
+bool spotIsProcess(const std::string& s) {
+  static const std::set<std::string> proc = {"Cyan", "Magenta", "Yellow", "Black",
+                                             "Gray", "Grey"};
+  return proc.count(s) > 0;
+}
+
+bool cmpStr(const std::string& v, const std::string& op, const std::vector<std::string>& vals) {
+  bool allEmpty = true;
+  for (const std::string& x : vals) {
+    if (!x.empty()) allEmpty = false;
+  }
+  if (vals.empty() || allEmpty) {
+    bool present = !v.empty();
+    if (op == "unequal" || op == "is_not_contained_in" || op == "not_contains") {
+      return present;
+    }
+    if (op == "equal" || op == "in" || op == "contains") return !present;
+  }
+  auto any = [&](std::function<bool(const std::string&)> pred) {
+    for (const std::string& x : vals) {
+      if (!x.empty() && pred(x)) return true;
+    }
+    return false;
+  };
+  if (op == "equal" || op == "in" || op == "occurs_in" || op == "contains") {
+    return any([&](const std::string& x) { return v.find(x) != std::string::npos; });
+  }
+  if (op == "unequal" || op == "is_not_contained_in" || op == "occurs_in" ||
+      op == "not_contains") {
+    return !any([&](const std::string& x) { return v.find(x) != std::string::npos; });
+  }
+  if (op == "begins") {
+    return any([&](const std::string& x) { return v.rfind(x, 0) == 0; });
+  }
+  if (op == "ends" || op == "not_ends") {
+    bool e = any([&](const std::string& x) {
+      return v.size() >= x.size() && v.compare(v.size() - x.size(), x.size(), x) == 0;
+    });
+    return op == "ends" ? e : !e;
+  }
+  return false;
+}
+
+enum class Domain { kNone, kPaint, kText, kImage, kDoc, kPage, kAny };
 
 Domain atomDomain(const std::string& token) {
   std::string ns = token.substr(0, token.find(':'));
-  if (ns == "grp_45919" || ns == "grp_75736" || ns == "grp_37816") return Domain::kPaint;
+  if (token == "content.kind") return Domain::kText;
+  if (token == "content.kind" || token == "content.kind") return Domain::kImage;
+  if (token == "content.painting" || token == "content.painting" ||
+      token == "content.kind" || token == "content.painting" ||
+      token == "content.painting") {
+    return Domain::kPaint;
+  }
+  if (ns == "grp_45919" || ns == "grp_75736" || ns == "grp_57935") return Domain::kPaint;
+  if (ns == "grp_37816") return Domain::kAny;
   if (ns == "grp_37222") return Domain::kText;
   if (ns == "grp_7226") return Domain::kImage;
-  if (ns == "grp_86055" || ns == "grp_46892") return Domain::kDoc;
+  if (ns == "grp_46892") return Domain::kPage;
+  if (ns == "grp_86055" || ns == "CSFONT" || ns == "grp_75300" || ns == "grp_3254") {
+    return Domain::kDoc;
+  }
   return Domain::kNone;
+}
+
+bool evalColorAtom(const PfAtom& a, const std::vector<double>& comps, const ColorInfo& ci,
+                   bool& supported) {
+  const std::string& t = a.token;
+  if (t == "color.inks_used" ||
+      t == "color.inks_used" ||
+      t == "color.inks_used" ||
+      t == "color.inks_used") {
+    return cmpNum(nonZeroComps(comps), a.op, numVal(a));
+  }
+  if (t == "color.component_count") return cmpNum(ci.declaredComps, a.op, numVal(a));
+  if (t == "color.ink") {
+    double m = maxComp(comps) * 100.0;
+    return nonZeroComps(comps) > 0 && cmpNum(m, a.op, numVal(a));
+  }
+  if (t == "color.ink_mix") return cmpBool(isWhite(comps), a.op);
+  if (t == "color.ink_mix") return cmpBool(blackOnly(comps), a.op);
+  if (t == "color.ink_mix") return cmpBool(is100Black(comps, ci), a.op);
+  if (t == "color.ink") {
+    double bp = blackPercent(comps, ci);
+    return bp >= 0 && cmpNum(bp, a.op, numVal(a));
+  }
+  if (t == "color.ink") {
+    if (comps.size() != 4 || comps[3] < 0.9) return false;
+    double cmy = std::max({comps[0], comps[1], comps[2]}) * 100.0;
+    return cmpNum(cmy, a.op, numVal(a));
+  }
+  if (t == "color.space") return cmpBool(ci.cls == "gray", a.op);
+  if (t == "color.space" || t == "color.ink_mix") {
+    return cmpBool(ci.cls == "cmyk", a.op);
+  }
+  if (t == "color.space") return cmpBool(ci.cls == "rgb", a.op);
+  if (t == "color.space") {
+    return cmpBool(ci.cls == "icc" && ci.declaredComps == 4, a.op);
+  }
+  if (t == "color.space") {
+    return cmpBool(ci.cls == "icc" && ci.declaredComps == 3, a.op);
+  }
+  if (t == "color.inks_used") {
+    if (ci.cls != "cmyk" || comps.size() != 4) return false;
+    return cmpNum(nonZeroComps(comps), a.op, numVal(a));
+  }
+  if (t == "color.space") return cmpBool(ci.cls == "lab", a.op);
+  if (t == "color.space") return cmpBool(ci.cls == "icc", a.op);
+  if (t == "color.space") return cmpBool(ci.cls == "cal", a.op);
+  bool realSpot = (ci.cls == "separation" || ci.cls == "devicen") &&
+                  !spotIsRegistration(ci) && ci.spot != "None" && !ci.spot.empty() &&
+                  !spotIsProcess(ci.spot);
+  if (t == "color.space") return cmpBool(ci.cls == "separation", a.op);
+  if (t == "color.spot" || t == "color.ink_mix") {
+    return cmpBool(realSpot, a.op);
+  }
+  if (t == "color.spot") return cmpBool(spotIsRegistration(ci), a.op);
+  if (t == "color.spot") {
+    return cmpStr(realSpot ? ci.spot : std::string(), a.op, a.vals);
+  }
+  if (t == "color.spot") {
+    bool pant = ci.spot.find("PANTONE") != std::string::npos ||
+                ci.spot.find("Pantone") != std::string::npos;
+    return cmpBool(pant, a.op);
+  }
+  supported = false;
+  return false;
 }
 
 bool evalPaintAtom(const PfAtom& a, const PaintEvent& e, bool& supported) {
   const std::string& t = a.token;
   if (t == "content.stroke_width") return e.stroke && cmpNum(e.width, a.op, numVal(a));
-  if (t == "color.inks_used" ||
-      t == "color.inks_used") {
-    return cmpNum(nonZeroComps(e.comps), a.op, numVal(a));
+  if (t == "color.overprint" || t == "color.overprint" ||
+      t == "color.overprint") {
+    return cmpBool(e.overprint, a.op);
   }
-  if (t == "color.ink") {
-    double m = maxComp(e.comps) * 100.0;
-    return nonZeroComps(e.comps) > 0 && cmpNum(m, a.op, numVal(a));
+  if (t == "color.overprint") return cmpBool(e.opm == 1, a.op);
+  if (t == "color.total_ink" || t == "color.total_ink" ||
+      t == "color.total_ink") {
+    return cmpNum(totalInk(e.comps), a.op, numVal(a));
   }
-  if (t == "color.ink_mix") return cmpBool(isWhite(e.comps), a.op);
-  if (t == "color.ink_mix") return cmpBool(blackOnly(e.comps), a.op);
-  if (t == "color.ink") {
-    if (e.comps.size() != 4 || e.comps[3] < 0.9) return false;
-    double cmy = std::max({e.comps[0], e.comps[1], e.comps[2]}) * 100.0;
-    return cmpNum(cmy, a.op, numVal(a));
+  if (t == "transparency.used" || t == "transparency.used" ||
+      t == "transparency.used") {
+    return cmpBool(e.transparency, a.op);
   }
+  if (t == "content.painting") return cmpBool(!e.stroke, a.op);
+  if (t == "content.painting" || t == "content.kind") return cmpBool(e.stroke, a.op);
+  if (t == "content.kind" || t == "content.kind" || t == "content.kind") {
+    return cmpBool(false, a.op);
+  }
+  bool s2 = true;
+  bool r = evalColorAtom(a, e.comps, e.color, s2);
+  if (s2) return r;
   supported = false;
   return false;
 }
@@ -660,6 +1017,14 @@ bool evalTextAtom(const PfAtom& a, const TextEvent& e, bool& supported) {
   if (t == "text.rendering") {
     return cmpBool(e.renderMode == 3, a.op);
   }
+  if (t == "content.kind") return cmpBool(true, a.op);
+  if (t == "content.kind" || t == "content.kind" ||
+      t == "content.painting" || t == "content.painting" || t == "content.kind") {
+    return cmpBool(false, a.op);
+  }
+  bool s2 = true;
+  bool r = evalColorAtom(a, e.comps, e.color, s2);
+  if (s2) return r;
   supported = false;
   return false;
 }
@@ -668,6 +1033,15 @@ bool evalImageAtom(const PfAtom& a, const ImageEvent& e, bool& supported) {
   const std::string& t = a.token;
   if (t == "image.resolution") return e.ppi > 0 && cmpNum(e.ppi, a.op, numVal(a));
   if (t == "image.property") return cmpNum(e.bpc, a.op, numVal(a));
+  if (t == "image.property") return cmpNum(e.width, a.op, numVal(a));
+  if (t == "image.property") return cmpNum(e.height, a.op, numVal(a));
+  if (t == "image.property") return cmpBool(e.hasSMask, a.op);
+  if (t == "content.kind") return cmpBool(!e.mask, a.op);
+  if (t == "content.kind") return cmpBool(e.mask, a.op);
+  if (t == "content.kind" || t == "content.painting" || t == "content.painting" ||
+      t == "content.kind") {
+    return cmpBool(false, a.op);
+  }
   if (t == "image.property") {
     bool has = false;
     for (const std::string& v : a.vals) {
@@ -678,6 +1052,9 @@ bool evalImageAtom(const PfAtom& a, const ImageEvent& e, bool& supported) {
       return !has;
     }
   }
+  bool s2 = true;
+  bool r = evalColorAtom(a, std::vector<double>(), e.color, s2);
+  if (s2) return r;
   supported = false;
   return false;
 }
@@ -685,9 +1062,53 @@ bool evalImageAtom(const PfAtom& a, const ImageEvent& e, bool& supported) {
 bool evalDocAtom(const PfAtom& a, const Events& ev, bool& supported) {
   const std::string& t = a.token;
   if (t == "document.file_size") return cmpNum(ev.filesize, a.op, numVal(a));
+  if (t == "document.page_count") return cmpNum(ev.pageCount, a.op, numVal(a));
+  if (t == "print.plates") {
+    return cmpNum(static_cast<int>(ev.spotPlates.size()), a.op, numVal(a));
+  }
   if (t == "page.box_present") {
     return cmpBool(ev.pagesWithMediaBox == ev.pageCount && ev.pageCount > 0, a.op);
   }
+  if (t == "output_intent.entry" || t == "output_intent.count" ||
+      t == "output_intent.count") {
+    return cmpBool(ev.hasOutputIntent, a.op);
+  }
+  if (t == "output_intent.count" ||
+      t == "output_intent.count") {
+    return cmpNum(ev.outputIntentCount, a.op, numVal(a));
+  }
+  if (t == "icc.header" || t == "icc.header") {
+    return cmpStr(ev.iccColorSpace, a.op, a.vals);
+  }
+  if (t == "icc.header") {
+    return cmpStr(ev.iccProfileId, a.op, a.vals);
+  }
+  if (t == "annotation.type" || t == "annotation.type") {
+    for (const std::string& at : ev.annotTypes) {
+      if (cmpStr(at, a.op, a.vals)) return true;
+    }
+    return false;
+  }
+  if (t == "font.name") {
+    for (const std::string& bf : ev.baseFonts) {
+      if (cmpStr(bf, a.op, a.vals)) return true;
+    }
+    return false;
+  }
+  supported = false;
+  return false;
+}
+
+bool evalPageAtom(const PfAtom& a, const PageFacts& p, bool& supported) {
+  const std::string& t = a.token;
+  if (t == "page.box_present") return cmpBool(p.hasMediaBox, a.op);
+  if (t == "page.box_present") return cmpBool(p.hasCropBox, a.op);
+  if (t == "page.box_relation") return cmpBool(p.cropEqualsMedia, a.op);
+  if (t == "page.user_unit") return cmpBool(p.scaled, a.op);
+  if (t == "page.single_image") return cmpBool(p.imageCount == 1, a.op);
+  if (t == "page.rotation") return cmpBool(p.rotated, a.op);
+  if (t == "page.empty") return cmpBool(p.empty, a.op);
+  if (t == "page.number") return cmpNum(p.page, a.op, numVal(a));
   supported = false;
   return false;
 }
@@ -707,6 +1128,47 @@ void passProfile(Ctx& ctx, std::size_t inputSize) {
   }
   Events ev;
   ev.filesize = static_cast<double>(inputSize);
+  {
+    QPDFObjectHandle oi = ctx.pdf.getRoot().getKey("/OutputIntents");
+    ev.hasOutputIntent = oi.isArray() && oi.getArrayNItems() > 0;
+    ev.outputIntentCount = oi.isArray() ? oi.getArrayNItems() : 0;
+    if (oi.isArray() && oi.getArrayNItems() > 0 && oi.getArrayItem(0).isDictionary()) {
+      QPDFObjectHandle prof = oi.getArrayItem(0).getKey("/DestOutputProfile");
+      if (prof.isStream()) {
+        try {
+          auto buf = prof.getStreamData(qpdf_dl_all);
+          const unsigned char* d = buf->getBuffer();
+          size_t n = buf->getSize();
+          if (n >= 100) {
+            ev.iccColorSpace.assign(reinterpret_cast<const char*>(d + 16), 4);
+            while (!ev.iccColorSpace.empty() && ev.iccColorSpace.back() == ' ') {
+              ev.iccColorSpace.pop_back();
+            }
+            bool anyId = false;
+            char hex[33];
+            for (int i = 0; i < 16; ++i) {
+              std::snprintf(hex + i * 2, 3, "%02x", d[84 + i]);
+              if (d[84 + i]) anyId = true;
+            }
+            if (anyId) ev.iccProfileId = hex;
+          }
+        } catch (...) {
+        }
+      }
+    }
+  }
+  auto boxEq = [](QPDFObjectHandle a, QPDFObjectHandle b) {
+    if (!a.isArray() || !b.isArray() || a.getArrayNItems() != 4 ||
+        b.getArrayNItems() != 4) {
+      return false;
+    }
+    for (int i = 0; i < 4; ++i) {
+      if (std::fabs(numOf(a.getArrayItem(i), 0) - numOf(b.getArrayItem(i), 0)) > 0.5) {
+        return false;
+      }
+    }
+    return true;
+  };
   try {
     QPDFPageDocumentHelper dh(ctx.pdf);
     std::vector<QPDFPageObjectHelper> pages = dh.getAllPages();
@@ -714,12 +1176,38 @@ void passProfile(Ctx& ctx, std::size_t inputSize) {
     int pageNum = 0;
     for (auto& ph : pages) {
       ++pageNum;
-      if (ph.getAttribute("/MediaBox", true).isArray()) ++ev.pagesWithMediaBox;
+      QPDFObjectHandle page = ph.getObjectHandle();
+      QPDFObjectHandle mb = ph.getAttribute("/MediaBox", true);
+      QPDFObjectHandle cb = ph.getAttribute("/CropBox", false);
+      PageFacts pf;
+      pf.page = pageNum;
+      pf.hasMediaBox = mb.isArray();
+      pf.hasCropBox = cb.isArray();
+      pf.cropEqualsMedia = !cb.isArray() || boxEq(cb, mb);
+      QPDFObjectHandle rot = ph.getAttribute("/Rotate", true);
+      pf.rotated = rot.isInteger() && (rot.getIntValue() % 360) != 0;
+      if (mb.isArray()) ++ev.pagesWithMediaBox;
+      QPDFObjectHandle annots = page.getKey("/Annots");
+      if (annots.isArray()) {
+        for (int i = 0; i < annots.getArrayNItems(); ++i) {
+          QPDFObjectHandle an = annots.getArrayItem(i);
+          if (an.isDictionary()) {
+            std::string st = nameOf(an.getKey("/Subtype"));
+            if (st.size() > 1) ev.annotTypes.insert(st.substr(1));
+          }
+        }
+      }
+      size_t imgBefore = ev.images.size();
+      size_t paintBefore = ev.paints.size();
+      size_t textBefore = ev.texts.size();
       QPDFObjectHandle res = ph.getAttribute("/Resources", true);
       Visited seen;
       Gs initial;
-      scanEvents(ph.getObjectHandle().getKey("/Contents"), res, initial, pageNum, 0,
-                 seen, ev);
+      scanEvents(page.getKey("/Contents"), res, initial, pageNum, 0, seen, ev);
+      pf.imageCount = static_cast<int>(ev.images.size() - imgBefore);
+      pf.empty = ev.images.size() == imgBefore && ev.paints.size() == paintBefore &&
+                 ev.texts.size() == textBefore;
+      ev.pages.push_back(pf);
     }
   } catch (...) {
     return;
@@ -727,80 +1215,80 @@ void passProfile(Ctx& ctx, std::size_t inputSize) {
 
   const char* sevName[] = {"", "Info", "Warning", "Error"};
   for (const PfRule& rule : prof.rules) {
+    std::vector<const PfCondition*> conds;
     std::vector<const PfAtom*> atoms;
     for (const std::string& cid : rule.condIds) {
       auto it = prof.conds.find(cid);
       if (it == prof.conds.end()) continue;
+      conds.push_back(&it->second);
       for (const PfAtom& a : it->second.atoms) atoms.push_back(&a);
     }
     if (atoms.empty()) continue;
     Domain dom = Domain::kNone;
     bool mixed = false;
+    bool sawAny = false;
     for (const PfAtom* a : atoms) {
       Domain d = atomDomain(a->token);
       if (d == Domain::kNone) mixed = true;
       else if (d == Domain::kDoc) continue;
+      else if (d == Domain::kAny) sawAny = true;
       else if (dom == Domain::kNone) dom = d;
       else if (dom != d) mixed = true;
     }
+    if (dom == Domain::kNone && sawAny) dom = Domain::kPaint;
     bool supported = !mixed;
     long long hits = 0;
     std::set<int> pages;
-    if (supported && dom == Domain::kPaint) {
-      for (const PaintEvent& e : ev.paints) {
-        bool all = true;
-        for (const PfAtom* a : atoms) {
-          if (atomDomain(a->token) == Domain::kDoc) {
-            if (!evalDocAtom(*a, ev, supported)) all = false;
-          } else if (!evalPaintAtom(*a, e, supported)) {
-            all = false;
-          }
-          if (!supported || !all) break;
+
+    auto evalAtom = [&](const PfAtom& a, const void* e) -> bool {
+      if (atomDomain(a.token) == Domain::kDoc) return evalDocAtom(a, ev, supported);
+      switch (dom) {
+        case Domain::kPaint:
+          return evalPaintAtom(a, *static_cast<const PaintEvent*>(e), supported);
+        case Domain::kText:
+          return evalTextAtom(a, *static_cast<const TextEvent*>(e), supported);
+        case Domain::kImage:
+          return evalImageAtom(a, *static_cast<const ImageEvent*>(e), supported);
+        case Domain::kPage:
+          return evalPageAtom(a, *static_cast<const PageFacts*>(e), supported);
+        default:
+          return evalDocAtom(a, ev, supported);
+      }
+    };
+    auto ruleMatches = [&](const void* e) -> bool {
+      bool combined = rule.logic != 1;
+      for (const PfCondition* c : conds) {
+        bool condResult = true;
+        for (const PfAtom& a : c->atoms) {
+          if (!evalAtom(a, e)) { condResult = false; break; }
+          if (!supported) return false;
         }
-        if (supported && all) {
+        if (rule.logic == 1) {
+          combined = combined || condResult;
+          if (combined) break;
+        } else {
+          combined = combined && condResult;
+          if (!combined) break;
+        }
+      }
+      return combined;
+    };
+
+    auto sweep = [&](auto& collection) {
+      for (const auto& e : collection) {
+        if (!supported) return;
+        if (ruleMatches(&e)) {
           ++hits;
           pages.insert(e.page);
         }
       }
-    } else if (supported && dom == Domain::kText) {
-      for (const TextEvent& e : ev.texts) {
-        bool all = true;
-        for (const PfAtom* a : atoms) {
-          if (atomDomain(a->token) == Domain::kDoc) {
-            if (!evalDocAtom(*a, ev, supported)) all = false;
-          } else if (!evalTextAtom(*a, e, supported)) {
-            all = false;
-          }
-          if (!supported || !all) break;
-        }
-        if (supported && all) {
-          ++hits;
-          pages.insert(e.page);
-        }
-      }
-    } else if (supported && dom == Domain::kImage) {
-      for (const ImageEvent& e : ev.images) {
-        bool all = true;
-        for (const PfAtom* a : atoms) {
-          if (atomDomain(a->token) == Domain::kDoc) {
-            if (!evalDocAtom(*a, ev, supported)) all = false;
-          } else if (!evalImageAtom(*a, e, supported)) {
-            all = false;
-          }
-          if (!supported || !all) break;
-        }
-        if (supported && all) {
-          ++hits;
-          pages.insert(e.page);
-        }
-      }
-    } else if (supported && dom == Domain::kNone) {
-      bool all = true;
-      for (const PfAtom* a : atoms) {
-        if (!evalDocAtom(*a, ev, supported)) all = false;
-        if (!supported || !all) break;
-      }
-      if (supported && all) hits = 1;
+    };
+    if (supported && dom == Domain::kPaint) sweep(ev.paints);
+    else if (supported && dom == Domain::kText) sweep(ev.texts);
+    else if (supported && dom == Domain::kImage) sweep(ev.images);
+    else if (supported && dom == Domain::kPage) sweep(ev.pages);
+    else if (supported && dom == Domain::kNone) {
+      if (ruleMatches(nullptr)) hits = 1;
     }
     if (!supported) {
       ctx.res.analysis.push_back(
