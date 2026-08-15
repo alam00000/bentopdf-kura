@@ -346,6 +346,9 @@ void passMetadata(Ctx& ctx) {
   }
   xmp += "        xmlns:dc=\"http://purl.org/dc/elements/1.1/\"\n";
   xmp += "        xmlns:xmp=\"http://ns.adobe.com/xap/1.0/\"\n";
+  if (ctx.isX()) {
+    xmp += "        xmlns:xmpMM=\"http://ns.adobe.com/xap/1.0/mm/\"\n";
+  }
   xmp += "        xmlns:pdf=\"http://ns.adobe.com/pdf/1.3/\">\n";
   if (ctx.isA()) {
     xmp += "      <pdfaid:part>" + std::to_string(ctx.part) + "</pdfaid:part>\n";
@@ -374,6 +377,8 @@ void passMetadata(Ctx& ctx) {
   if (ctx.isVT()) {
     xmp += std::string("      <pdfvtid:GTS_PDFVTVersion>") +
            (ctx.pdf20Print() ? "PDF/VT-3" : "PDF/VT-1") + "</pdfvtid:GTS_PDFVTVersion>\n";
+    xmp += "      <pdfvtid:GTS_PDFVTModDate>" + collectInfo(ctx).modifyIso +
+           "</pdfvtid:GTS_PDFVTModDate>\n";
   }
   if (ctx.isE()) {
     xmp += "      <pdfe:ISO_PDFEVersion>1</pdfe:ISO_PDFEVersion>\n";
@@ -409,6 +414,19 @@ void passMetadata(Ctx& ctx) {
   appendSimple(xmp, "pdf:Producer", info.producer);
   appendSimple(xmp, "xmp:CreateDate", info.createIso);
   appendSimple(xmp, "xmp:ModifyDate", info.modifyIso);
+  if (ctx.isX()) {
+    appendSimple(xmp, "xmp:MetadataDate", info.modifyIso);
+    unsigned hash = 2166136261u;
+    std::string seed = info.createIso + info.modifyIso + levelToString(ctx.opt.level);
+    for (unsigned char c : seed) hash = (hash ^ c) * 16777619u;
+    char idbuf[64];
+    std::snprintf(idbuf, sizeof(idbuf), "uuid:%08x-0000-4000-8000-%08x0000", hash,
+                  hash ^ 0x9e3779b9u);
+    appendSimple(xmp, "xmpMM:DocumentID", idbuf);
+    appendSimple(xmp, "xmpMM:InstanceID", idbuf);
+    appendSimple(xmp, "xmpMM:VersionID", "1");
+    appendSimple(xmp, "xmpMM:RenditionClass", "default");
+  }
   xmp += "    </rdf:Description>\n";
   bool wantUaSchema = ctx.opt.ua && ctx.part <= 3;
   bool wantFxSchema = !ctx.opt.attachXml.empty() && ctx.isA() && ctx.part <= 3;

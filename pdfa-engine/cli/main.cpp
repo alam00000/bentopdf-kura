@@ -78,7 +78,7 @@ void printReport(const pdfa::Options& opt, const pdfa::Result& res,
             "\",\"fixed\":" + (is.fixed ? "true" : "false") + "}";
   }
   json += "]";
-  if (opt.analyze) {
+  if (opt.analyze || !opt.preflightProfile.empty()) {
     json += ",\"analysis\":[";
     bool firstA = true;
     for (const pdfa::Issue& is : res.analysis) {
@@ -407,6 +407,8 @@ int main(int argc, char** argv) {
       opt.analyze = true;
     } else if (arg == "--outline-fonts") {
       opt.outlineFonts = true;
+    } else if (arg == "--profile" && i + 1 < argc) {
+      if (!readFile(argv[++i], opt.preflightProfile)) return 1;
     } else if (arg == "--ocr") {
       ocr = true;
     } else if (arg == "--ocr-engine" && i + 1 < argc) {

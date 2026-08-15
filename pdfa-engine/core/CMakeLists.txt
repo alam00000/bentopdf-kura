@@ -17,6 +17,7 @@ add_library(pdfa_core STATIC
   src/engine.cpp
   src/analyze.cpp
   src/outline.cpp
+  src/profile.cpp
   src/semantics.cpp
   src/einvoice.cpp
   src/einvoice_read.cpp

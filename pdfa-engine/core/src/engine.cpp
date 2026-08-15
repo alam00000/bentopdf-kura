@@ -373,6 +373,7 @@ Result convert(const unsigned char* data, std::size_t size, const Options& opt) 
       tmark = now;
     };
     if (opt.analyze) passAnalyze(ctx);
+    if (!opt.preflightProfile.empty()) passProfile(ctx, size);
     lap("analyze");
     passStructure(ctx);
     lap("structure");

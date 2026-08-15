@@ -1,0 +1,40 @@
+{
+  "kura-profile": 1,
+  "name": "Report image formats",
+  "description": "Finds image compression choices that need attention in exchange workflows.",
+  "checks": [
+    {
+      "name": "JPEG2000 image",
+      "severity": "info",
+      "all": [
+        {
+          "prop": "image.filter",
+          "op": "==",
+          "value": "JPXDecode"
+        }
+      ]
+    },
+    {
+      "name": "JBIG2 image",
+      "severity": "info",
+      "all": [
+        {
+          "prop": "image.filter",
+          "op": "==",
+          "value": "JBIG2Decode"
+        }
+      ]
+    },
+    {
+      "name": "Image above 8 bits per component",
+      "severity": "info",
+      "all": [
+        {
+          "prop": "image.bitsPerComponent",
+          "op": ">",
+          "value": 8
+        }
+      ]
+    }
+  ]
+}
