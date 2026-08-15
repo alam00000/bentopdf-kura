@@ -381,7 +381,7 @@ void passMetadata(Ctx& ctx) {
            "</pdfvtid:GTS_PDFVTModDate>\n";
   }
   if (ctx.isE()) {
-    xmp += "      <pdfe:ISO_PDFEVersion>1</pdfe:ISO_PDFEVersion>\n";
+    xmp += "      <pdfe:ISO_PDFEVersion>PDF/E-1</pdfe:ISO_PDFEVersion>\n";
   }
   if (!ctx.opt.attachXml.empty()) {
     const std::string& px = ctx.inv.prefix;

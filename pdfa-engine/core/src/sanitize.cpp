@@ -1,5 +1,7 @@
 #include <qpdf/QPDF.hh>
+#include <qpdf/QPDFPageDocumentHelper.hh>
 
+#include <algorithm>
 #include <set>
 #include <string>
 #include <vector>
@@ -111,6 +113,24 @@ void stripSignatures(Ctx& ctx, QPDFObjectHandle root) {
       }
       if (f.getKey("/Kids").isArray()) stack.push_back(f.getKey("/Kids"));
     }
+  }
+  try {
+    QPDFPageDocumentHelper dh(ctx.pdf);
+    for (auto& ph : dh.getAllPages()) {
+      QPDFObjectHandle annots = ph.getObjectHandle().getKey("/Annots");
+      if (!annots.isArray()) continue;
+      for (int i = 0; i < annots.getArrayNItems(); ++i) {
+        QPDFObjectHandle an = annots.getArrayItem(i);
+        if (an.isDictionary() && nameIs(an.getKey("/FT"), "/Sig") &&
+            visited.enter(an) && an.hasKey("/V")) {
+          an.removeKey("/V");
+          an.removeKey("/Lock");
+          an.removeKey("/SV");
+          ++stripped;
+        }
+      }
+    }
+  } catch (...) {
   }
   if (acro.isDictionary() && acro.getKey("/SigFlags").isInteger() &&
       acro.getKey("/SigFlags").getIntValue() != 0) {
@@ -228,10 +248,69 @@ void handleEmbeddedFiles(Ctx& ctx, QPDFObjectHandle root) {
     }
   }
   for (QPDFObjectHandle fs : specs) normalizeFilespecPart3(ctx, fs);
-  for (QPDFObjectHandle obj : ctx.pdf.getAllObjects()) {
-    if (obj.isDictionary() && nameIs(obj.getKey("/Type"), "/Filespec") && obj.hasKey("/EF")) {
-      normalizeFilespecPart3(ctx, obj);
+  std::vector<QPDFObjectHandle> orphans;
+  {
+    std::set<QPDFObjGen> inTree;
+    for (QPDFObjectHandle fs : specs) {
+      if (fs.isIndirect()) inTree.insert(fs.getObjGen());
     }
+    for (QPDFObjectHandle obj : ctx.pdf.getAllObjects()) {
+      if (obj.isDictionary() && nameIs(obj.getKey("/Type"), "/Filespec") && obj.hasKey("/EF")) {
+        normalizeFilespecPart3(ctx, obj);
+        if (!inTree.count(obj.getObjGen())) orphans.push_back(obj);
+      }
+    }
+  }
+  if (!orphans.empty()) {
+    std::vector<std::pair<std::string, QPDFObjectHandle>> pairs;
+    std::set<std::string> used;
+    auto keyFor = [&](QPDFObjectHandle fs, int i) {
+      std::string k;
+      if (fs.getKey("/UF").isString()) k = fs.getKey("/UF").getUTF8Value();
+      else if (fs.getKey("/F").isString()) k = fs.getKey("/F").getUTF8Value();
+      if (k.empty()) k = "attachment-" + std::to_string(i);
+      std::string base = k;
+      int n = 2;
+      while (used.count(k)) k = base + "-" + std::to_string(n++);
+      used.insert(k);
+      return k;
+    };
+    if (tree.isDictionary()) {
+      QPDFObjectHandle vals = tree.getKey("/Names");
+      if (vals.isArray()) {
+        for (int i = 0; i + 1 < vals.getArrayNItems(); i += 2) {
+          if (vals.getArrayItem(i).isString()) {
+            std::string k = vals.getArrayItem(i).getUTF8Value();
+            used.insert(k);
+            pairs.push_back({k, vals.getArrayItem(i + 1)});
+          }
+        }
+      }
+    }
+    int idx = 0;
+    for (QPDFObjectHandle fs : orphans) {
+      pairs.push_back({keyFor(fs, ++idx),
+                       fs.isIndirect() ? fs : ctx.pdf.makeIndirectObject(fs)});
+    }
+    std::sort(pairs.begin(), pairs.end(),
+              [](const auto& a, const auto& b) { return a.first < b.first; });
+    QPDFObjectHandle flat = QPDFObjectHandle::newArray();
+    for (const auto& [k, v] : pairs) {
+      flat.appendItem(QPDFObjectHandle::newUnicodeString(k));
+      flat.appendItem(v);
+    }
+    QPDFObjectHandle newTree = QPDFObjectHandle::newDictionary();
+    newTree.replaceKey("/Names", flat);
+    if (!names.isDictionary()) {
+      names = QPDFObjectHandle::newDictionary();
+      root.replaceKey("/Names", names);
+    }
+    names.replaceKey("/EmbeddedFiles", ctx.pdf.makeIndirectObject(newTree));
+    tree = names.getKey("/EmbeddedFiles");
+    ctx.issue("EMBEDDED_FILES_ENROLLED",
+              "listed " + std::to_string(orphans.size()) +
+                  " embedded file(s) in the catalog /EmbeddedFiles name tree",
+              true);
   }
   if (ctx.conf == 'F' && !tree.isDictionary()) {
     if (!names.isDictionary()) {
