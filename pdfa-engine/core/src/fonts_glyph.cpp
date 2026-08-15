@@ -119,8 +119,10 @@ bool parseCmapBody(const std::string& text, std::vector<CodespaceRange>& spaces,
 const std::set<QPDFObjGen>* ctxIdentityCmaps = nullptr;
 bool gStrictNotdef = false;
 
-FT_UInt strictSimpleGid(FT_Face face, int code, const SimpleEncoding& enc, bool symbolic) {
-  if (symbolic) return glyphForCode(face, code, enc, symbolic);
+FT_UInt strictSimpleGid(const FtFace& ftFace, int code, const SimpleEncoding& enc,
+                        bool symbolic) {
+  FT_Face face = ftFace.face;
+  if (symbolic) return resolveSimpleGid(ftFace, code, enc, symbolic);
   const std::string& diffName = enc.diffs[code];
   if (!diffName.empty()) {
     std::string bare = diffName.substr(1);
@@ -259,12 +261,12 @@ FontGlyphInfo analyzeFontGlyphs(FtLib& lib, QPDFObjectHandle font) {
     if (nameBased && !enc.diffs[code].empty()) {
       gid = FT_Get_Name_Index(face.face, enc.diffs[code].substr(1).c_str());
     } else {
-      gid = glyphForCode(face.face, code, enc, symbolic);
+      gid = resolveSimpleGid(face, code, enc, symbolic);
     }
     if (gid == 0) {
       info.bad.insert(code);
     } else if (gStrictNotdef && !(nameBased && !enc.diffs[code].empty()) &&
-               strictSimpleGid(face.face, code, enc, symbolic) == 0) {
+               strictSimpleGid(face, code, enc, symbolic) == 0) {
       info.bad.insert(code);
     }
   }

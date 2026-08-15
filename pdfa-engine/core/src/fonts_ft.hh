@@ -2,8 +2,11 @@
 
 #include <qpdf/QPDFObjectHandle.hh>
 
+#include <cstring>
+
 #include <ft2build.h>
 #include FT_FREETYPE_H
+#include FT_FONT_FORMATS_H
 #include FT_TRUETYPE_IDS_H
 
 #include <cstdint>
@@ -143,15 +146,6 @@ inline FT_UInt glyphForCode(FT_Face face, int code, const SimpleEncoding& enc, b
   }
   for (int i = 0; i < face->num_charmaps; ++i) {
     FT_CharMap cm = face->charmaps[i];
-    if (cm->encoding == FT_ENCODING_ADOBE_CUSTOM ||
-        cm->encoding == FT_ENCODING_ADOBE_STANDARD) {
-      FT_Set_Charmap(face, cm);
-      FT_UInt gid = FT_Get_Char_Index(face, static_cast<FT_ULong>(code));
-      if (gid) return gid;
-    }
-  }
-  for (int i = 0; i < face->num_charmaps; ++i) {
-    FT_CharMap cm = face->charmaps[i];
     if (cm->platform_id == TT_PLATFORM_MACINTOSH) {
       FT_Set_Charmap(face, cm);
       FT_UInt gid = FT_Get_Char_Index(face, code);
@@ -166,5 +160,159 @@ inline FT_UInt glyphForCode(FT_Face face, int code, const SimpleEncoding& enc, b
     }
   }
   return FT_Get_Char_Index(face, code);
+}
+
+inline int cffCustomEncodingGid(const std::string& file, int code) {
+  const unsigned char* d = reinterpret_cast<const unsigned char*>(file.data());
+  size_t n = file.size();
+  size_t base = 0;
+  if (n > 12 && std::memcmp(d, "OTTO", 4) == 0) {
+    uint16_t numTables = static_cast<uint16_t>((d[4] << 8) | d[5]);
+    bool found = false;
+    for (uint16_t i = 0; i < numTables && 12 + 16 * (i + 1) <= n; ++i) {
+      const unsigned char* rec = d + 12 + 16 * i;
+      if (std::memcmp(rec, "CFF ", 4) == 0) {
+        base = (static_cast<size_t>(rec[8]) << 24) | (rec[9] << 16) | (rec[10] << 8) |
+               rec[11];
+        found = true;
+        break;
+      }
+    }
+    if (!found) return -1;
+  }
+  if (base + 4 > n || d[base] != 1) return -1;
+  size_t pos = base + d[base + 2];
+  auto readIndex = [&](size_t p, size_t& first, size_t& firstLen, size_t& end) -> bool {
+    if (p + 2 > n) return false;
+    unsigned count = (d[p] << 8) | d[p + 1];
+    if (count == 0) {
+      end = p + 2;
+      first = firstLen = 0;
+      return true;
+    }
+    if (p + 3 > n) return false;
+    unsigned offSize = d[p + 2];
+    if (offSize < 1 || offSize > 4) return false;
+    size_t offArr = p + 3;
+    size_t dataStart = offArr + static_cast<size_t>(count + 1) * offSize - 1;
+    auto off = [&](unsigned i) -> size_t {
+      size_t q = offArr + static_cast<size_t>(i) * offSize;
+      size_t v = 0;
+      for (unsigned b = 0; b < offSize; ++b) v = (v << 8) | d[q + b];
+      return v;
+    };
+    if (dataStart + off(count) > n) return false;
+    first = dataStart + off(0);
+    firstLen = off(1) - off(0);
+    end = dataStart + off(count);
+    return true;
+  };
+  size_t f1, l1, end;
+  if (!readIndex(pos, f1, l1, end)) return -1;
+  size_t tdFirst, tdLen, tdEnd;
+  if (!readIndex(end, tdFirst, tdLen, tdEnd)) return -1;
+  long long encOff = -1;
+  {
+    size_t i = tdFirst;
+    size_t e = tdFirst + tdLen;
+    long long stack[48];
+    int sp = 0;
+    while (i < e) {
+      unsigned b = d[i];
+      if (b <= 21) {
+        unsigned op = b;
+        if (b == 12) {
+          op = 1200 + d[i + 1];
+          i += 2;
+        } else {
+          i += 1;
+        }
+        if (op == 16 && sp > 0) encOff = stack[sp - 1];
+        sp = 0;
+      } else if (b == 28) {
+        if (sp < 48) stack[sp++] = static_cast<int16_t>((d[i + 1] << 8) | d[i + 2]);
+        i += 3;
+      } else if (b == 29) {
+        long long v = (static_cast<long long>(d[i + 1]) << 24) | (d[i + 2] << 16) |
+                      (d[i + 3] << 8) | d[i + 4];
+        if (sp < 48) stack[sp++] = static_cast<int32_t>(v);
+        i += 5;
+      } else if (b == 30) {
+        i += 1;
+        while (i < e) {
+          unsigned nib = d[i];
+          ++i;
+          if ((nib & 0x0F) == 0x0F || (nib >> 4) == 0x0F) break;
+        }
+        if (sp < 48) stack[sp++] = 0;
+      } else if (b >= 32 && b <= 246) {
+        if (sp < 48) stack[sp++] = static_cast<int>(b) - 139;
+        i += 1;
+      } else if (b >= 247 && b <= 250) {
+        if (sp < 48) stack[sp++] = (static_cast<int>(b) - 247) * 256 + d[i + 1] + 108;
+        i += 2;
+      } else if (b >= 251 && b <= 254) {
+        if (sp < 48) stack[sp++] = -(static_cast<int>(b) - 251) * 256 - d[i + 1] - 108;
+        i += 2;
+      } else {
+        i += 1;
+      }
+    }
+  }
+  if (encOff <= 1) return -1;
+  size_t ep = base + static_cast<size_t>(encOff);
+  if (ep + 2 > n) return -1;
+  unsigned fmt = d[ep] & 0x7F;
+  if (fmt == 0) {
+    unsigned nCodes = d[ep + 1];
+    if (ep + 2 + nCodes > n) return 0;
+    for (unsigned i = 0; i < nCodes; ++i) {
+      if (d[ep + 2 + i] == static_cast<unsigned>(code)) return i + 1;
+    }
+    return 0;
+  }
+  if (fmt == 1) {
+    unsigned nRanges = d[ep + 1];
+    if (ep + 2 + nRanges * 2 > n) return 0;
+    unsigned gid = 1;
+    for (unsigned r = 0; r < nRanges; ++r) {
+      unsigned first = d[ep + 2 + r * 2];
+      unsigned nLeft = d[ep + 3 + r * 2];
+      if (static_cast<unsigned>(code) >= first &&
+          static_cast<unsigned>(code) <= first + nLeft) {
+        return gid + (static_cast<unsigned>(code) - first);
+      }
+      gid += nLeft + 1;
+    }
+  }
+  return 0;
+}
+
+inline FT_UInt resolveSimpleGid(const FtFace& face, int code, const SimpleEncoding& enc,
+                                bool symbolic) {
+  if (symbolic && enc.diffs[code].empty()) {
+    const char* fmt = FT_Get_Font_Format(face.face);
+    if (fmt && std::strcmp(fmt, "CFF") == 0) {
+      int g = cffCustomEncodingGid(face.data, code);
+      if (g >= 0) {
+        return g > 0 && g < static_cast<int>(face.face->num_glyphs)
+                   ? static_cast<FT_UInt>(g)
+                   : 0;
+      }
+    } else if (fmt && std::strcmp(fmt, "Type 1") == 0) {
+      FT_CharMap saved = face.face->charmap;
+      for (int i = 0; i < face.face->num_charmaps; ++i) {
+        FT_CharMap cm = face.face->charmaps[i];
+        if (cm->encoding == FT_ENCODING_ADOBE_CUSTOM ||
+            cm->encoding == FT_ENCODING_ADOBE_STANDARD) {
+          FT_Set_Charmap(face.face, cm);
+          FT_UInt gid = FT_Get_Char_Index(face.face, static_cast<FT_ULong>(code));
+          if (saved) FT_Set_Charmap(face.face, saved);
+          return gid;
+        }
+      }
+    }
+  }
+  return glyphForCode(face.face, code, enc, symbolic);
 }
 }

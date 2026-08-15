@@ -356,6 +356,7 @@ void syncSimpleFontWidths(Ctx& ctx, FtLib& lib, QPDFObjectHandle font) {
   }
   double upem = face.face->units_per_EM ? face.face->units_per_EM : 1000.0;
   HmtxTable hmtx = parseHmtx(face.data);
+  CffWidths cff(face.data);
   long long flags = fd.getKey("/Flags").isInteger() ? fd.getKey("/Flags").getIntValue() : 0;
   bool symbolic = (flags & 4) != 0 && (flags & 32) == 0;
   SimpleEncoding enc = readEncoding(font, symbolic);
@@ -370,8 +371,12 @@ void syncSimpleFontWidths(Ctx& ctx, FtLib& lib, QPDFObjectHandle font) {
     QPDFObjectHandle w =
         inRange ? widths.getArrayItem(code - firstChar) : QPDFObjectHandle::newNull();
     double dictW = w.isNumber() ? w.getNumericValue() : 0.0;
-    FT_UInt gid = glyphForCode(face.face, code, enc, symbolic);
+    FT_UInt gid = resolveSimpleGid(face, code, enc, symbolic);
     double progW = programAdvance(face, hmtx, gid, upem);
+    if (progW < 0 && cff.ok) {
+      double w = cff.widthForGid(gid);
+      if (w > 0) progW = w * 1000.0 / upem;
+    }
     if (inRange && w.isNumber()) full[code] = w;
     if (gid == 0 && inRange && w.isNumber() && dictW != 0) continue;
     if (progW < 0) continue;

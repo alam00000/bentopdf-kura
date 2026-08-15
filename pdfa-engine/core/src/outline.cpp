@@ -239,7 +239,7 @@ uint32_t gidForCode(const OutFont& of, uint32_t code) {
     return (static_cast<unsigned char>(of.cid2gid[idx]) << 8) |
            static_cast<unsigned char>(of.cid2gid[idx + 1]);
   }
-  return glyphForCode(of.face->face, static_cast<int>(code), of.enc, of.symbolic);
+  return resolveSimpleGid(*of.face, static_cast<int>(code), of.enc, of.symbolic);
 }
 
 bool codeMappable(const OutFont& of, uint32_t code) {

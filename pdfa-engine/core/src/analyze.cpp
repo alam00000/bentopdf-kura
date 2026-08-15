@@ -1,8 +1,11 @@
 #include <qpdf/QPDF.hh>
+#include <qpdf/QPDFObjGen.hh>
 #include <qpdf/QPDFPageDocumentHelper.hh>
 #include <qpdf/QPDFPageObjectHelper.hh>
 
 #include <cmath>
+#include <cstdio>
+#include <map>
 #include <set>
 #include <string>
 #include <vector>
@@ -19,6 +22,7 @@ constexpr double kContoneMinPpi = 250.0;
 constexpr double kContoneMaxPpi = 450.0;
 constexpr double kBitonalMinPpi = 550.0;
 constexpr double kBitonalMaxPpi = 3600.0;
+constexpr double kSmallTextPt = 4.0;
 
 struct Mat {
   double a = 1, b = 0, c = 0, d = 1, e = 0, f = 0;
@@ -43,6 +47,8 @@ struct Gs {
   double stroke[4] = {0, 0, 0, 0};
   bool fillCmyk = false;
   bool strokeCmyk = false;
+  double fontSize = 0;
+  double tmScale = 1.0;
 };
 
 struct Tally {
@@ -54,6 +60,20 @@ struct Tally {
   double minPpi = 0;
   double maxPpi = 0;
   std::set<int> hairlinePages, richPages, invisPages, lowPages, highPages;
+  long long smallText = 0;
+  double minTextPt = 0;
+  std::set<int> smallTextPages;
+  long long transparency = 0;
+  std::set<int> transparencyPages;
+  long long overprint = 0;
+  std::set<int> overprintPages;
+  long long rgbOps = 0, cmykOps = 0, grayOps = 0;
+  std::set<std::string> colorants;
+  std::map<std::string, long long> imageFilters;
+  long long imageMasks = 0;
+  long long deepImages = 0;
+  std::set<QPDFObjGen> usedFonts;
+  std::vector<QPDFObjectHandle> usedFontDicts;
 };
 
 bool richBlack(const double c[4]) {
@@ -63,6 +83,41 @@ bool richBlack(const double c[4]) {
 
 double strokeScale(const Mat& m) {
   return (std::hypot(m.a, m.b) + std::hypot(m.c, m.d)) / 2.0;
+}
+
+void classifySpace(QPDFObjectHandle cs, Tally& t, int depth = 0) {
+  if (depth > 4) return;
+  if (cs.isName()) {
+    std::string n = cs.getName();
+    if (n == "/DeviceRGB" || n == "/CalRGB") ++t.rgbOps;
+    else if (n == "/DeviceCMYK") ++t.cmykOps;
+    else if (n == "/DeviceGray" || n == "/CalGray") ++t.grayOps;
+    return;
+  }
+  if (!cs.isArray() || cs.getArrayNItems() < 1) return;
+  std::string fam = nameOf(cs.getArrayItem(0));
+  if (fam == "/ICCBased" && cs.getArrayNItems() >= 2 && cs.getArrayItem(1).isStream()) {
+    QPDFObjectHandle n = cs.getArrayItem(1).getDict().getKey("/N");
+    long long comps = n.isInteger() ? n.getIntValue() : 0;
+    if (comps == 3) ++t.rgbOps;
+    else if (comps == 4) ++t.cmykOps;
+    else if (comps == 1) ++t.grayOps;
+  } else if (fam == "/Separation" && cs.getArrayNItems() >= 2) {
+    std::string col = nameOf(cs.getArrayItem(1));
+    if (col.size() > 1 && col != "/All" && col != "/None") t.colorants.insert(col.substr(1));
+  } else if (fam == "/DeviceN" && cs.getArrayNItems() >= 2 && cs.getArrayItem(1).isArray()) {
+    QPDFObjectHandle arr = cs.getArrayItem(1);
+    for (int i = 0; i < arr.getArrayNItems(); ++i) {
+      std::string col = nameOf(arr.getArrayItem(i));
+      if (col.size() > 1 && col != "/None") t.colorants.insert(col.substr(1));
+    }
+  } else if (fam == "/Indexed" || fam == "/I") {
+    if (cs.getArrayNItems() >= 2) classifySpace(cs.getArrayItem(1), t, depth + 1);
+  } else if (fam == "/CalRGB" || fam == "/Lab") {
+    ++t.rgbOps;
+  } else if (fam == "/CalGray") {
+    ++t.grayOps;
+  }
 }
 
 struct Scanner : QPDFObjectHandle::ParserCallbacks {
@@ -100,6 +155,60 @@ struct Scanner : QPDFObjectHandle::ParserCallbacks {
     QPDFObjectHandle g = egs.getKey(lastName);
     if (!g.isDictionary()) return;
     if (g.getKey("/LW").isNumber()) gs.lineWidth = g.getKey("/LW").getNumericValue();
+    bool transparent = false;
+    if (g.getKey("/CA").isNumber() && g.getKey("/CA").getNumericValue() < 1.0) {
+      transparent = true;
+    }
+    if (g.getKey("/ca").isNumber() && g.getKey("/ca").getNumericValue() < 1.0) {
+      transparent = true;
+    }
+    QPDFObjectHandle sm = g.getKey("/SMask");
+    if (!sm.isNull() && !nameIs(sm, "/None")) transparent = true;
+    QPDFObjectHandle bm = g.getKey("/BM");
+    std::string bmName = nameOf(bm);
+    if (bm.isArray() && bm.getArrayNItems() > 0) bmName = nameOf(bm.getArrayItem(0));
+    if (!bmName.empty() && bmName != "/Normal" && bmName != "/Compatible") {
+      transparent = true;
+    }
+    if (transparent) {
+      ++tally.transparency;
+      tally.transparencyPages.insert(page);
+    }
+    bool op = false;
+    if (g.getKey("/OP").isBool() && g.getKey("/OP").getBoolValue()) op = true;
+    if (g.getKey("/op").isBool() && g.getKey("/op").getBoolValue()) op = true;
+    if (g.getKey("/OPM").isInteger() && g.getKey("/OPM").getIntValue() == 1) op = true;
+    if (op) {
+      ++tally.overprint;
+      tally.overprintPages.insert(page);
+    }
+  }
+
+  void resolveColorSpace(const std::string& name) {
+    static const std::set<std::string> kDevice = {"/DeviceRGB", "/DeviceCMYK",
+                                                  "/DeviceGray", "/Pattern"};
+    if (name.empty()) return;
+    if (kDevice.count(name)) {
+      classifySpace(QPDFObjectHandle::newName(name), tally);
+      return;
+    }
+    if (!res.isDictionary()) return;
+    QPDFObjectHandle csd = res.getKey("/ColorSpace");
+    if (csd.isDictionary() && !csd.getKey(name).isNull()) {
+      classifySpace(csd.getKey(name), tally);
+    }
+  }
+
+  void resolveFont(const std::string& name) {
+    if (name.empty() || !res.isDictionary()) return;
+    QPDFObjectHandle fd = res.getKey("/Font");
+    if (!fd.isDictionary()) return;
+    QPDFObjectHandle fnt = fd.getKey(name);
+    if (!fnt.isDictionary()) return;
+    if (fnt.isIndirect()) {
+      if (!tally.usedFonts.insert(fnt.getObjGen()).second) return;
+    }
+    tally.usedFontDicts.push_back(fnt);
   }
 
   void handleObject(QPDFObjectHandle obj, size_t, size_t) override {
@@ -131,19 +240,43 @@ struct Scanner : QPDFObjectHandle::ParserCallbacks {
       applyExtGState();
     } else if (op == "Tr" && !nums.empty()) {
       gs.renderMode = static_cast<int>(nums.back());
+    } else if (op == "Tf" && !nums.empty()) {
+      gs.fontSize = nums.back();
+      resolveFont(lastName);
+    } else if (op == "BT") {
+      gs.tmScale = 1.0;
+    } else if (op == "Tm" && nums.size() >= 6) {
+      size_t n = nums.size();
+      gs.tmScale = (std::hypot(nums[n - 6], nums[n - 5]) +
+                    std::hypot(nums[n - 4], nums[n - 3])) /
+                   2.0;
     } else if (op == "k" && nums.size() >= 4) {
       size_t n = nums.size();
       gs.fill[0] = nums[n - 4]; gs.fill[1] = nums[n - 3];
       gs.fill[2] = nums[n - 2]; gs.fill[3] = nums[n - 1];
       gs.fillCmyk = true;
+      ++tally.cmykOps;
     } else if (op == "K" && nums.size() >= 4) {
       size_t n = nums.size();
       gs.stroke[0] = nums[n - 4]; gs.stroke[1] = nums[n - 3];
       gs.stroke[2] = nums[n - 2]; gs.stroke[3] = nums[n - 1];
       gs.strokeCmyk = true;
-    } else if (op == "rg" || op == "g" || op == "cs" || op == "sc" || op == "scn") {
+      ++tally.cmykOps;
+    } else if (op == "rg" || op == "RG") {
+      if (op == "rg") gs.fillCmyk = false;
+      else gs.strokeCmyk = false;
+      ++tally.rgbOps;
+    } else if (op == "g" || op == "G") {
+      if (op == "g") gs.fillCmyk = false;
+      else gs.strokeCmyk = false;
+      ++tally.grayOps;
+    } else if (op == "cs" || op == "CS") {
+      if (op == "cs") gs.fillCmyk = false;
+      else gs.strokeCmyk = false;
+      resolveColorSpace(lastName);
+    } else if (op == "sc" || op == "scn") {
       gs.fillCmyk = false;
-    } else if (op == "RG" || op == "G" || op == "CS" || op == "SC" || op == "SCN") {
+    } else if (op == "SC" || op == "SCN") {
       gs.strokeCmyk = false;
     } else if (op == "S" || op == "s") {
       markHairline();
@@ -164,6 +297,12 @@ struct Scanner : QPDFObjectHandle::ParserCallbacks {
         if (m == 1 || m == 2 || m == 5 || m == 6) {
           markRich(gs.stroke, gs.strokeCmyk);
           markHairline();
+        }
+        double eff = gs.fontSize * gs.tmScale * strokeScale(gs.ctm);
+        if (eff > 0.01 && eff < kSmallTextPt) {
+          ++tally.smallText;
+          tally.smallTextPages.insert(page);
+          if (tally.minTextPt == 0 || eff < tally.minTextPt) tally.minTextPt = eff;
         }
       }
     } else if (op == "Do" && !lastName.empty()) {
@@ -194,6 +333,28 @@ void scanContent(QPDFObjectHandle contents, QPDFObjectHandle res, const Gs& init
     QPDFObjectHandle dict = xo.getDict();
     std::string sub = nameOf(dict.getKey("/Subtype"));
     if (sub == "/Image") {
+      QPDFObjectHandle filt = dict.getKey("/Filter");
+      std::vector<std::string> fnames;
+      if (filt.isName()) fnames.push_back(filt.getName());
+      if (filt.isArray()) {
+        for (int fi = 0; fi < filt.getArrayNItems(); ++fi) {
+          fnames.push_back(nameOf(filt.getArrayItem(fi)));
+        }
+      }
+      if (fnames.empty()) fnames.push_back("/None");
+      ++tally.imageFilters[fnames.back()];
+      if (dict.getKey("/ImageMask").isBool() && dict.getKey("/ImageMask").getBoolValue()) {
+        ++tally.imageMasks;
+      }
+      if (dict.getKey("/BitsPerComponent").isInteger() &&
+          dict.getKey("/BitsPerComponent").getIntValue() > 8) {
+        ++tally.deepImages;
+      }
+      classifySpace(dict.getKey("/ColorSpace"), tally);
+      if (dict.getKey("/SMask").isStream()) {
+        ++tally.transparency;
+        tally.transparencyPages.insert(page);
+      }
       int w = dict.getKey("/Width").isInteger()
                   ? static_cast<int>(dict.getKey("/Width").getIntValue()) : 0;
       int h = dict.getKey("/Height").isInteger()
@@ -223,6 +384,11 @@ void scanContent(QPDFObjectHandle contents, QPDFObjectHandle res, const Gs& init
       }
     } else if (sub == "/Form") {
       if (!seen.enter(xo)) continue;
+      QPDFObjectHandle grp = dict.getKey("/Group");
+      if (grp.isDictionary() && nameIs(grp.getKey("/S"), "/Transparency")) {
+        ++tally.transparency;
+        tally.transparencyPages.insert(page);
+      }
       Gs inner = d.second;
       QPDFObjectHandle mtx = dict.getKey("/Matrix");
       if (mtx.isArray() && mtx.getArrayNItems() == 6) {
@@ -258,17 +424,41 @@ std::string pageList(const std::set<int>& pages) {
 
 void passAnalyze(Ctx& ctx) {
   Tally tally;
+  std::map<std::string, std::set<int>> pageSizes;
+  std::map<std::string, long long> annotTypes;
   try {
     QPDFPageDocumentHelper dh(ctx.pdf);
     std::vector<QPDFPageObjectHelper> pages = dh.getAllPages();
     int pageNum = 0;
     for (auto& ph : pages) {
       ++pageNum;
+      QPDFObjectHandle page = ph.getObjectHandle();
       QPDFObjectHandle res = ph.getAttribute("/Resources", true);
       Visited seen;
       Gs initial;
-      scanContent(ph.getObjectHandle().getKey("/Contents"), res, initial, pageNum, 0,
-                  seen, tally);
+      scanContent(page.getKey("/Contents"), res, initial, pageNum, 0, seen, tally);
+      QPDFObjectHandle grp = page.getKey("/Group");
+      if (grp.isDictionary() && nameIs(grp.getKey("/S"), "/Transparency")) {
+        ++tally.transparency;
+        tally.transparencyPages.insert(pageNum);
+      }
+      QPDFObjectHandle mb = ph.getAttribute("/MediaBox", true);
+      if (mb.isArray() && mb.getArrayNItems() == 4) {
+        double w = std::fabs(numOf(mb.getArrayItem(2), 0) - numOf(mb.getArrayItem(0), 0));
+        double h = std::fabs(numOf(mb.getArrayItem(3), 0) - numOf(mb.getArrayItem(1), 0));
+        char buf[48];
+        std::snprintf(buf, sizeof(buf), "%.0f x %.0f pt", w, h);
+        pageSizes[buf].insert(pageNum);
+      }
+      QPDFObjectHandle annots = page.getKey("/Annots");
+      if (annots.isArray()) {
+        for (int i = 0; i < annots.getArrayNItems(); ++i) {
+          QPDFObjectHandle a = annots.getArrayItem(i);
+          if (!a.isDictionary()) continue;
+          std::string sub = nameOf(a.getKey("/Subtype"));
+          if (sub.size() > 1) ++annotTypes[sub.substr(1)];
+        }
+      }
     }
   } catch (...) {
     return;
@@ -305,6 +495,138 @@ void passAnalyze(Ctx& ctx) {
             "resolution at their placed size, 450 ppi contone or 3600 ppi bitonal; "
             "highest is " + std::to_string(static_cast<int>(tally.maxPpi)) + " ppi (" +
             pageList(tally.highPages) + ")");
+  }
+  if (tally.smallText) {
+    char minBuf[24];
+    std::snprintf(minBuf, sizeof(minBuf), "%.1f", tally.minTextPt);
+    finding("ANALYZE_SMALL_TEXT",
+            std::to_string(tally.smallText) + " text run(s) below 4 pt at rendered size; "
+            "smallest is " + minBuf + " pt (" + pageList(tally.smallTextPages) + ")");
+  }
+  if (tally.transparency) {
+    finding("ANALYZE_TRANSPARENCY",
+            std::to_string(tally.transparency) + " use(s) of transparency (soft masks, "
+            "constant alpha below 1, non-normal blend modes or transparency groups) (" +
+            pageList(tally.transparencyPages) + ")");
+  }
+  if (tally.overprint) {
+    finding("ANALYZE_OVERPRINT",
+            std::to_string(tally.overprint) + " graphics state(s) enabling overprint (" +
+            pageList(tally.overprintPages) + ")");
+  }
+  if (tally.rgbOps || tally.cmykOps || tally.grayOps || !tally.colorants.empty()) {
+    std::string detail = "colour usage: " + std::to_string(tally.rgbOps) + " RGB, " +
+                         std::to_string(tally.cmykOps) + " CMYK, " +
+                         std::to_string(tally.grayOps) + " grayscale selection(s)";
+    if (!tally.colorants.empty()) {
+      detail += "; spot colourant(s):";
+      int shown = 0;
+      for (const std::string& c : tally.colorants) {
+        if (shown == 8) {
+          detail += " …";
+          break;
+        }
+        detail += (shown ? ", " : " ") + c;
+        ++shown;
+      }
+    }
+    finding("ANALYZE_COLOR_USAGE", detail);
+  }
+  if (!tally.imageFilters.empty()) {
+    std::string detail = "image compression:";
+    bool first = true;
+    for (const auto& kv : tally.imageFilters) {
+      detail += (first ? " " : ", ") + std::to_string(kv.second) + " " +
+                (kv.first.size() > 1 ? kv.first.substr(1) : kv.first);
+      first = false;
+    }
+    if (tally.imageMasks) {
+      detail += "; " + std::to_string(tally.imageMasks) + " stencil mask(s)";
+    }
+    if (tally.deepImages) {
+      detail += "; " + std::to_string(tally.deepImages) + " image(s) above 8 bits per "
+                "component";
+    }
+    finding("ANALYZE_IMAGE_FORMATS", detail);
+  }
+  {
+    int notEmbedded = 0, type3 = 0, noToUnicode = 0;
+    std::string firstMissing;
+    for (QPDFObjectHandle f : tally.usedFontDicts) {
+      std::string sub = nameOf(f.getKey("/Subtype"));
+      if (sub == "/Type3") {
+        ++type3;
+        continue;
+      }
+      QPDFObjectHandle fd = f.getKey("/FontDescriptor");
+      if (sub == "/Type0" && f.getKey("/DescendantFonts").isArray() &&
+          f.getKey("/DescendantFonts").getArrayNItems() == 1 &&
+          f.getKey("/DescendantFonts").getArrayItem(0).isDictionary()) {
+        fd = f.getKey("/DescendantFonts").getArrayItem(0).getKey("/FontDescriptor");
+      }
+      bool embedded = fd.isDictionary() &&
+                      (fd.getKey("/FontFile").isStream() ||
+                       fd.getKey("/FontFile2").isStream() ||
+                       fd.getKey("/FontFile3").isStream());
+      if (!embedded) {
+        ++notEmbedded;
+        if (firstMissing.empty()) {
+          std::string base = nameOf(f.getKey("/BaseFont"));
+          if (base.size() > 1) firstMissing = base.substr(1);
+        }
+      }
+      if (!f.getKey("/ToUnicode").isStream()) ++noToUnicode;
+    }
+    if (notEmbedded) {
+      finding("ANALYZE_FONT_NOT_EMBEDDED",
+              std::to_string(notEmbedded) + " used font(s) not embedded" +
+                  (firstMissing.empty() ? "" : " (first: " + firstMissing + ")"));
+    }
+    if (type3) {
+      finding("ANALYZE_TYPE3_FONTS", std::to_string(type3) + " Type 3 font(s) in use");
+    }
+    if (noToUnicode) {
+      finding("ANALYZE_FONT_NO_TOUNICODE",
+              std::to_string(noToUnicode) + " used font(s) without a ToUnicode map "
+              "(text extraction unreliable)");
+    }
+  }
+  if (pageSizes.size() > 1) {
+    std::string detail = std::to_string(pageSizes.size()) + " distinct page sizes:";
+    int shown = 0;
+    for (const auto& kv : pageSizes) {
+      if (shown == 4) {
+        detail += " …";
+        break;
+      }
+      detail += (shown ? ", " : " ") + kv.first + " (" + pageList(kv.second) + ")";
+      ++shown;
+    }
+    finding("ANALYZE_MIXED_PAGE_SIZES", detail);
+  }
+  if (!annotTypes.empty()) {
+    std::string detail = "annotations:";
+    bool first = true;
+    for (const auto& kv : annotTypes) {
+      detail += (first ? " " : ", ") + std::to_string(kv.second) + " " + kv.first;
+      first = false;
+    }
+    finding("ANALYZE_ANNOTATIONS", detail);
+  }
+  {
+    QPDFObjectHandle ois = ctx.pdf.getRoot().getKey("/OutputIntents");
+    if (ois.isArray() && ois.getArrayNItems() > 0 && ois.getArrayItem(0).isDictionary()) {
+      QPDFObjectHandle oi = ois.getArrayItem(0);
+      std::string s = nameOf(oi.getKey("/S"));
+      std::string ident = oi.getKey("/OutputConditionIdentifier").isString()
+                              ? oi.getKey("/OutputConditionIdentifier").getUTF8Value()
+                              : "";
+      finding("ANALYZE_OUTPUT_INTENT",
+              "output intent present" + (s.size() > 1 ? " (" + s.substr(1) : "(") +
+                  (ident.empty() ? "" : ", " + ident) + ")");
+    } else {
+      finding("ANALYZE_OUTPUT_INTENT", "no output intent present");
+    }
   }
 }
 }

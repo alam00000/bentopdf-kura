@@ -3,7 +3,8 @@
 
 out/
 
-suite/
+suite
+calpoly/
 cert/
 corpus/
 
