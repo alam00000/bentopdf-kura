@@ -45,11 +45,19 @@ struct PfRule {
   std::string name;
   int severity = 1;
   int logic = 0;
+  int scope = 0;
   std::vector<std::string> condIds;
+};
+
+struct PfBuiltin {
+  std::string name;
+  int severity = 1;
+  std::map<std::string, double> params;
 };
 
 struct PfProfile {
   std::string name;
+  std::vector<PfBuiltin> builtins;
   std::map<std::string, PfCondition> conds;
   std::vector<PfRule> rules;
 };
@@ -280,6 +288,25 @@ bool parseKuraJson(const std::string& text, PfProfile& out) {
   if (!jp.ok || root.type != Json::kObj || !root.get("kura-profile")) return false;
   const Json* name = root.get("name");
   if (name) out.name = name->str;
+  const Json* bts = root.get("builtins");
+  if (bts && bts->type == Json::kArr) {
+    for (const Json& b : bts->arr) {
+      if (b.type != Json::kObj) continue;
+      const Json* bn = b.get("name");
+      if (!bn || bn->type != Json::kStr) continue;
+      PfBuiltin pb;
+      pb.name = bn->str;
+      const Json* sv = b.get("severity");
+      if (sv && sv->type == Json::kNum) pb.severity = static_cast<int>(sv->num);
+      const Json* pr = b.get("params");
+      if (pr && pr->type == Json::kObj) {
+        for (const auto& kv : pr->obj) {
+          if (kv.second.type == Json::kNum) pb.params[kv.first] = kv.second.num;
+        }
+      }
+      out.builtins.push_back(pb);
+    }
+  }
   const Json* checks = root.get("checks");
   if (!checks || checks->type != Json::kArr) return false;
   int serial = 0;
@@ -292,6 +319,10 @@ bool parseKuraJson(const std::string& text, PfProfile& out) {
     const Json* sev = c.get("severity");
     std::string sv = sev ? sev->str : "info";
     rule.severity = sv == "error" ? 3 : (sv == "warning" ? 2 : 1);
+    const Json* sc = c.get("scope");
+    if (sc && sc->type == Json::kStr) {
+      rule.scope = sc->str == "trim" ? 2 : (sc->str == "bleed" ? 3 : 0);
+    }
     const Json* any = c.get("any");
     std::vector<const Json*> groups;
     if (any && any->type == Json::kArr) {
@@ -405,6 +436,8 @@ bool parsePreflightXml(const std::string& text, PfProfile& out) {
     rule.name = unescape(tagText(text, "name", pos, end));
     size_t lp = text.find("condition_logic=\"", pos);
     if (lp != std::string::npos && lp < end) rule.logic = text[lp + 17] - '0';
+    size_t ip = text.find("ignore_objects=\"", pos);
+    if (ip != std::string::npos && ip < end) rule.scope = text[ip + 16] - '0';
     size_t cpos = text.find("<conditions>", pos);
     size_t cend = text.find("</conditions>", pos);
     if (cpos != std::string::npos && cend != std::string::npos && cend < end) {
@@ -444,6 +477,40 @@ bool parsePreflightXml(const std::string& text, PfProfile& out) {
     }
   }
   size_t ppos = text.find("<profile>");
+  if (ppos != std::string::npos) {
+    size_t pend2 = text.find("</profile>", ppos);
+    size_t cp = ppos;
+    while (true) {
+      cp = text.find("<check name=\"", cp);
+      if (cp == std::string::npos || (pend2 != std::string::npos && cp > pend2)) break;
+      size_t nend = text.find('"', cp + 13);
+      PfBuiltin b;
+      b.name = text.substr(cp + 13, nend - cp - 13);
+      size_t sevp = text.find("check_severity=\"", cp);
+      if (sevp != std::string::npos && sevp < cp + 120) b.severity = text[sevp + 16] - '0';
+      size_t cend = text.find("</check>", cp);
+      size_t selfclose = text.find("/>", cp);
+      size_t bodyEnd = cend != std::string::npos ? cend : text.size();
+      if (selfclose != std::string::npos && (cend == std::string::npos || selfclose < text.find('>', cp))) {
+        bodyEnd = selfclose;
+      }
+      size_t dp = cp;
+      while (true) {
+        dp = text.find("<data name=\"", dp);
+        if (dp == std::string::npos || dp > bodyEnd) break;
+        size_t dn = text.find('"', dp + 12);
+        std::string key = text.substr(dp + 12, dn - dp - 12);
+        size_t vopen = text.find('>', dn);
+        size_t vclose = text.find("</data>", vopen);
+        if (vopen != std::string::npos && vclose != std::string::npos && vclose <= bodyEnd + 200) {
+          b.params[key] = std::atof(text.substr(vopen + 1, vclose - vopen - 1).c_str());
+        }
+        dp = (vclose == std::string::npos ? dp + 12 : vclose + 1);
+      }
+      out.builtins.push_back(b);
+      cp = cend == std::string::npos ? cp + 13 : cend + 1;
+    }
+  }
   std::set<std::string> activeRuleIds;
   std::map<std::string, int> activeSev;
   if (ppos != std::string::npos) {
@@ -615,6 +682,8 @@ struct FontFacts {
   bool hasFlags = false;
   bool type3 = false;
   bool cid = false;
+  bool cid0 = false;
+  bool openType = false;
   bool trueType = false;
   bool hasCIDToGIDMap = true;
   bool hasToUnicode = false;
@@ -695,6 +764,12 @@ struct Events {
   bool docHasProcSteps = false;
   bool hasStructTree = false;
   bool hasParentTree = false;
+  bool hasTransferCurve = false;
+  bool hasHalftoneDict = false;
+  bool hasPostScriptXObject = false;
+  bool hasTransparencyAnywhere = false;
+  bool encrypted = false;
+  bool damaged = false;
   int qpdfWarnings = 0;
   std::string xmpRaw;
   std::set<std::string> docIssues;
@@ -966,10 +1041,11 @@ struct EvScanner : QPDFObjectHandle::ParserCallbacks {
         target = df.getArrayItem(0);
         ff.cid = true;
         std::string dst = nameOf(target.getKey("/Subtype"));
+        if (dst == "/CIDFontType0") ff.cid0 = true;
         if (dst == "/CIDFontType2") {
           ff.trueType = true;
           QPDFObjectHandle c2g = target.getKey("/CIDToGIDMap");
-          ff.hasCIDToGIDMap = c2g.isNull() || nameIs(c2g, "/Identity") || c2g.isStream();
+          ff.hasCIDToGIDMap = nameIs(c2g, "/Identity") || c2g.isStream();
         }
       }
     }
@@ -983,6 +1059,10 @@ struct EvScanner : QPDFObjectHandle::ParserCallbacks {
             auto buf = ffs.getStreamData(qpdf_dl_all);
             ff.fontProgram.assign(reinterpret_cast<const char*>(buf->getBuffer()),
                                   buf->getSize());
+            if (ff.fontProgram.rfind("OTTO", 0) == 0 ||
+                nameIs(ffs.getDict().getKey("/Subtype"), "/OpenType")) {
+              ff.openType = true;
+            }
           } catch (...) {
             ff.ftValid = false;
           }
@@ -1399,21 +1479,34 @@ void scanEvents(QPDFObjectHandle contents, QPDFObjectHandle res, const Gs& initi
   }
 }
 
-double numVal(const PfAtom& a) {
-  for (const std::string& v : a.vals) {
-    size_t n = v.size();
-    if (n > 2) {
-      std::string suf = v.substr(n - 2);
-      if (suf == "mm" || suf == "cm" || suf == "in" || suf == "pt") {
-        double x = std::atof(v.c_str());
-        if (suf == "mm") return x * 72.0 / 25.4;
-        if (suf == "cm") return x * 72.0 / 2.54;
-        if (suf == "in") return x * 72.0;
-        return x;
-      }
+double unitVal(const std::string& v, bool& hadUnit) {
+  hadUnit = false;
+  size_t n = v.size();
+  if (n > 2) {
+    std::string suf = v.substr(n - 2);
+    if (suf == "mm" || suf == "cm" || suf == "in" || suf == "pt") {
+      hadUnit = true;
+      double x = std::atof(v.c_str());
+      if (suf == "mm") return x * 72.0 / 25.4;
+      if (suf == "cm") return x * 72.0 / 2.54;
+      if (suf == "in") return x * 72.0;
+      return x;
     }
   }
-  return a.vals.empty() ? 0.0 : std::atof(a.vals[0].c_str());
+  return std::atof(v.c_str());
+}
+
+double numVal(const PfAtom& a) {
+  if (a.vals.empty()) return 0.0;
+  bool hadUnit = false;
+  double first = unitVal(a.vals[0], hadUnit);
+  if (first != 0.0) return first;
+  for (size_t i = 1; i < a.vals.size(); ++i) {
+    bool u = false;
+    double v = unitVal(a.vals[i], u);
+    if (u && v != 0.0) return v;
+  }
+  return first;
 }
 
 bool cmpNum(double lhs, const std::string& op, double rhs) {
@@ -2519,6 +2612,28 @@ void passProfile(Ctx& ctx, const unsigned char* inputData, std::size_t inputSize
     QPDFObjectHandle str = root.getKey("/StructTreeRoot");
     ev.hasStructTree = str.isDictionary();
     if (str.isDictionary()) ev.hasParentTree = str.getKey("/ParentTree").isDictionary();
+    ev.encrypted = ctx.pdf.isEncrypted();
+    for (QPDFObjectHandle obj : ctx.pdf.getAllObjects()) {
+      if (obj.isDictionary() && nameIs(obj.getKey("/Type"), "/ExtGState")) {
+        QPDFObjectHandle tr = obj.getKey("/TR");
+        QPDFObjectHandle tr2 = obj.getKey("/TR2");
+        if ((!tr.isNull() && !nameIs(tr, "/Identity")) ||
+            (!tr2.isNull() && !nameIs(tr2, "/Identity") && !nameIs(tr2, "/Default"))) {
+          ev.hasTransferCurve = true;
+        }
+        QPDFObjectHandle ht = obj.getKey("/HT");
+        if (ht.isDictionary() || ht.isStream()) {
+          QPDFObjectHandle htType = (ht.isStream() ? ht.getDict() : ht).getKey("/HalftoneType");
+          if (htType.isInteger() && htType.getIntValue() != 1) ev.hasHalftoneDict = true;
+        }
+      }
+      if (obj.isStream()) {
+        QPDFObjectHandle sd = obj.getDict();
+        if (nameIs(sd.getKey("/Subtype"), "/PS") || !sd.getKey("/PS").isNull()) {
+          ev.hasPostScriptXObject = true;
+        }
+      }
+    }
   }
   auto boxEq = [](QPDFObjectHandle a, QPDFObjectHandle b) {
     if (!a.isArray() || !b.isArray() || a.getArrayNItems() != 4 ||
@@ -2670,16 +2785,22 @@ void passProfile(Ctx& ctx, const unsigned char* inputData, std::size_t inputSize
           }
         }
       };
+      auto bigEnough = [](const Box& b) {
+        if (!b.valid) return true;
+        return (b.x1 - b.x0) >= 28.35 && (b.y1 - b.y0) >= 28.35;
+      };
       for (size_t i = paintBefore; i < ev.paints.size(); ++i) {
         const PaintEvent& pe = ev.paints[i];
         if (pe.transparency) pf.hasTransObj = true;
         if (pe.noPaint) continue;
+        if (!bigEnough(pe.bbox)) continue;
         addPlates(pe.comps, pe.color);
       }
       for (size_t i = textBefore; i < ev.texts.size(); ++i) {
         const TextEvent& te = ev.texts[i];
         if (te.transparency) pf.hasTransObj = true;
         if (te.renderMode == 3) continue;
+        if (!bigEnough(te.bbox)) continue;
         addPlates(te.comps, te.color);
       }
       for (size_t i = imgBefore; i < ev.images.size(); ++i) {
@@ -2729,11 +2850,16 @@ void passProfile(Ctx& ctx, const unsigned char* inputData, std::size_t inputSize
                                 cmsFLAGS_BLACKPOINTCOMPENSATION);
       }
       auto rgbInk = [&](double r, double g, double b) {
-        if (!tDbl) return (3.0 - r - g - b) * 100.0;
-        double in[3] = {r, g, b};
-        double out[4] = {0, 0, 0, 0};
-        cmsDoTransform(tDbl, in, out, 1);
-        return out[0] + out[1] + out[2] + out[3];
+        double sum;
+        if (!tDbl) {
+          sum = (3.0 - r - g - b) * 100.0;
+        } else {
+          double in[3] = {r, g, b};
+          double out[4] = {0, 0, 0, 0};
+          cmsDoTransform(tDbl, in, out, 1);
+          sum = out[0] + out[1] + out[2] + out[3];
+        }
+        return std::min(sum, 300.0);
       };
       auto inkOf = [&](const std::vector<double>& c, const ColorInfo& ci) -> double {
         if (c.empty()) return 0;
@@ -2832,8 +2958,13 @@ void passProfile(Ctx& ctx, const unsigned char* inputData, std::size_t inputSize
         }
         pf.inkCoverage = maxTac;
       }
+      std::set<int> shadePages;
+      for (const PaintEvent& e : ev.paints) {
+        if (e.shade || e.color.cls == "pattern") shadePages.insert(e.page);
+      }
       if (ctx.opt.rasterizePage && t8) {
         for (PageFacts& pf : ev.pages) {
+          if (!shadePages.count(pf.page)) continue;
           int w = 0, h = 0;
           std::string rgb;
           if (!ctx.opt.rasterizePage(pf.page - 1, 72.0, w, h, rgb)) continue;
@@ -2953,7 +3084,8 @@ void passProfile(Ctx& ctx, const unsigned char* inputData, std::size_t inputSize
           for (FontFacts& f : ev.fonts) {
             if (f.og == e.fontOg) ff = &f;
           }
-          if (ff && !ff->hasToUnicode && ff->encodingName.empty() && ff->symbolic) {
+          if (ff && !ff->hasToUnicode &&
+              ((ff->encodingName.empty() && ff->symbolic) || ff->cid)) {
             e.mappedToUnicode = false;
             ff->allUsedMapped = false;
           }
@@ -2963,13 +3095,28 @@ void passProfile(Ctx& ctx, const unsigned char* inputData, std::size_t inputSize
             if (c == ' ') e.glyphWhitespace = true;
             FT_UInt gid = FT_Get_Char_Index(face, c);
             if (gid == 0) {
+              for (int cm = 0; cm < face->num_charmaps && gid == 0; ++cm) {
+                if (FT_Set_Charmap(face, face->charmaps[cm]) == 0) {
+                  gid = FT_Get_Char_Index(face, c);
+                  if (gid == 0 && c < 0xF0) {
+                    gid = FT_Get_Char_Index(face, 0xF000 + c);
+                  }
+                }
+              }
+            }
+            if (gid == 0 && ff->symbolic && ff->trueType &&
+                static_cast<long>(c) < face->num_glyphs) {
+              gid = c;
+            }
+            if (gid == 0) {
               e.glyphUndefined = true;
               ff->anyUndefinedGlyph = true;
               continue;
             }
             if (FT_Load_Glyph(face, gid, FT_LOAD_NO_SCALE) == 0) {
               if (face->glyph->format == FT_GLYPH_FORMAT_OUTLINE &&
-                  face->glyph->outline.n_points == 0 && c != ' ') {
+                  face->glyph->outline.n_points == 0 && c != ' ' &&
+                  face->glyph->advance.x == 0) {
                 e.glyphHasContour = false;
               }
               int wi = c - ff->firstChar;
@@ -3049,71 +3196,255 @@ void passProfile(Ctx& ctx, const unsigned char* inputData, std::size_t inputSize
   }
 
   {
-    bool hasColourPolicy = false;
-    for (const PfFix& f : collectFixes(ctx.opt.preflightProfile)) {
-      std::string op = lower(f.op);
-      if (op == "ccsettings" || op == "ccpolicy" || op == "ccdestination" ||
-          op == "devicelinkconversion" || op == "quickcolorconversion") {
-        hasColourPolicy = true;
+    auto sevLabel = [](int sev) {
+      if (sev == 0 || sev >= 3) return "Error";
+      return sev == 1 ? "Warning" : "Info";
+    };
+    auto emitB = [&](const PfBuiltin& b, long long n, const std::set<int>& pages,
+                     const std::string& what) {
+      if (n <= 0) return;
+      std::string detail = std::string(sevLabel(b.severity)) + ": " + what + " (" +
+                           std::to_string(n) + " hit(s)";
+      if (!pages.empty()) detail += ", page " + std::to_string(*pages.begin());
+      detail += ")";
+      ctx.res.analysis.push_back({"PROFILE_HIT", detail, false});
+    };
+    auto isDevIndep = [](const ColorInfo& ci) {
+      return ci.cls == "icc" || ci.cls == "cal" || ci.cls == "lab";
+    };
+    auto onColourPlates = [](const ColorInfo& ci, const std::vector<double>& comps) {
+      if (ci.cls == "rgb" || ci.cls == "lab") return true;
+      if (ci.cls == "icc" || ci.cls == "cal") return true;
+      if (ci.cls == "cmyk") {
+        if (comps.size() == 4) {
+          return comps[0] > 0.001 || comps[1] > 0.001 || comps[2] > 0.001;
+        }
+        return true;
       }
-    }
-    if (hasColourPolicy) {
-      auto isDevIndep = [](const ColorInfo& ci) {
-        return ci.cls == "icc" || ci.cls == "cal" || ci.cls == "lab";
-      };
-      long long devIndep = 0, colourImages = 0;
-      std::set<int> diPages, ciPages;
-      auto onColourPlates = [](const ColorInfo& ci, const std::vector<double>& comps) {
-        if (ci.cls == "rgb" || ci.cls == "lab") return true;
-        if (ci.cls == "icc" || ci.cls == "cal") return true;
-        if (ci.cls == "cmyk") {
-          if (comps.size() == 4) {
-            return comps[0] > 0.001 || comps[1] > 0.001 || comps[2] > 0.001;
+      if (ci.cls == "separation" || ci.cls == "devicen") {
+        for (const std::string& c : ci.colorants) {
+          if (c != "Black" && c != "Gray" && c != "None") return true;
+        }
+      }
+      return false;
+    };
+    for (const PfBuiltin& b : prof.builtins) {
+      const std::string& nm = b.name;
+      long long n = 0;
+      std::set<int> pg;
+      if (nm == "PRCWzPage_SizeOrientDifferent") {
+        for (size_t i = 1; i < ev.pages.size(); ++i) {
+          if (std::abs(ev.pages[i].wPt - ev.pages[0].wPt) > 3 ||
+              std::abs(ev.pages[i].hPt - ev.pages[0].hPt) > 3) {
+            ++n;
+            pg.insert(ev.pages[i].page);
           }
-          return true;
         }
-        if (ci.cls == "separation" || ci.cls == "devicen") {
-          for (const std::string& c : ci.colorants) {
-            if (c != "Black" && c != "Gray" && c != "None") return true;
+        emitB(b, n, pg, "Pages differ in size or orientation");
+      } else if (nm == "PRCWzPage_OnePageEmpty") {
+        for (const PageFacts& p : ev.pages) {
+          if (p.empty) {
+            ++n;
+            pg.insert(p.page);
           }
         }
-        return false;
-      };
-      auto tally = [&](const ColorInfo& ci, const std::vector<double>& comps, int page) {
-        if (isDevIndep(ci)) {
-          ++devIndep;
-          diPages.insert(page);
+        emitB(b, n, pg, "Empty page");
+      } else if (nm == "PRCWzImag_ResImgLower" || nm == "PRCWzImag_ResImgUpper" ||
+                 nm == "PRCWzImag_ResBmpLower" || nm == "PRCWzImag_ResBmpUpper") {
+        bool bmp = nm.find("Bmp") != std::string::npos;
+        bool lower = nm.find("Lower") != std::string::npos;
+        double ppi = 0;
+        auto it = b.params.find("PixelsPerInch");
+        if (it != b.params.end()) ppi = it->second;
+        if (ppi > 0) {
+          for (const ImageEvent& e : ev.images) {
+            bool isBmp = e.bpc == 1 || e.mask;
+            if (isBmp != bmp || e.ppi <= 0) continue;
+            if ((lower && e.ppi < ppi) || (!lower && e.ppi > ppi)) {
+              ++n;
+              pg.insert(e.page);
+            }
+          }
+          emitB(b, n, pg,
+                std::string(bmp ? "Bitmap" : "Image") + " resolution " +
+                    (lower ? "below " : "above ") + std::to_string((int)ppi) + " ppi");
         }
-        if (onColourPlates(ci, comps)) {
-          ++colourImages;
-          ciPages.insert(page);
+      } else if (nm == "PRCWzColr_CMYSeparations") {
+        for (const PaintEvent& e : ev.paints) {
+          if (!e.noPaint && onColourPlates(e.color, e.comps)) { ++n; pg.insert(e.page); }
         }
-      };
-      for (const PaintEvent& e : ev.paints) {
-        if (!e.noPaint) tally(e.color, e.comps, e.page);
+        for (const TextEvent& e : ev.texts) {
+          if (e.renderMode != 3 && onColourPlates(e.color, e.comps)) { ++n; pg.insert(e.page); }
+        }
+        for (const ImageEvent& e : ev.images) {
+          if (!e.mask && onColourPlates(e.color, {})) { ++n; pg.insert(e.page); }
+        }
+        emitB(b, n, pg, "Objects produce colour plate output (CMY)");
+      } else if (nm == "PRCWzColr_DICS") {
+        for (const PaintEvent& e : ev.paints) {
+          if (!e.noPaint && isDevIndep(e.color)) { ++n; pg.insert(e.page); }
+        }
+        for (const TextEvent& e : ev.texts) {
+          if (e.renderMode != 3 && isDevIndep(e.color)) { ++n; pg.insert(e.page); }
+        }
+        for (const ImageEvent& e : ev.images) {
+          if (isDevIndep(e.color)) { ++n; pg.insert(e.page); }
+        }
+        emitB(b, n, pg, "Device-independent colour in use");
+      } else if (nm == "PRCWzColr_RGB") {
+        for (const PaintEvent& e : ev.paints) {
+          if (!e.noPaint && e.color.cls == "rgb") { ++n; pg.insert(e.page); }
+        }
+        for (const TextEvent& e : ev.texts) {
+          if (e.renderMode != 3 && e.color.cls == "rgb") { ++n; pg.insert(e.page); }
+        }
+        for (const ImageEvent& e : ev.images) {
+          if (e.color.cls == "rgb") { ++n; pg.insert(e.page); }
+        }
+        emitB(b, n, pg, "Object uses RGB");
+      } else if (nm == "PRCWzColr_MoreThan") {
+        double lim = 0;
+        auto it = b.params.find("SpotColorSepsOnPage");
+        if (it != b.params.end()) lim = it->second;
+        if (static_cast<double>(ev.spotPlates.size()) > lim) {
+          n = static_cast<long long>(ev.spotPlates.size());
+          emitB(b, n, pg, "More spot colour separations than allowed");
+        }
+      } else if (nm == "PRCWzFont_NotEmbedded") {
+        for (const FontFacts& f : ev.fonts) {
+          if (!f.embedded) ++n;
+        }
+        emitB(b, n, pg, "Font not embedded");
+      } else if (nm == "PRCWzFont_Type1CID") {
+        for (const FontFacts& f : ev.fonts) {
+          if (f.cid0) ++n;
+        }
+        emitB(b, n, pg, "Uses CID Type 1 font");
+      } else if (nm == "PRCWzFont_TrueTypeCID") {
+        for (const FontFacts& f : ev.fonts) {
+          if (f.cid && f.trueType) ++n;
+        }
+        emitB(b, n, pg, "Uses CID Type 2 font");
+      } else if (nm == "PRCWzFont_OpenType") {
+        for (const FontFacts& f : ev.fonts) {
+          if (f.openType) ++n;
+        }
+        emitB(b, n, pg, "Uses OpenType font");
+      } else if (nm == "PRCWzColr_InconsistentNaming") {
+        for (const auto& [name, alts] : ev.spotAlternates) {
+          if (alts.size() > 1) ++n;
+        }
+        emitB(b, n, pg, "Spot colour with inconsistent representation");
+      } else if (nm == "PRCWzDocu_Encrypted") {
+        emitB(b, ev.encrypted ? 1 : 0, pg, "Document is encrypted");
+      } else if (nm == "PRCWzDocu_Damaged") {
+        emitB(b, ev.qpdfWarnings > 0 ? 1 : 0, pg, "Document structure needed repair");
+      } else if (nm == "PRCWzDocu_SyntaxChecks") {
+        emitB(b, ev.qpdfWarnings, pg, "PDF syntax issue");
+      } else if (nm == "PRCWzDocu_RequiresAtLeast") {
+        double want = 0;
+        auto it = b.params.find("AcroVers");
+        if (it != b.params.end()) want = it->second;
+        double have = 0;
+        if (!ev.pdfVersion.empty()) {
+          double v = std::atof(ev.pdfVersion.c_str());
+          have = v >= 2.0 ? 8 : (v >= 1.7 ? 8 : (v - 1.0) * 10 + 1);
+        }
+        emitB(b, have < want ? 1 : 0, pg, "Requires a newer PDF version");
+      } else if (nm == "PRCWzFont_Embedded") {
+        for (const FontFacts& f : ev.fonts) {
+          if (f.embedded) ++n;
+        }
+        emitB(b, n, pg, "Font is embedded");
+      } else if (nm == "PRCWzImag_NotUncompressed") {
+        for (const ImageEvent& e : ev.images) {
+          if (!e.filters.empty()) ++n;
+        }
+        emitB(b, n, pg, "Image is compressed");
+      } else if (nm == "PRCWzPage_NumPages") {
+        emitB(b, ev.pageCount, pg, "Document page count");
+      } else if (nm == "PRCWzRend_Curve") {
+        emitB(b, ev.hasTransferCurve ? 1 : 0, pg, "Transfer curve in use");
+      } else if (nm == "PRCWzRend_Halftone") {
+        emitB(b, ev.hasHalftoneDict ? 1 : 0, pg, "Halftone screening in use");
+      } else if (nm == "PRCWzRend_Postscript") {
+        emitB(b, ev.hasPostScriptXObject ? 1 : 0, pg, "PostScript XObject in use");
+      } else if (nm == "PRCWzRend_Transparency") {
+        for (const PaintEvent& e : ev.paints) {
+          if (e.transparency) { ++n; pg.insert(e.page); }
+        }
+        for (const TextEvent& e : ev.texts) {
+          if (e.transparency) { ++n; pg.insert(e.page); }
+        }
+        emitB(b, n, pg, "Transparency in use");
+      } else if (nm == "PRCWzRend_Thickness") {
+        double pts = 0.14;
+        auto it = b.params.find("Points");
+        if (it != b.params.end()) pts = it->second;
+        for (const PaintEvent& e : ev.paints) {
+          if (e.stroke && e.width > 0 && e.width < pts) { ++n; pg.insert(e.page); }
+        }
+        emitB(b, n, pg, "Line thickness below the minimum");
       }
-      for (const TextEvent& e : ev.texts) {
-        if (e.renderMode != 3) tally(e.color, e.comps, e.page);
-      }
-      for (const ImageEvent& e : ev.images) {
-        if (!e.mask) tally(e.color, {}, e.page);
-      }
-      auto emitPolicy = [&](long long n, const std::set<int>& pages,
-                            const std::string& what) {
-        if (n <= 0) return;
-        std::string detail = "Warning: " + what + " (" + std::to_string(n) + " hit(s)";
-        if (!pages.empty()) detail += ", page " + std::to_string(*pages.begin());
-        detail += ")";
-        ctx.res.analysis.push_back({"PROFILE_HIT", detail, false});
-      };
-      emitPolicy(colourImages, ciPages,
-                 "Objects produce colour plate output and will be converted by this recipe");
-      emitPolicy(devIndep, diPages,
-                 "Device-independent colour in use (ICC, Lab or calibrated)");
     }
   }
 
   const char* sevName[] = {"", "Info", "Warning", "Error"};
+  auto humanTail = [](const std::string& token) {
+    size_t p = token.find("::");
+    std::string t = p == std::string::npos ? token : token.substr(p + 2);
+    std::string out;
+    for (size_t i = 0; i < t.size(); ++i) {
+      char c = t[i];
+      if (i && std::isupper(static_cast<unsigned char>(c)) &&
+          std::islower(static_cast<unsigned char>(t[i - 1]))) {
+        out += ' ';
+      }
+      out += (i == 0) ? c : static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+    }
+    for (char& c : out) {
+      if (c == '_') c = ' ';
+    }
+    return out;
+  };
+  auto opPhrase = [](const std::string& op) {
+    if (op == "less") return std::string("below");
+    if (op == "less_or_equal") return std::string("at most");
+    if (op == "greater") return std::string("above");
+    if (op == "greater_or_equal") return std::string("at least");
+    if (op == "equal") return std::string("of");
+    if (op == "unequal") return std::string("other than");
+    if (op == "is_not_true") return std::string("not");
+    return std::string();
+  };
+  auto displayName = [&](const PfRule& rule,
+                         const std::vector<const PfCondition*>& conds) {
+    if (rule.name.rfind("R_", 0) != 0 && rule.name.rfind("RR", 0) != 0 &&
+        rule.name.rfind("P_", 0) != 0) {
+      return rule.name;
+    }
+    std::vector<std::string> parts;
+    for (const PfCondition* c : conds) {
+      for (const PfAtom& a : c->atoms) {
+        if (parts.size() >= 3) break;
+        std::string p = humanTail(a.token);
+        std::string ph = opPhrase(a.op);
+        if (a.op == "is_true" || a.op == "is_not_true") {
+          parts.push_back(ph.empty() ? p : ph + " " + p);
+        } else if (!a.vals.empty() && !a.vals[0].empty()) {
+          parts.push_back(p + (ph.empty() ? " " : " " + ph + " ") + a.vals[0]);
+        } else {
+          parts.push_back(p);
+        }
+      }
+    }
+    if (parts.empty()) return rule.name;
+    std::string out = parts[0];
+    for (size_t i = 1; i < parts.size() && i < 3; ++i) out += "; " + parts[i];
+    if (!out.empty()) out[0] = static_cast<char>(std::toupper(static_cast<unsigned char>(out[0])));
+    if (out.size() > 90) out = out.substr(0, 87) + "...";
+    return out;
+  };
   std::vector<bool> usedPaint(ev.paints.size(), false);
   std::vector<bool> usedText(ev.texts.size(), false);
   std::vector<bool> usedImage(ev.images.size(), false);
@@ -3221,12 +3552,35 @@ void passProfile(Ctx& ctx, const unsigned char* inputData, std::size_t inputSize
       return combined;
     };
 
+    auto inScope = [&](const Box& bbox, int page) {
+      if (rule.scope < 2 || !bbox.valid) return true;
+      const PageFacts* p = pageFor(ev, page);
+      if (!p) return true;
+      Box area;
+      if (rule.scope == 2) area = p->trim.valid ? p->trim : (p->hasCropBox ? p->media : p->media);
+      else area = p->bleed.valid ? p->bleed : (p->trim.valid ? p->trim : p->media);
+      if (!area.valid) return true;
+      return boxesIntersect(area, bbox);
+    };
+    auto bboxOf = [&](const void* e) -> const Box& {
+      static Box none;
+      switch (dom) {
+        case Domain::kPaint: return static_cast<const PaintEvent*>(e)->bbox;
+        case Domain::kText: return static_cast<const TextEvent*>(e)->bbox;
+        case Domain::kImage: return static_cast<const ImageEvent*>(e)->bbox;
+        default: return none;
+      }
+    };
     auto sweep = [&](auto& collection, std::vector<bool>* used) {
       for (size_t i = 0; i < collection.size(); ++i) {
         if (!supported) return;
         if (used && (*used)[i]) continue;
         const auto& e = collection[i];
         curPage = e.page;
+        if ((dom == Domain::kPaint || dom == Domain::kText || dom == Domain::kImage) &&
+            !inScope(bboxOf(&e), e.page)) {
+          continue;
+        }
         if (ruleMatches(&e)) {
           ++hits;
           pages.insert(e.page);
@@ -3278,7 +3632,8 @@ void passProfile(Ctx& ctx, const unsigned char* inputData, std::size_t inputSize
     if (hits) {
       std::string detail = std::string(sevName[rule.severity < 4 && rule.severity > 0
                                                    ? rule.severity : 1]) +
-                           ": " + rule.name + " (" + std::to_string(hits) + " hit(s)";
+                           ": " + displayName(rule, conds) + " (" + std::to_string(hits) +
+                           " hit(s)";
       if (!pages.empty()) {
         detail += ", page";
         detail += pages.size() > 1 ? "s " : " ";
