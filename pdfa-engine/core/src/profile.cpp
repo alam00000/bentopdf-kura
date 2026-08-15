@@ -582,6 +582,7 @@ struct ColorInfo {
   std::string altName;
   std::vector<std::string> colorants;
   int declaredComps = 1;
+  bool indexed = false;
 };
 
 struct GsExtra {
@@ -853,7 +854,11 @@ ColorInfo classifyColor(QPDFObjectHandle cs, QPDFObjectHandle res, int depth = 0
       if (an.size() > 1) ci.altName = an.substr(1);
     }
   } else if (fam == "/Indexed" || fam == "/I") {
-    if (cs.getArrayNItems() >= 2) return classifyColor(cs.getArrayItem(1), res, depth + 1);
+    if (cs.getArrayNItems() >= 2) {
+      ci = classifyColor(cs.getArrayItem(1), res, depth + 1);
+      ci.indexed = true;
+      return ci;
+    }
   } else if (fam == "/Pattern") {
     ci.cls = "pattern";
     ci.declaredComps = 0;
@@ -1305,13 +1310,13 @@ struct EvScanner : QPDFObjectHandle::ParserCallbacks {
       applyExtGState();
     } else if (op == "g" || op == "G") {
       setColor(op == "G", 1);
-      (op == "G" ? gs.strokeColor : gs.fillColor) = ColorInfo{"gray", "", "", {}, 1};
+      (op == "G" ? gs.strokeColor : gs.fillColor) = ColorInfo{"gray", "", "", {}, 1, false};
     } else if (op == "rg" || op == "RG") {
       setColor(op == "RG", 3);
-      (op == "RG" ? gs.strokeColor : gs.fillColor) = ColorInfo{"rgb", "", "", {}, 3};
+      (op == "RG" ? gs.strokeColor : gs.fillColor) = ColorInfo{"rgb", "", "", {}, 3, false};
     } else if (op == "k" || op == "K") {
       setColor(op == "K", 4);
-      (op == "K" ? gs.strokeColor : gs.fillColor) = ColorInfo{"cmyk", "", "", {}, 4};
+      (op == "K" ? gs.strokeColor : gs.fillColor) = ColorInfo{"cmyk", "", "", {}, 4, false};
     } else if (op == "cs" || op == "CS") {
       setSpace(op == "CS");
     } else if (op == "sc" || op == "scn" || op == "SC" || op == "SCN") {
@@ -1423,10 +1428,13 @@ void scanEvents(QPDFObjectHandle contents, QPDFObjectHandle res, const Gs& initi
     if (sub == "/Image") {
       ImageEvent e;
       e.page = page;
+      e.mask = (dict.getKey("/ImageMask").isBool() &&
+                dict.getKey("/ImageMask").getBoolValue()) ||
+               (dict.getKey("/ColorSpace").isNull() &&
+                !dict.getKey("/BitsPerComponent").isInteger());
       e.bpc = dict.getKey("/BitsPerComponent").isInteger()
-                  ? static_cast<int>(dict.getKey("/BitsPerComponent").getIntValue()) : 8;
-      e.mask = dict.getKey("/ImageMask").isBool() &&
-               dict.getKey("/ImageMask").getBoolValue();
+                  ? static_cast<int>(dict.getKey("/BitsPerComponent").getIntValue())
+                  : (e.mask ? 1 : 8);
       QPDFObjectHandle filt = dict.getKey("/Filter");
       if (filt.isName()) e.filters.insert(filt.getName().substr(1));
       if (filt.isArray()) {
@@ -1444,7 +1452,7 @@ void scanEvents(QPDFObjectHandle contents, QPDFObjectHandle res, const Gs& initi
       e.hasSMask = dict.getKey("/SMask").isStream();
       e.interpolate = dict.getKey("/Interpolate").isBool() &&
                       dict.getKey("/Interpolate").getBoolValue();
-      e.color = classifyColor(dict.getKey("/ColorSpace"), res);
+      e.color = e.mask ? d.second.fillColor : classifyColor(dict.getKey("/ColorSpace"), res);
       double wpt = std::hypot(d.second.ctm.a, d.second.ctm.b);
       double hpt = std::hypot(d.second.ctm.c, d.second.ctm.d);
       if (w > 0 && h > 0 && wpt > 0.01 && hpt > 0.01) {
@@ -1721,10 +1729,10 @@ bool evalColorAtom(const PfAtom& a, const std::vector<double>& comps, const Colo
     double cmy = std::max({comps[0], comps[1], comps[2]}) * 100.0;
     return cmpNum(cmy, a.op, numVal(a));
   }
-  if (t == "CSCOLOR::IsDeviceGray") return cmpBool(ci.cls == "gray", a.op);
-  if (t == "CSCOLOR::IsDeviceCMYK") return cmpBool(ci.cls == "cmyk", a.op);
+  if (t == "CSCOLOR::IsDeviceGray") return cmpBool(ci.cls == "gray" && !ci.indexed, a.op);
+  if (t == "CSCOLOR::IsDeviceCMYK") return cmpBool(ci.cls == "cmyk" && !ci.indexed, a.op);
   if (t == "CSCOLOR::ObjectUsesCMYKOnly_noSpotColo") {
-    return cmpBool(processOnly(ci), a.op);
+    return cmpBool(processOnly(ci) && !ci.indexed, a.op);
   }
   if (t == "CSCOLOR::IsDeviceRGB") return cmpBool(ci.cls == "rgb", a.op);
   if (t == "CSCOLOR::UsesICCbasedCMYK") {
@@ -2809,7 +2817,7 @@ void passProfile(Ctx& ctx, const unsigned char* inputData, std::size_t inputSize
         if (ie.mask) {
           addPlates(ev.paints.empty() ? std::vector<double>{0.0}
                                       : std::vector<double>{0.0},
-                    ColorInfo{"gray", "", "", {}, 1});
+                    ColorInfo{"gray", "", "", {}, 1, false});
         } else if (ci.cls == "gray" || (ci.cls == "icc" && ci.declaredComps == 1)) {
           pf.plates.insert("Black");
         } else if (ci.cls == "separation" || ci.cls == "devicen") {
@@ -3014,22 +3022,49 @@ void passProfile(Ctx& ctx, const unsigned char* inputData, std::size_t inputSize
       if (e.noPaint || e.x.alphaFill <= 0.001) e.visible = false;
     }
     size_t total = ev.paints.size() + ev.texts.size() + ev.images.size();
-    if (total > 0 && total <= 4000) {
-      std::vector<std::pair<Box, int>> all;
-      for (const PaintEvent& e : ev.paints) all.push_back({e.bbox, e.page});
-      for (const TextEvent& e : ev.texts) all.push_back({e.bbox, e.page});
-      for (const ImageEvent& e : ev.images) all.push_back({e.bbox, e.page});
-      auto coversAny = [&](const Box& b, int page, size_t self) {
-        for (size_t i = 0; i < all.size(); ++i) {
-          if (i == self || all[i].second != page) continue;
-          if (boxesIntersect(b, all[i].first)) return true;
-        }
-        return false;
+    if (total > 0 && total <= 6000) {
+      struct Occ {
+        Box bbox;
+        int page;
+        long seq;
+        bool opaque;
+        bool areaFill;
+        bool* coversOut;
+        bool* visibleOut;
       };
-      size_t idx = 0;
-      for (PaintEvent& e : ev.paints) e.covers = coversAny(e.bbox, e.page, idx++);
-      for (TextEvent& e : ev.texts) e.covers = coversAny(e.bbox, e.page, idx++);
-      for (ImageEvent& e : ev.images) e.covers = coversAny(e.bbox, e.page, idx++);
+      std::vector<Occ> objs;
+      long seq = 0;
+      auto opaqueOf = [](const GsExtra& x, bool fill) {
+        double a = fill ? x.alphaFill : x.alphaStroke;
+        return a >= 0.999 && (x.blendMode == "Normal" || x.blendMode == "Compatible") &&
+               !x.hasSMask;
+      };
+      for (PaintEvent& e : ev.paints) {
+        bool areaFill = e.fillOp && !e.shade && !e.noPaint;
+        objs.push_back({e.bbox, e.page, seq++, opaqueOf(e.x, true) && !e.overprint,
+                        areaFill, &e.covers, &e.visible});
+      }
+      for (TextEvent& e : ev.texts) {
+        objs.push_back({e.bbox, e.page, seq++, opaqueOf(e.x, true), false, &e.covers,
+                        &e.visible});
+      }
+      for (ImageEvent& e : ev.images) {
+        bool opaque = !e.hasSMask && !e.mask;
+        objs.push_back({e.bbox, e.page, seq++, opaque, true, &e.covers, &e.visible});
+      }
+      for (Occ& o : objs) {
+        bool covers = false, occluded = false;
+        for (const Occ& u : objs) {
+          if (&o == &u || u.page != o.page || !boxesIntersect(o.bbox, u.bbox)) continue;
+          if (o.seq > u.seq && o.opaque && o.areaFill) covers = true;
+          if (u.seq > o.seq && u.opaque && u.areaFill &&
+              boxContains(u.bbox, o.bbox, 0.5)) {
+            occluded = true;
+          }
+        }
+        *o.coversOut = covers;
+        if (occluded) *o.visibleOut = false;
+      }
     }
   }
 

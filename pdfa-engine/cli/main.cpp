@@ -4,6 +4,7 @@
 #include <system_error>
 #include <unistd.h>
 #include <chrono>
+#include <cmath>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -378,7 +379,92 @@ void pdfa_watchdog(unsigned seconds) {
   std::_Exit(0);
 }
 
+#ifdef KURA_WITH_PDFIUM
+int runCompare(const std::string& fileA, const std::string& fileB) {
+  auto load = [](const std::string& p, std::vector<unsigned char>& out) {
+    std::ifstream in(p, std::ios::binary);
+    if (!in) return false;
+    out.assign((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+    return true;
+  };
+  std::vector<unsigned char> a, b;
+  if (!load(fileA, a) || !load(fileB, b)) {
+    std::cerr << "cannot open input(s)" << std::endl;
+    return 2;
+  }
+  kura::Rasterizer ra = kura::makeRasterizer(a.data(), a.size(), "");
+  kura::Rasterizer rb = kura::makeRasterizer(b.data(), b.size(), "");
+  const double dpi = 72.0;
+  std::cout << "{\n  \"compare\": true,\n  \"pages\": [\n";
+  bool first = true;
+  int page = 0;
+  long long totalChanged = 0;
+  for (;; ++page) {
+    int wa = 0, ha = 0, wb = 0, hb = 0;
+    std::string ba, bb;
+    bool okA = ra(page, dpi, wa, ha, ba);
+    bool okB = rb(page, dpi, wb, hb, bb);
+    if (!okA && !okB) break;
+    if (!first) std::cout << ",\n";
+    first = false;
+    if (okA != okB) {
+      std::cout << "    {\"page\": " << (page + 1) << ", \"status\": \""
+                << (okA ? "removed" : "added") << "\"}";
+      totalChanged += 1;
+      continue;
+    }
+    long long changed = 0, considered = 0;
+    double maxDelta = 0;
+    double minX = 1e9, minY = 1e9, maxX = -1e9, maxY = -1e9;
+    int w = std::min(wa, wb), h = std::min(ha, hb);
+    if (wa != wb || ha != hb) changed += 1;
+    const unsigned char* pa = reinterpret_cast<const unsigned char*>(ba.data());
+    const unsigned char* pb = reinterpret_cast<const unsigned char*>(bb.data());
+    for (int y = 0; y < h; ++y) {
+      for (int x = 0; x < w; ++x) {
+        size_t ia = (static_cast<size_t>(y) * wa + x) * 3;
+        size_t ib = (static_cast<size_t>(y) * wb + x) * 3;
+        if (ia + 2 >= ba.size() || ib + 2 >= bb.size()) continue;
+        ++considered;
+        int d = std::abs(pa[ia] - pb[ib]) + std::abs(pa[ia + 1] - pb[ib + 1]) +
+                std::abs(pa[ia + 2] - pb[ib + 2]);
+        if (d > 24) {
+          ++changed;
+          double dd = d / 765.0 * 100.0;
+          if (dd > maxDelta) maxDelta = dd;
+          double px = x / dpi * 72.0;
+          double py = (h - 1 - y) / dpi * 72.0;
+          minX = std::min(minX, px);
+          minY = std::min(minY, py);
+          maxX = std::max(maxX, px);
+          maxY = std::max(maxY, py);
+        }
+      }
+    }
+    totalChanged += changed;
+    double pct = considered ? (100.0 * changed / considered) : 0.0;
+    std::cout << "    {\"page\": " << (page + 1) << ", \"changedPixels\": " << changed
+              << ", \"changedPercent\": " << (std::round(pct * 100) / 100)
+              << ", \"maxDeltaPercent\": " << (std::round(maxDelta * 10) / 10);
+    if (changed > 0 && maxX >= minX) {
+      std::cout << ", \"changedRegion\": [" << (std::round(minX * 10) / 10) << ", "
+                << (std::round(minY * 10) / 10) << ", " << (std::round(maxX * 10) / 10)
+                << ", " << (std::round(maxY * 10) / 10) << "]";
+    }
+    std::cout << "}";
+  }
+  std::cout << "\n  ],\n  \"identical\": " << (totalChanged == 0 ? "true" : "false")
+            << ",\n  \"pageCount\": " << page << "\n}\n";
+  return 0;
+}
+#endif
+
 int main(int argc, char** argv) {
+#ifdef KURA_WITH_PDFIUM
+  if (argc >= 4 && std::string(argv[1]) == "--compare") {
+    return runCompare(argv[2], argv[3]);
+  }
+#endif
   const char* budget = std::getenv("PDFA_TIMEOUT");
   unsigned seconds = budget ? static_cast<unsigned>(std::atoi(budget)) : 120u;
   if (seconds) std::thread(pdfa_watchdog, seconds).detach();
