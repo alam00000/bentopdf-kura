@@ -583,7 +583,7 @@ bool parsePreflightXml(const std::string& text, PfProfile& out) {
       }
     }
   }
-  return !out.rules.empty();
+  return !out.rules.empty() || !out.builtins.empty();
 }
 
 struct Mat {
@@ -2473,7 +2473,7 @@ bool evalDocAtom(const PfAtom& a, const Events& ev, bool& supported) {
     return cmpBool(ev.qpdfWarnings > 0, a.op);
   }
   if (t == "CERTIFY::CertifyXMPIsPresent" || t == "CERTIFY::CertifyXMPIsSyntactValid") {
-    bool present = ev.xmpRaw.find("the reference tool") != std::string::npos &&
+    bool present = ev.xmpRaw.find("reflight") != std::string::npos &&
                    ev.xmpRaw.find("ertif") != std::string::npos;
     return cmpBool(present, a.op);
   }
@@ -2677,6 +2677,56 @@ std::vector<PfFix> collectFixes(const std::string& text) {
     fixes.push_back(fix);
     pos = end + 1;
   }
+  pos = 0;
+  while ((pos = text.find("<fixup>", pos)) != std::string::npos) {
+    size_t end = text.find("</fixup>", pos);
+    if (end == std::string::npos) break;
+    if (text.find("<ffeat>", pos) < end) {
+      pos = end + 1;
+      continue;
+    }
+    size_t cf = text.find("<fcfg>", pos);
+    if (cf == std::string::npos || cf > end) {
+      pos = end + 1;
+      continue;
+    }
+    size_t cfEnd = text.find("</fcfg>", cf);
+    if (cfEnd == std::string::npos || cfEnd > end) {
+      pos = end + 1;
+      continue;
+    }
+    std::string raw = text.substr(cf + 6, cfEnd - cf - 6);
+    std::string dec;
+    dec.reserve(raw.size());
+    for (size_t i = 0; i < raw.size();) {
+      if (raw[i] == '&') {
+        if (raw.compare(i, 4, "&#9;") == 0) { dec += '\t'; i += 4; continue; }
+        if (raw.compare(i, 5, "&#10;") == 0) { dec += '\n'; i += 5; continue; }
+        if (raw.compare(i, 5, "&#13;") == 0) { i += 5; continue; }
+        if (raw.compare(i, 5, "&amp;") == 0) { dec += '&'; i += 5; continue; }
+        if (raw.compare(i, 4, "&lt;") == 0) { dec += '<'; i += 4; continue; }
+        if (raw.compare(i, 4, "&gt;") == 0) { dec += '>'; i += 4; continue; }
+        if (raw.compare(i, 6, "&apos;") == 0) { dec += '\''; i += 6; continue; }
+        if (raw.compare(i, 6, "&quot;") == 0) { dec += '"'; i += 6; continue; }
+      }
+      dec += raw[i++];
+    }
+    size_t nl = dec.find('\n');
+    std::string line = nl == std::string::npos ? dec : dec.substr(0, nl);
+    PfFix fix;
+    size_t f0 = 0;
+    while (f0 <= line.size()) {
+      size_t tab = line.find('\t', f0);
+      std::string tok = line.substr(f0, tab == std::string::npos ? std::string::npos
+                                                                 : tab - f0);
+      if (fix.op.empty()) fix.op = tok;
+      else fix.params.push_back(tok);
+      if (tab == std::string::npos) break;
+      f0 = tab + 1;
+    }
+    if (!fix.op.empty()) fixes.push_back(fix);
+    pos = end + 1;
+  }
   return fixes;
 }
 
@@ -2694,8 +2744,21 @@ void passProfile(Ctx& ctx, const unsigned char* inputData, std::size_t inputSize
   bool parsed = isJson ? parseKuraJson(ctx.opt.preflightProfile, prof)
                        : parsePreflightXml(ctx.opt.preflightProfile, prof);
   if (!parsed) {
-    ctx.res.analysis.push_back(
-        {"PROFILE_UNREADABLE", "the preflight profile could not be parsed", false});
+    bool looksLikeXml = ctx.opt.preflightProfile.find("<pdfpreflight") != std::string::npos;
+    bool hasFixes = ctx.opt.preflightProfile.find("<fcfg>") != std::string::npos;
+    if (looksLikeXml && hasFixes) {
+      ctx.res.analysis.push_back(
+          {"PROFILE_NO_CHECKS",
+           "this profile only converts or repairs documents; it defines no checks to "
+           "run in analysis mode",
+           false});
+    } else if (looksLikeXml) {
+      ctx.res.analysis.push_back(
+          {"PROFILE_NO_CHECKS", "this profile defines no checks Kura can run", false});
+    } else {
+      ctx.res.analysis.push_back(
+          {"PROFILE_UNREADABLE", "the preflight profile could not be parsed", false});
+    }
     return;
   }
   Events ev;
@@ -3682,6 +3745,128 @@ void passProfile(Ctx& ctx, const unsigned char* inputData, std::size_t inputSize
       }
       return false;
     };
+    std::set<std::string> notedWizard;
+    auto xcompLevels = [](const PfBuiltin& b) {
+      static const std::vector<std::pair<const char*, const char*>> flags = {
+          {"PDFA1b2005", "1b"}, {"PDFA1a2005", "1a"}, {"PDFA2b", "2b"},
+          {"PDFA2u", "2u"},     {"PDFA2a", "2a"},     {"PDFA3ZFeRD", "3b"},
+          {"PDFA3b", "3b"},     {"PDFA3u", "3u"},     {"PDFA3a", "3a"},
+          {"PDFA4", "4"},       {"PDFA4f", "4f"},     {"PDFA4e", "4e"},
+          {"PDFX1A2001", "x1a"}, {"PDFX1A2003", "x1a"}, {"PDFX32002", "x3"},
+          {"PDFX32003", "x3"},  {"PDFX4", "x4"},      {"PDFX4p", "x4p"},
+          {"PDFX5g", "x5g"},    {"PDFX5n", "x5n"},    {"PDFX5pg", "x5pg"},
+          {"PDFX6", "x6"},      {"PDFX6n", "x6n"},    {"PDFX6p", "x6p"},
+          {"PDFE12008", "e1"},  {"PDFVT1", "vt1"},    {"PDFVT2", "vt2"},
+          {"PDFVT3", "vt3"},
+      };
+      std::vector<std::string> out;
+      for (const auto& [flag, lvl] : flags) {
+        auto it = b.params.find(flag);
+        if (it != b.params.end() && it->second > 0.5 &&
+            std::find(out.begin(), out.end(), lvl) == out.end()) {
+          out.push_back(lvl);
+        }
+      }
+      return out;
+    };
+    auto prettyLevel = [](const std::string& ls) {
+      if (ls == "e1") return std::string("PDF/E-1");
+      if (ls.rfind("vt", 0) == 0) return "PDF/VT-" + ls.substr(2);
+      if (ls.rfind("x", 0) == 0) {
+        std::string tail = ls.substr(1);
+        if (tail == "1a") return std::string("PDF/X-1a");
+        return "PDF/X-" + tail;
+      }
+      return "PDF/A-" + ls;
+    };
+    auto prettyLevelList = [&](const std::vector<std::string>& lvls) {
+      std::string out;
+      for (size_t i = 0; i < lvls.size(); ++i) {
+        if (i) out += lvls.size() == 2 ? " or " : (i + 1 == lvls.size() ? ", or " : ", ");
+        out += prettyLevel(lvls[i]);
+      }
+      return out;
+    };
+    auto verifyBytes = [&](const unsigned char* data, std::size_t size,
+                           const std::vector<std::string>& lvls, std::string& failDetail,
+                           long long& worst) {
+      worst = -1;
+      for (const std::string& ls : lvls) {
+        Level lv;
+        if (!levelFromString(ls, lv)) continue;
+        Options o;
+        o.level = lv;
+        o.verifyOnly = true;
+        o.password = ctx.opt.password;
+        Result r = convert(data, size, o);
+        if (r.ok && r.compliant) {
+          worst = 0;
+          failDetail.clear();
+          return true;
+        }
+        long long cnt = 0;
+        std::string first;
+        if (!r.ok) {
+          cnt = 1;
+          first = r.error;
+        } else {
+          for (const Issue& i : r.issues) {
+            if (i.fixed && !issueIsNormalization(i.code)) {
+              ++cnt;
+              if (first.empty()) first = i.detail;
+            }
+          }
+          if (cnt == 0) cnt = 1;
+        }
+        if (worst < 0 || cnt < worst) {
+          worst = cnt;
+          failDetail = first;
+        }
+      }
+      if (worst < 0) worst = 1;
+      return false;
+    };
+    auto verifyAgainst = [&](const std::vector<std::string>& lvls, std::string& failDetail,
+                             long long& worst) {
+      if (!inputData || !inputSize) {
+        worst = 0;
+        return true;
+      }
+      return verifyBytes(inputData, inputSize, lvls, failDetail, worst);
+    };
+    auto embeddedPdfPayloads = [&]() {
+      std::vector<std::string> out;
+      std::function<void(QPDFObjectHandle, int)> walk = [&](QPDFObjectHandle node,
+                                                            int depth) {
+        if (depth > 8 || out.size() >= 16 || !node.isDictionary()) return;
+        QPDFObjectHandle kids = node.getKey("/Kids");
+        if (kids.isArray()) {
+          for (int i = 0; i < kids.getArrayNItems(); ++i) walk(kids.getArrayItem(i), depth + 1);
+        }
+        QPDFObjectHandle names = node.getKey("/Names");
+        if (!names.isArray()) return;
+        for (int i = 0; i + 1 < names.getArrayNItems(); i += 2) {
+          QPDFObjectHandle fs = names.getArrayItem(i + 1);
+          if (!fs.isDictionary()) continue;
+          QPDFObjectHandle ef = fs.getKey("/EF");
+          if (!ef.isDictionary()) continue;
+          QPDFObjectHandle f = ef.getKey("/F");
+          if (!f.isStream()) f = ef.getKey("/UF");
+          if (!f.isStream()) continue;
+          try {
+            auto buf = f.getStreamData(qpdf_dl_all);
+            std::string bytes(reinterpret_cast<const char*>(buf->getBuffer()),
+                              buf->getSize());
+            if (bytes.compare(0, 4, "%PDF") == 0) out.push_back(std::move(bytes));
+          } catch (...) {
+          }
+          if (out.size() >= 16) return;
+        }
+      };
+      QPDFObjectHandle namesDict = ctx.pdf.getRoot().getKey("/Names");
+      if (namesDict.isDictionary()) walk(namesDict.getKey("/EmbeddedFiles"), 0);
+      return out;
+    };
     for (const PfBuiltin& b : prof.builtins) {
       const std::string& nm = b.name;
       long long n = 0;
@@ -3839,7 +4024,51 @@ void passProfile(Ctx& ctx, const unsigned char* inputData, std::size_t inputSize
           if (e.stroke && e.width > 0 && e.width < pts) { ++n; pg.insert(e.page); }
         }
         emitB(b, n, pg, "Line thickness below the minimum");
+      } else if (nm == "PRCWzXComp_PDFDocument" || nm == "PRCWzXComp_PDFDocumentA" ||
+                 nm == "PRCWzXComp_PDFDocumentE" || nm == "PRCWzXComp_PDFDocumentVT") {
+        std::vector<std::string> lvls = xcompLevels(b);
+        if (lvls.empty()) {
+          if (notedWizard.insert(nm).second) {
+            ctx.res.analysis.push_back(
+                {"PROFILE_CHECK_UNSUPPORTED",
+                 nm + ": no recognizable standard flavour is switched on", false});
+          }
+        } else {
+          std::string failDetail;
+          long long worst = 0;
+          if (!verifyAgainst(lvls, failDetail, worst)) {
+            emitB(b, worst, pg,
+                  "Document does not conform to " + prettyLevelList(lvls) +
+                      (failDetail.empty() ? "" : " - first deviation: " + failDetail));
+          }
+        }
+      } else if (nm == "PRCWzXCompEmb_PDFDocumentA") {
+        std::vector<std::string> lvls = xcompLevels(b);
+        long long bad = 0;
+        for (const std::string& att : embeddedPdfPayloads()) {
+          std::string failDetail;
+          long long worst = 0;
+          if (!verifyBytes(reinterpret_cast<const unsigned char*>(att.data()), att.size(),
+                           lvls.empty() ? std::vector<std::string>{"2b"} : lvls,
+                           failDetail, worst)) {
+            ++bad;
+          }
+        }
+        emitB(b, bad, pg, "Embedded document does not conform to the archival standard");
+      } else {
+        if (notedWizard.insert(nm).second) {
+          ctx.res.analysis.push_back(
+              {"PROFILE_CHECK_UNSUPPORTED",
+               nm + ": uses a built-in check Kura cannot evaluate yet", false});
+        }
       }
+    }
+    if (ctx.opt.preflightProfile.find("PRC_PDFUA1_CHECK") != std::string::npos) {
+      ctx.res.analysis.push_back(
+          {"PROFILE_CHECK_UNSUPPORTED",
+           "this profile requests the PDF/UA-1 accessibility check, which Kura does not "
+           "run in analysis mode yet",
+           false});
     }
   }
 
@@ -4183,6 +4412,7 @@ void applyProfileFixes(Options& opt, std::vector<Issue>& notes) {
       "overprintblack", "setoverprintandknockout", "increaselinewidth",
       "settextrendermode", "removeobjectsoutofbox", "placetext", "annotation",
       "putobjectsonlayer", "putobjpsteps", "dscdhdnlycntfltnvsblyrs",
+      "removepdfuakeys", "settransparencyblendcs",
   };
   static const std::set<std::string> partialOps = {
       "duplicatetextasinvisible", "removecontentbyimage", "dtctandmrgimgfrgmnts",
@@ -4414,6 +4644,90 @@ void passProfileFixups(Ctx& ctx) {
           page.replaceKey("/Rotate", QPDFObjectHandle::newInteger(((cur + ang) % 360 + 360) % 360));
         }
         note("rotated pages by " + std::to_string(ang) + " degrees");
+      }
+    } else if (op == "removepdfuakeys") {
+      QPDFObjectHandle meta = ctx.pdf.getRoot().getKey("/Metadata");
+      if (meta.isStream()) {
+        std::string xmp;
+        try {
+          auto buf = meta.getStreamData(qpdf_dl_all);
+          xmp.assign(reinterpret_cast<const char*>(buf->getBuffer()), buf->getSize());
+        } catch (...) {
+        }
+        std::string before = xmp;
+        size_t pos = 0;
+        while ((pos = xmp.find("<pdfuaid:", pos)) != std::string::npos) {
+          size_t tagEnd = xmp.find(':', pos + 1);
+          size_t nameEnd = xmp.find_first_of(" >", tagEnd + 1);
+          std::string tag = xmp.substr(pos + 1, nameEnd - pos - 1);
+          size_t close = xmp.find("</" + tag + ">", pos);
+          if (close != std::string::npos) {
+            xmp.erase(pos, close + tag.size() + 3 - pos);
+          } else {
+            size_t gt = xmp.find('>', pos);
+            if (gt == std::string::npos) break;
+            xmp.erase(pos, gt + 1 - pos);
+          }
+        }
+        pos = 0;
+        while ((pos = xmp.find("pdfuaid:", pos)) != std::string::npos) {
+          size_t eq = xmp.find('=', pos);
+          size_t lineStart = xmp.rfind('\n', pos);
+          if (eq != std::string::npos && eq < pos + 40 && eq + 1 < xmp.size() &&
+              (xmp[eq + 1] == '"' || xmp[eq + 1] == '\'')) {
+            char q = xmp[eq + 1];
+            size_t end = xmp.find(q, eq + 2);
+            if (end == std::string::npos) break;
+            size_t start = pos;
+            if (start >= 6 && xmp.compare(start - 6, 6, "xmlns:") == 0) start -= 6;
+            while (start > 0 && (xmp[start - 1] == ' ' || xmp[start - 1] == '\n' ||
+                                 xmp[start - 1] == '\t')) {
+              --start;
+              if (lineStart != std::string::npos && start <= lineStart) break;
+            }
+            xmp.erase(start, end + 1 - start);
+            pos = start;
+          } else {
+            pos += 8;
+          }
+        }
+        if (xmp != before) {
+          meta.replaceStreamData(xmp, QPDFObjectHandle::newNull(),
+                                 QPDFObjectHandle::newNull());
+          note("removed the PDF/UA marker from the document metadata");
+        }
+      }
+    } else if (op == "settransparencyblendcs") {
+      std::string profName = p(0);
+      bool cmyk = profName.find("CMYK") != std::string::npos ||
+                  profName.find("Coated") != std::string::npos ||
+                  profName.find("SWOP") != std::string::npos ||
+                  profName.find("FOGRA") != std::string::npos;
+      QPDFObjectHandle icc =
+          buildIccStream(ctx, cmyk ? kCmykIcc : kSrgbIcc,
+                         cmyk ? kCmykIccLen : kSrgbIccLen, cmyk ? 4 : 3);
+      QPDFObjectHandle cs = QPDFObjectHandle::newArray();
+      cs.appendItem(QPDFObjectHandle::newName("/ICCBased"));
+      cs.appendItem(icc);
+      QPDFObjectHandle csRef = ctx.pdf.makeIndirectObject(cs);
+      int touched = 0;
+      for (auto& ph : pages) {
+        QPDFObjectHandle page = ph.getObjectHandle();
+        QPDFObjectHandle grp = page.getKey("/Group");
+        if (!grp.isDictionary()) {
+          grp = QPDFObjectHandle::newDictionary();
+          grp.replaceKey("/S", QPDFObjectHandle::newName("/Transparency"));
+          grp.replaceKey("/I", QPDFObjectHandle::newBool(true));
+          page.replaceKey("/Group", grp);
+        }
+        if (nameIs(grp.getKey("/S"), "/Transparency")) {
+          grp.replaceKey("/CS", csRef);
+          ++touched;
+        }
+      }
+      if (touched) {
+        note("set the transparency blending colour space on " + std::to_string(touched) +
+             " page(s) to " + (cmyk ? "a CMYK press profile" : "sRGB"));
       }
     } else if (op == "removepagescaling") {
       int n = 0;

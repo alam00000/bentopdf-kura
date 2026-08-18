@@ -132,10 +132,72 @@ std::string pdfNow(Ctx& ctx) {
 }
 
 std::string xVersionString(Ctx& ctx) {
-  if (ctx.opt.level == Level::X1A) return "PDF/X-1a:2003";
-  if (ctx.opt.level == Level::X3) return "PDF/X-3:2003";
+  switch (ctx.opt.level) {
+    case Level::X1A: return "PDF/X-1a:2003";
+    case Level::X3: return "PDF/X-3:2003";
+    case Level::X4P: return "PDF/X-4p";
+    case Level::X5G: return "PDF/X-5g";
+    case Level::X5N: return "PDF/X-5n";
+    case Level::X5PG: return "PDF/X-5pg";
+    case Level::X6N: return "PDF/X-6n";
+    case Level::X6P: return "PDF/X-6p";
+    default: break;
+  }
   if (ctx.pdf20Print()) return "PDF/X-6";
   return "PDF/X-4";
+}
+
+std::string vtVersionString(Ctx& ctx) {
+  if (ctx.opt.level == Level::VT2) return "PDF/VT-2";
+  return ctx.pdf20Print() ? "PDF/VT-3" : "PDF/VT-1";
+}
+
+std::string oldXmpText(Ctx& ctx) {
+  QPDFObjectHandle meta = ctx.pdf.getRoot().getKey("/Metadata");
+  if (!meta.isStream()) return std::string();
+  try {
+    auto buf = meta.getStreamData(qpdf_dl_all);
+    return std::string(reinterpret_cast<const char*>(buf->getBuffer()), buf->getSize());
+  } catch (...) {
+    return std::string();
+  }
+}
+
+std::string xmpElementText(const std::string& xmp, const std::string& localName) {
+  size_t p = xmp.find(localName + ">");
+  if (p != std::string::npos) {
+    size_t start = p + localName.size() + 1;
+    size_t end = xmp.find('<', start);
+    if (end != std::string::npos) return xmp.substr(start, end - start);
+  }
+  p = xmp.find(localName + "=\"");
+  if (p != std::string::npos) {
+    size_t start = p + localName.size() + 2;
+    size_t end = xmp.find('"', start);
+    if (end != std::string::npos) return xmp.substr(start, end - start);
+  }
+  return std::string();
+}
+
+bool xVersionAcceptable(Ctx& ctx, const std::string& v) {
+  switch (ctx.opt.level) {
+    case Level::X1A: return v == "PDF/X-1a:2001" || v == "PDF/X-1a:2003";
+    case Level::X3: return v == "PDF/X-3:2002" || v == "PDF/X-3:2003";
+    case Level::X4: return v == "PDF/X-4" || v == "PDF/X-4:2010";
+    case Level::X4P: return v == "PDF/X-4p" || v == "PDF/X-4p:2010";
+    case Level::X5G: return v == "PDF/X-5g" || v == "PDF/X-5g:2010";
+    case Level::X5N: return v == "PDF/X-5n" || v == "PDF/X-5n:2010";
+    case Level::X5PG: return v == "PDF/X-5pg" || v == "PDF/X-5pg:2010";
+    case Level::X6: return v == "PDF/X-6";
+    case Level::X6N: return v == "PDF/X-6n";
+    case Level::X6P: return v == "PDF/X-6p";
+    case Level::VT1: return v == "PDF/X-4" || v == "PDF/X-4:2010";
+    case Level::VT2:
+      return v == "PDF/X-4p" || v == "PDF/X-4p:2010" || v == "PDF/X-5g" ||
+             v == "PDF/X-5g:2010" || v == "PDF/X-5pg" || v == "PDF/X-5pg:2010";
+    case Level::VT3: return v == "PDF/X-6";
+    default: return true;
+  }
 }
 
 std::string cleanText(QPDFObjectHandle v) {
@@ -199,6 +261,33 @@ InfoData collectInfo(Ctx& ctx) {
     ctx.issue("DOCINFO_DATE_DROPPED", "dropped unparseable date from document info", true);
   }
   if (ctx.isX()) {
+    std::string declared = cleanText(info.getKey("/GTS_PDFXVersion"));
+    std::string declaredVt = cleanText(info.getKey("/GTS_PDFVTVersion"));
+    if (ctx.pdf20Print()) {
+      std::string xmpOld = oldXmpText(ctx);
+      declared = xmpElementText(xmpOld, "GTS_PDFXVersion");
+      declaredVt = xmpElementText(xmpOld, "GTS_PDFVTVersion");
+      if (d.createIso.empty()) {
+        std::string c = xmpElementText(xmpOld, "xmp:CreateDate");
+        if (!c.empty()) d.createIso = c;
+      }
+      if (d.modifyIso.empty()) {
+        std::string m = xmpElementText(xmpOld, "xmp:ModifyDate");
+        if (!m.empty()) d.modifyIso = m;
+      }
+      if (d.title.empty()) {
+        size_t tp = xmpOld.find("dc:title");
+        if (tp != std::string::npos) {
+          size_t li = xmpOld.find("<rdf:li", tp);
+          size_t open = li == std::string::npos ? std::string::npos : xmpOld.find('>', li);
+          size_t close = open == std::string::npos ? std::string::npos
+                                                   : xmpOld.find('<', open + 1);
+          if (close != std::string::npos && close > open + 1) {
+            d.title = xmpOld.substr(open + 1, close - open - 1);
+          }
+        }
+      }
+    }
     if (d.title.empty()) {
       d.title = "Untitled document";
       clean.replaceKey("/Title", QPDFObjectHandle::newUnicodeString(d.title));
@@ -216,11 +305,48 @@ InfoData collectInfo(Ctx& ctx) {
       pdfDateToIso(now, d.modifyIso);
       ctx.issue("DOCINFO_DATE_SYNTHESIZED", "added required /ModDate", true);
     }
+    if (!xVersionAcceptable(ctx, declared)) {
+      ctx.issue("X_VERSION_SET",
+                declared.empty()
+                    ? "recorded the " + xVersionString(ctx) + " version marker"
+                    : "replaced the declared version marker \"" + declared + "\" with " +
+                          xVersionString(ctx),
+                true);
+    }
+    if (ctx.isVT() && declaredVt != vtVersionString(ctx)) {
+      ctx.issue("VT_VERSION_SET",
+                declaredVt.empty()
+                    ? "recorded the " + vtVersionString(ctx) + " version marker"
+                    : "replaced the declared version marker \"" + declaredVt + "\" with " +
+                          vtVersionString(ctx),
+                true);
+    }
+    if (ctx.pdf20Print()) {
+      QPDFObjectHandle pinfo = trailer.getKey("/Info");
+      bool hadInfo = pinfo.isDictionary() && !pinfo.getKeys().empty();
+      if (ctx.pdf.getRoot().getKey("/PieceInfo").isDictionary() && !d.modifyIso.empty() &&
+          !canonModify.empty()) {
+        QPDFObjectHandle keep = QPDFObjectHandle::newDictionary();
+        keep.replaceKey("/ModDate", QPDFObjectHandle::newString(canonModify));
+        trailer.replaceKey("/Info", ctx.pdf.makeIndirectObject(keep));
+        if (hadInfo && pinfo.getKeys().size() > 1) {
+          ctx.issue("DOCINFO_REDUCED",
+                    "kept only /ModDate in document info (required alongside /PieceInfo)",
+                    true);
+        }
+      } else if (hadInfo) {
+        trailer.removeKey("/Info");
+        ctx.issue("DOCINFO_REMOVED",
+                  "removed the document information dictionary (PDF 2.0 print standards "
+                  "keep document metadata in XMP only)",
+                  true);
+      }
+      return d;
+    }
     clean.replaceKey("/GTS_PDFXVersion", QPDFObjectHandle::newString(xVersionString(ctx)));
     if (ctx.isVT()) {
       clean.replaceKey("/GTS_PDFVTVersion",
-                       QPDFObjectHandle::newString(
-                           ctx.pdf20Print() ? "PDF/VT-3" : "PDF/VT-1"));
+                       QPDFObjectHandle::newString(vtVersionString(ctx)));
     }
     clean.replaceKey("/Trapped", QPDFObjectHandle::newName("/False"));
     trailer.replaceKey("/Info", ctx.pdf.makeIndirectObject(clean));
@@ -294,7 +420,9 @@ void passMetadata(Ctx& ctx) {
       if (o.isStream()) d = o.getDict();
       else if (o.isDictionary()) d = o;
       if (d.isInitialized() && d.isDictionary()) {
-        if (o.getObjGen() != rootGen && d.getKey("/Metadata").isStream()) {
+        bool refForm = ctx.allowRefXObjects() && d.getKey("/Ref").isDictionary() &&
+                       nameIs(d.getKey("/Subtype"), "/Form");
+        if (o.getObjGen() != rootGen && d.getKey("/Metadata").isStream() && !refForm) {
           d.removeKey("/Metadata");
           ++stripped;
         }
@@ -375,9 +503,9 @@ void passMetadata(Ctx& ctx) {
     xmp += "      <pdf:Trapped>False</pdf:Trapped>\n";
   }
   if (ctx.isVT()) {
-    xmp += std::string("      <pdfvtid:GTS_PDFVTVersion>") +
-           (ctx.pdf20Print() ? "PDF/VT-3" : "PDF/VT-1") + "</pdfvtid:GTS_PDFVTVersion>\n";
-    xmp += "      <pdfvtid:GTS_PDFVTModDate>" + collectInfo(ctx).modifyIso +
+    xmp += "      <pdfvtid:GTS_PDFVTVersion>" + vtVersionString(ctx) +
+           "</pdfvtid:GTS_PDFVTVersion>\n";
+    xmp += "      <pdfvtid:GTS_PDFVTModDate>" + info.modifyIso +
            "</pdfvtid:GTS_PDFVTModDate>\n";
   }
   if (ctx.isE()) {

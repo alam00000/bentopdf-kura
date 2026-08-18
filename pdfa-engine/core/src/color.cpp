@@ -851,13 +851,116 @@ void passColorPrint(Ctx& ctx, ColorUsage& usage) {
   std::string anchor;
   QPDFObjectHandle keepIntent;
   QPDFObjectHandle existing = root.getKey("/OutputIntents");
+  bool wantColorants = ctx.opt.level == Level::X5N || ctx.opt.level == Level::X6N;
+  bool wantChecksum = ctx.opt.level == Level::X6N || ctx.opt.level == Level::X6P;
+  auto wellFormedProfileRef = [&](QPDFObjectHandle oi, std::string& why) {
+    QPDFObjectHandle ref = oi.getKey("/DestOutputProfileRef");
+    if (!ref.isDictionary()) {
+      why = "the output intent has no external press-profile reference";
+      return false;
+    }
+    QPDFObjectHandle urls = ref.getKey("/URLs");
+    bool hasUrl = urls.isArray() && urls.getArrayNItems() > 0;
+    bool hasFile = ref.getKey("/F").isDictionary() || ref.getKey("/F").isString();
+    if (!hasUrl && !hasFile) {
+      why = "the press-profile reference names no address to fetch the profile from";
+      return false;
+    }
+    QPDFObjectHandle ver = ref.getKey("/ICCVersion");
+    if (!ver.isString() || ver.getStringValue().size() != 4) {
+      why = "the press-profile reference must record the profile version as the four "
+            "raw header bytes";
+      return false;
+    }
+    QPDFObjectHandle ct = ref.getKey("/ColorantTable");
+    if (wantColorants) {
+      std::string cs = ref.getKey("/ProfileCS").isString()
+                           ? ref.getKey("/ProfileCS").getUTF8Value()
+                           : std::string();
+      bool xclr = cs.size() == 4 && cs.substr(1) == "CLR";
+      if (!xclr) {
+        why = "a multi-colorant flavour needs the profile colour space recorded in the "
+              "nCLR form";
+        return false;
+      }
+      bool names = ct.isArray() && ct.getArrayNItems() > 0;
+      for (int i = 0; names && i < ct.getArrayNItems(); ++i) {
+        if (!ct.getArrayItem(i).isName()) names = false;
+      }
+      if (!names) {
+        why = "a multi-colorant flavour needs the colorant names listed in the "
+              "press-profile reference";
+        return false;
+      }
+    } else if (!ct.isNull()) {
+      why = "a colorant table is only allowed in the multi-colorant flavours";
+      return false;
+    }
+    if (wantChecksum) {
+      QPDFObjectHandle ck = ref.getKey("/CheckSum");
+      if (!ck.isString() || ck.getStringValue().size() != 16) {
+        why = "PDF 2.0 print flavours need a 16-byte checksum of the referenced profile";
+        return false;
+      }
+    }
+    return true;
+  };
   if (existing.isArray()) {
     for (int i = 0; i < existing.getArrayNItems(); ++i) {
       QPDFObjectHandle oi = existing.getArrayItem(i);
       if (oi.isDictionary() && nameIs(oi.getKey("/S"), wantSubtype)) {
         std::string cs;
-        if (validExistingProfile(ctx, oi.getKey("/DestOutputProfile"), cs) &&
-            oi.getKey("/OutputConditionIdentifier").isString()) {
+        bool embeddedOk = validExistingProfile(ctx, oi.getKey("/DestOutputProfile"), cs) &&
+                          oi.getKey("/OutputConditionIdentifier").isString();
+        if (ctx.externalIntent()) {
+          std::string why;
+          bool refOk = wellFormedProfileRef(oi, why) &&
+                       oi.getKey("/OutputConditionIdentifier").isString();
+          if (refOk) {
+            anchor = "CMYK";
+            keepIntent = oi;
+            if (oi.getKey("/DestOutputProfile").isStream()) {
+              ctx.issue("OUTPUT_INTENT_EMBEDDED_TOO",
+                        "this flavour identifies its press condition by external "
+                        "reference only, but the output intent also embeds the profile",
+                        true);
+            } else {
+              ctx.issue("OUTPUT_INTENT_EXTERNAL_KEPT",
+                        "kept output intent with an externally referenced press profile",
+                        false);
+            }
+            break;
+          }
+          if (oi.getKey("/DestOutputProfileRef").isDictionary()) {
+            ctx.issue("OUTPUT_INTENT_REF_INCOMPLETE", why, true);
+            anchor = "CMYK";
+            keepIntent = oi;
+            break;
+          }
+          if (embeddedOk) {
+            ctx.issue("OUTPUT_INTENT_NOT_EXTERNAL",
+                      "this flavour identifies its press condition by external reference, "
+                      "but the output intent only embeds the profile",
+                      true);
+            anchor = cs;
+            keepIntent = oi;
+            break;
+          }
+          continue;
+        }
+        if (ctx.opt.level == Level::VT2 && !embeddedOk) {
+          std::string why;
+          if (wellFormedProfileRef(oi, why) &&
+              oi.getKey("/OutputConditionIdentifier").isString()) {
+            anchor = "CMYK";
+            keepIntent = oi;
+            ctx.issue("OUTPUT_INTENT_EXTERNAL_KEPT",
+                      "kept output intent with an externally referenced press profile",
+                      false);
+            break;
+          }
+        }
+        if (embeddedOk) {
           if (ctx.isE() || cs == "CMYK") {
             anchor = cs;
             keepIntent = oi;
@@ -866,6 +969,11 @@ void passColorPrint(Ctx& ctx, ColorUsage& usage) {
         }
       }
     }
+  }
+  if (ctx.externalIntent() && !keepIntent.isInitialized()) {
+    ctx.issue("OUTPUT_INTENT_EXTERNAL_MISSING",
+              "no output intent with a usable external press-profile reference was found",
+              true);
   }
 
   if (!keepIntent.isInitialized()) {

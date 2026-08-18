@@ -850,8 +850,32 @@ void fixResources(Ctx& ctx, QPDFObjectHandle res, Visited& visited, bool flatten
                     true);
         }
         if (d.hasKey("/Ref")) {
-          d.removeKey("/Ref");
-          ctx.issue("REFERENCE_XOBJECT_FIXED", "removed /Ref from form XObject", true);
+          QPDFObjectHandle ref = d.getKey("/Ref");
+          bool wellFormed = ref.isDictionary() && (ref.getKey("/F").isDictionary() ||
+                                                   ref.getKey("/F").isString());
+          if (ctx.allowRefXObjects() && wellFormed) {
+            ctx.issue("REFERENCE_XOBJECT_KEPT",
+                      "kept reference XObject pointing at an external document", false);
+            if (!d.getKey("/ID").isArray()) {
+              ctx.issue("REFERENCE_XOBJECT_INCOMPLETE",
+                        "reference XObject does not carry the file ID pair of the "
+                        "document it points at",
+                        true);
+            }
+            if (!d.getKey("/Metadata").isStream()) {
+              ctx.issue("REFERENCE_XOBJECT_INCOMPLETE",
+                        "reference XObject has no metadata describing the referenced "
+                        "rendition",
+                        true);
+            }
+          } else if (ctx.allowRefXObjects()) {
+            d.removeKey("/Ref");
+            ctx.issue("REFERENCE_XOBJECT_FIXED",
+                      "removed /Ref without a usable file reference from form XObject", true);
+          } else {
+            d.removeKey("/Ref");
+            ctx.issue("REFERENCE_XOBJECT_FIXED", "removed /Ref from form XObject", true);
+          }
         }
         if (d.hasKey("/PS")) {
           d.removeKey("/PS");

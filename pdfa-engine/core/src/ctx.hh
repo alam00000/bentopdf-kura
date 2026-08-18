@@ -27,7 +27,19 @@ struct Ctx {
   bool isE() const { return fam == Family::PDFE; }
   bool isVT() const { return fam == Family::PDFVT; }
   bool x1a() const { return opt.level == Level::X1A; }
-  bool pdf20Print() const { return opt.level == Level::X6 || opt.level == Level::VT3; }
+  bool pdf20Print() const {
+    return opt.level == Level::X6 || opt.level == Level::VT3 ||
+           opt.level == Level::X6N || opt.level == Level::X6P;
+  }
+  bool externalIntent() const {
+    return opt.level == Level::X4P || opt.level == Level::X5N ||
+           opt.level == Level::X5PG || opt.level == Level::X6N ||
+           opt.level == Level::X6P;
+  }
+  bool allowRefXObjects() const {
+    return opt.level == Level::X5G || opt.level == Level::X5PG ||
+           opt.level == Level::VT2;
+  }
   bool ua2() const { return opt.ua && isA() && part == 4; }
   bool pdf14Target() const {
     return (isA() && part == 1) || opt.level == Level::X1A || opt.level == Level::X3;
