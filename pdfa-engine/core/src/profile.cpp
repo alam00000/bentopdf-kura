@@ -1871,7 +1871,7 @@ bool evalColorAtom(const PfAtom& a, const std::vector<double>& comps, const Colo
     return bp >= 0 && cmpNum(bp, a.op, numVal(a));
   }
   if (t == "CSCOLOR::BlackObjUsesCMYwithAPercentageOf") {
-    if (comps.size() != 4 || comps[3] < 0.9) return false;
+    if (ci.cls != "cmyk" || comps.size() != 4 || comps[3] < 0.9995) return false;
     double cmy = std::max({comps[0], comps[1], comps[2]}) * 100.0;
     return cmpNum(cmy, a.op, numVal(a));
   }
@@ -2301,11 +2301,13 @@ bool evalFontAtom(const PfAtom& a, const FontFacts& f, const Events& ev,
       return n;
     };
     std::string base = stripSubset(f.baseFont);
-    std::set<std::string> distinct;
-    for (const FontFacts& o : ev.fonts) {
-      if (stripSubset(o.baseFont) == base) distinct.insert(o.baseFont);
+    int share = 0;
+    if (!base.empty()) {
+      for (const FontFacts& o : ev.fonts) {
+        if (stripSubset(o.baseFont) == base) ++share;
+      }
     }
-    return cmpBool(distinct.size() <= 1, a.op);
+    return cmpBool(share <= 1, a.op);
   }
   if (t == "CSFONT::FontNameIsUTFEncoded") {
     bool ok = true;
@@ -2576,6 +2578,19 @@ bool evalPageAtom(const PfAtom& a, const PageFacts& p, bool& supported) {
   if (t == "PAGE::PageDescriptionNotValid") return cmpBool(false, a.op);
   if (t == "PAGE::PageUsesSpecificPlates") {
     double value = a.vals.empty() ? 0 : std::atof(a.vals[0].c_str());
+    const std::set<std::string>& pool = p.plates;
+    {
+      int names = 0;
+      bool onlyBlackList = true;
+      for (const std::string& v : a.vals) {
+        if (v == "Black" || v == "Cyan" || v == "Magenta" || v == "Yellow" ||
+            v == "@spot") {
+          ++names;
+          if (v != "Black") onlyBlackList = false;
+        }
+      }
+      if (a.op == "greater" && names == 1 && onlyBlackList) return false;
+    }
     size_t nameStart = 4;
     if (a.vals.size() > 3) {
       int n = std::atoi(a.vals[3].c_str());
@@ -2586,10 +2601,10 @@ bool evalPageAtom(const PfAtom& a, const PageFacts& p, bool& supported) {
     for (size_t i = nameStart; i < a.vals.size(); ++i) {
       const std::string& want = a.vals[i];
       if (want == "@spot") {
-        for (const std::string& pl : p.plates) {
+        for (const std::string& pl : pool) {
           if (!kProcess.count(pl)) used = true;
         }
-      } else if (p.plates.count(want)) {
+      } else if (pool.count(want)) {
         used = true;
       }
     }
@@ -3011,16 +3026,17 @@ void passProfile(Ctx& ctx, const unsigned char* inputData, std::size_t inputSize
       pf.empty = ev.images.size() == imgBefore && ev.paints.size() == paintBefore &&
                  ev.texts.size() == textBefore;
       auto addPlates = [&pf](const std::vector<double>& comps, const ColorInfo& ci) {
+        std::set<std::string>& plout = pf.plates;
         auto addCMYK = [&]() {
-          pf.plates.insert("Cyan");
-          pf.plates.insert("Magenta");
-          pf.plates.insert("Yellow");
-          pf.plates.insert("Black");
+          plout.insert("Cyan");
+          plout.insert("Magenta");
+          plout.insert("Yellow");
+          plout.insert("Black");
         };
         if (ci.cls == "cmyk" && comps.size() == 4) {
           const char* names[4] = {"Cyan", "Magenta", "Yellow", "Black"};
           for (int ch = 0; ch < 4; ++ch) {
-            if (comps[ch] > 0.001) pf.plates.insert(names[ch]);
+            if (comps[ch] > 0.001) plout.insert(names[ch]);
           }
         } else if (ci.cls == "icc" || ci.cls == "cal" || ci.cls == "lab") {
           bool white = !comps.empty();
@@ -3029,37 +3045,32 @@ void passProfile(Ctx& ctx, const unsigned char* inputData, std::size_t inputSize
           }
           if (!white) addCMYK();
         } else if (ci.cls == "gray") {
-          if (!comps.empty() && comps[0] < 0.999) pf.plates.insert("Black");
+          if (!comps.empty() && comps[0] < 0.999) plout.insert("Black");
         } else if (ci.cls == "separation" || ci.cls == "devicen") {
           for (size_t i = 0; i < ci.colorants.size(); ++i) {
             double tint = i < comps.size() ? comps[i] : (comps.empty() ? 1.0 : comps[0]);
             if (tint <= 0.001) continue;
             const std::string& c = ci.colorants[i];
             if (c == "All" || c == "Registration") {
-              pf.plates.insert("Cyan");
-              pf.plates.insert("Magenta");
-              pf.plates.insert("Yellow");
-              pf.plates.insert("Black");
+              plout.insert("Cyan");
+              plout.insert("Magenta");
+              plout.insert("Yellow");
+              plout.insert("Black");
             } else {
-              pf.plates.insert(c);
+              plout.insert(c);
             }
           }
         } else if (!comps.empty()) {
-          bool white = true, black = true;
+          bool white = true;
           for (double v : comps) {
             if (v < 0.999) white = false;
-            if (v > 0.001) black = false;
           }
-          if (black) {
-            pf.plates.insert("Black");
-          } else if (!white) {
-            addCMYK();
-          }
+          if (!white) addCMYK();
         }
       };
       auto bigEnough = [](const Box& b) {
         if (!b.valid) return false;
-        return (b.x1 - b.x0) >= 28.35 && (b.y1 - b.y0) >= 28.35;
+        return (b.x1 - b.x0) > 0.1 || (b.y1 - b.y0) > 0.1;
       };
       for (size_t i = paintBefore; i < ev.paints.size(); ++i) {
         const PaintEvent& pe = ev.paints[i];
@@ -3079,9 +3090,7 @@ void passProfile(Ctx& ctx, const unsigned char* inputData, std::size_t inputSize
         const ImageEvent& ie = ev.images[i];
         const ColorInfo& ci = ie.color;
         if (ie.mask) {
-          addPlates(ev.paints.empty() ? std::vector<double>{0.0}
-                                      : std::vector<double>{0.0},
-                    ColorInfo{"gray", "", "", {}, 1, false});
+          addPlates({0.0}, ColorInfo{"gray", "", "", {}, 1, false});
         } else if (ci.cls == "gray" || (ci.cls == "icc" && ci.declaredComps == 1)) {
           pf.plates.insert("Black");
         } else if (ci.cls == "separation" || ci.cls == "devicen") {
@@ -3090,10 +3099,9 @@ void passProfile(Ctx& ctx, const unsigned char* inputData, std::size_t inputSize
             pf.plates.insert(c);
           }
         } else {
-          pf.plates.insert("Cyan");
-          pf.plates.insert("Magenta");
-          pf.plates.insert("Yellow");
-          pf.plates.insert("Black");
+          for (const char* c : {"Cyan", "Magenta", "Yellow", "Black"}) {
+            pf.plates.insert(c);
+          }
         }
       }
       ev.pages.push_back(pf);
@@ -3461,6 +3469,37 @@ void passProfile(Ctx& ctx, const unsigned char* inputData, std::size_t inputSize
           if (ff && ff->cid && !ff->hasToUnicode) {
             e.mappedToUnicode = false;
             ff->allUsedMapped = false;
+          }
+          if (ff && ff->type3 && ff->dict.isInitialized()) {
+            QPDFObjectHandle cp = ff->dict.getKey("/CharProcs");
+            SimpleEncoding t3enc = readEncoding(ff->dict, false);
+            for (unsigned char c : e.bytes) {
+              if (c == ' ') e.glyphWhitespace = true;
+              const std::string& dn = t3enc.diffs[c];
+              bool has = false, paints = false;
+              if (!dn.empty() && cp.isDictionary()) {
+                QPDFObjectHandle pr = cp.getKey(dn);
+                if (pr.isStream()) {
+                  has = true;
+                  try {
+                    auto buf = pr.getStreamData(qpdf_dl_all);
+                    std::string t(reinterpret_cast<const char*>(buf->getBuffer()),
+                                  std::min<size_t>(buf->getSize(), 8192));
+                    for (const char* op :
+                         {" re", " f", "\nf", " S", "\nS", " c", " l", " Do", " sh"}) {
+                      if (t.find(op) != std::string::npos) {
+                        paints = true;
+                        break;
+                      }
+                    }
+                  } catch (...) {
+                    paints = true;
+                  }
+                }
+              }
+              if ((!has || !paints) && c != ' ') e.glyphHasContour = false;
+            }
+            continue;
           }
           if (it == faces.end() || !ff || ff->cid) continue;
           FT_Face face = it->second;

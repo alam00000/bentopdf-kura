@@ -13,3 +13,4 @@ pdfa-engine/third_party/
 
 dist/
 cert/mustang.jar
+__pycache__/
