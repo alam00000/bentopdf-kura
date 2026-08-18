@@ -36,6 +36,13 @@ bool levelFromString(const std::string& s, Level& out) {
   if (s == "vt1") { out = Level::VT1; return true; }
   if (s == "x6") { out = Level::X6; return true; }
   if (s == "vt3") { out = Level::VT3; return true; }
+  if (s == "x4p") { out = Level::X4P; return true; }
+  if (s == "x5g") { out = Level::X5G; return true; }
+  if (s == "x5n") { out = Level::X5N; return true; }
+  if (s == "x5pg") { out = Level::X5PG; return true; }
+  if (s == "x6n") { out = Level::X6N; return true; }
+  if (s == "x6p") { out = Level::X6P; return true; }
+  if (s == "vt2") { out = Level::VT2; return true; }
   return false;
 }
 
@@ -59,6 +66,13 @@ std::string levelToString(Level level) {
     case Level::VT1: return "vt1";
     case Level::X6: return "x6";
     case Level::VT3: return "vt3";
+    case Level::X4P: return "x4p";
+    case Level::X5G: return "x5g";
+    case Level::X5N: return "x5n";
+    case Level::X5PG: return "x5pg";
+    case Level::X6N: return "x6n";
+    case Level::X6P: return "x6p";
+    case Level::VT2: return "vt2";
   }
   return "2b";
 }
@@ -101,11 +115,31 @@ Family levelFamily(Level level) {
     case Level::X1A:
     case Level::X3:
     case Level::X4:
-    case Level::X6: return Family::PDFX;
+    case Level::X6:
+    case Level::X4P:
+    case Level::X5G:
+    case Level::X5N:
+    case Level::X5PG:
+    case Level::X6N:
+    case Level::X6P: return Family::PDFX;
     case Level::E1: return Family::PDFE;
     case Level::VT1:
-    case Level::VT3: return Family::PDFVT;
+    case Level::VT3:
+    case Level::VT2: return Family::PDFVT;
     default: return Family::PDFA;
+  }
+}
+
+bool levelVerifyOnly(Level level) {
+  switch (level) {
+    case Level::X4P:
+    case Level::X5G:
+    case Level::X5N:
+    case Level::X5PG:
+    case Level::X6N:
+    case Level::X6P:
+    case Level::VT2: return true;
+    default: return false;
   }
 }
 
@@ -320,6 +354,19 @@ Result convert(const unsigned char* data, std::size_t size, const Options& optIn
       res.errorCode = "UA_UNSUPPORTED_LEVEL";
       res.error = "PDF/UA layers only on PDF/A levels (UA-1 on parts 1-3, UA-2 on part 4)";
       res.suggestedLevel = "2u";
+      return res;
+    }
+    if (levelVerifyOnly(opt.level) && !opt.verifyOnly) {
+      res.errorCode = "LEVEL_VERIFY_ONLY";
+      res.error = "this flavour relies on externally referenced press assets, so Kura checks "
+                  "files against it but cannot produce one; convert to the self-contained "
+                  "flavour instead";
+      switch (opt.level) {
+        case Level::X6N:
+        case Level::X6P: res.suggestedLevel = "x6"; break;
+        case Level::VT2: res.suggestedLevel = "vt1"; break;
+        default: res.suggestedLevel = "x4"; break;
+      }
       return res;
     }
     if (wasEncrypted) {
