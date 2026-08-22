@@ -314,15 +314,7 @@ struct TextState {
   int renderMode = 0;
 };
 
-std::string fmtNum(double v) {
-  char buf[40];
-  std::snprintf(buf, sizeof(buf), "%.3f", v);
-  std::string s(buf);
-  size_t dot = s.find('.');
-  size_t last = s.find_last_not_of('0');
-  if (last == dot) last = dot - 1;
-  return s.substr(0, last + 1);
-}
+std::string fmtNum(double v) { return fmtFixed(v, 3); }
 
 struct GlyphEmitter {
   std::string& out;

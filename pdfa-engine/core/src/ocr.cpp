@@ -6,6 +6,7 @@
 #include <cstdio>
 
 #include "assets/fonts_data.hh"
+#include "util.hh"
 
 namespace pdfa {
 namespace {
@@ -91,7 +92,6 @@ void passOcr(Ctx& ctx) {
     }
 
     std::string content = "q BT 3 Tr\n";
-    char buf[512];
     for (const Options::OcrWord& word : words) {
       if (word.text.empty() || word.width <= 0 || word.height <= 0) continue;
       double x = px0 + word.x * sx;
@@ -103,9 +103,8 @@ void passOcr(Ctx& ctx) {
       double hscale = natural > 0 ? (target / natural) * 100.0 : 100.0;
       if (hscale < 1) hscale = 1;
       if (hscale > 1000) hscale = 1000;
-      std::snprintf(buf, sizeof(buf), "/KuraOCR %.2f Tf %.2f Tz 1 0 0 1 %.2f %.2f Tm (", size,
-                    hscale, x, y);
-      content += buf;
+      content += "/KuraOCR " + fmtFixed(size, 2) + " Tf " + fmtFixed(hscale, 2) +
+                 " Tz 1 0 0 1 " + fmtFixed(x, 2) + " " + fmtFixed(y, 2) + " Tm (";
       content += escapeText(word.text);
       content += ") Tj\n";
       ++totalWords;

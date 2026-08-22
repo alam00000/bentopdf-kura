@@ -59,7 +59,7 @@ if(EMSCRIPTEN)
   set_target_properties(lcms2_wasm PROPERTIES
     IMPORTED_LOCATION ${PDFA_TP}/build-lcms2-wasm/src/liblcms2.a)
 
-  target_include_directories(pdfa_core PRIVATE
+  target_include_directories(pdfa_core SYSTEM PRIVATE
     ${PDFA_TP}/qpdf-12.3.2/include
     ${PDFA_TP}/build-qpdf-wasm/include
     ${PDFA_TP}/openjpeg-2.5.4/src/lib/openjp2
@@ -72,7 +72,7 @@ if(EMSCRIPTEN)
   target_link_options(pdfa_core INTERFACE
     -fwasm-exceptions "SHELL:-s USE_FREETYPE=1" "SHELL:-s USE_LIBJPEG=1" "SHELL:-s USE_ZLIB=1")
 else()
-  target_include_directories(pdfa_core PRIVATE ${LCMS2_INCLUDE_DIR})
+  target_include_directories(pdfa_core SYSTEM PRIVATE ${LCMS2_INCLUDE_DIR})
   if(PDFA_STATIC_DEPS)
     foreach(dep qpdf freetype openjp2 jpeg lcms2 png crypto)
       find_library(PDFA_A_${dep} NAMES lib${dep}.a
@@ -91,11 +91,11 @@ else()
       if(TARGET ${tgt})
         get_target_property(_inc ${tgt} INTERFACE_INCLUDE_DIRECTORIES)
         if(_inc)
-          target_include_directories(pdfa_core PRIVATE ${_inc})
+          target_include_directories(pdfa_core SYSTEM PRIVATE ${_inc})
         endif()
       endif()
     endforeach()
-    target_include_directories(pdfa_core PRIVATE ${FREETYPE_INCLUDE_DIRS})
+    target_include_directories(pdfa_core SYSTEM PRIVATE ${FREETYPE_INCLUDE_DIRS})
     target_link_libraries(pdfa_core
       PUBLIC ${PDFA_A_qpdf}
       PRIVATE ${PDFA_A_freetype} ${PDFA_A_png} ${PDFA_A_openjp2}

@@ -68,7 +68,22 @@ void scanResources(QPDFObjectHandle res, Visited& visited, TransparencyReport& r
       QPDFObjectHandle d = xo.getDict();
       std::string subtype = nameOf(d.getKey("/Subtype"));
       if (subtype == "/Form") {
+        QPDFObjectHandle grp = d.getKey("/Group");
+        if (grp.isDictionary() && nameIs(grp.getKey("/S"), "/Transparency")) {
+          rep.real = true;
+          rep.where.push_back("XObject" + k + " transparency group");
+        }
         scanResources(d.getKey("/Resources"), visited, rep);
+      } else if (subtype == "/Image") {
+        QPDFObjectHandle sm = d.getKey("/SMask");
+        if (!sm.isNull() && !nameIs(sm, "/None")) {
+          rep.real = true;
+          rep.where.push_back("XObject" + k + " /SMask");
+        }
+        if (numOf(d.getKey("/SMaskInData"), 0) > 0) {
+          rep.real = true;
+          rep.where.push_back("XObject" + k + " /SMaskInData");
+        }
       }
     }
   }
@@ -76,9 +91,14 @@ void scanResources(QPDFObjectHandle res, Visited& visited, TransparencyReport& r
   if (pat.isDictionary()) {
     for (const std::string& k : pat.getKeys()) {
       QPDFObjectHandle p = pat.getKey(k);
-      if (p.isStream() && visited.enter(p)) {
-        scanResources(p.getDict().getKey("/Resources"), visited, rep);
+      if (!visited.enter(p)) continue;
+      QPDFObjectHandle pd = p.isStream() ? p.getDict() : p;
+      if (!pd.isDictionary()) continue;
+      if (gsHasTransparency(pd.getKey("/ExtGState"))) {
+        rep.real = true;
+        rep.where.push_back("Pattern" + k + " /ExtGState");
       }
+      scanResources(pd.getKey("/Resources"), visited, rep);
     }
   }
 }
@@ -498,10 +518,8 @@ bool rasterFlattenPage(Ctx& ctx, QPDFPageObjectHelper& ph, int pageIndex, bool p
   res.replaceKey("/XObject", xo);
   if (!fonts.isNull()) res.replaceKey("/Font", fonts);
   page.replaceKey("/Resources", res);
-  char buf[192];
-  std::snprintf(buf, sizeof(buf), "q %.4f 0 0 %.4f %.4f %.4f cm /FlatIm Do Q\n", pw, phh, mx1,
-                my1);
-  std::string content(buf);
+  std::string content = "q " + fmtFixed(pw, 4) + " 0 0 " + fmtFixed(phh, 4) + " " +
+                        fmtFixed(mx1, 4) + " " + fmtFixed(my1, 4) + " cm /FlatIm Do Q\n";
   if (!text.empty()) content += text;
   page.replaceKey("/Contents",
                   ctx.pdf.makeIndirectObject(QPDFObjectHandle::newStream(&ctx.pdf, content)));
@@ -900,10 +918,16 @@ void fixResources(Ctx& ctx, QPDFObjectHandle res, Visited& visited, bool flatten
   if (pat.isDictionary()) {
     for (const std::string& k : pat.getKeys()) {
       QPDFObjectHandle p = pat.getKey(k);
-      if (p.isStream() && visited.enter(p)) {
-        fixResources(ctx, p.getDict().getKey("/Resources"), visited, flatten);
-        if (ctx.failed()) return;
+      if (!visited.enter(p)) continue;
+      QPDFObjectHandle pd = p.isStream() ? p.getDict() : p;
+      if (!pd.isDictionary()) continue;
+      QPDFObjectHandle pgs = pd.getKey("/ExtGState");
+      if (pgs.isDictionary()) {
+        fixGState(ctx, pgs);
+        if (flatten) flattenGStateTransparency(ctx, pgs);
       }
+      fixResources(ctx, pd.getKey("/Resources"), visited, flatten);
+      if (ctx.failed()) return;
     }
   }
 }

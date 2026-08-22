@@ -433,7 +433,7 @@ void passAnalyze(Ctx& ctx) {
     for (auto& ph : pages) {
       ++pageNum;
       QPDFObjectHandle page = ph.getObjectHandle();
-      QPDFObjectHandle res = ph.getAttribute("/Resources", true);
+      QPDFObjectHandle res = ph.getAttribute("/Resources", false);
       Visited seen;
       Gs initial;
       scanContent(page.getKey("/Contents"), res, initial, pageNum, 0, seen, tally);
@@ -442,7 +442,7 @@ void passAnalyze(Ctx& ctx) {
         ++tally.transparency;
         tally.transparencyPages.insert(pageNum);
       }
-      QPDFObjectHandle mb = ph.getAttribute("/MediaBox", true);
+      QPDFObjectHandle mb = ph.getAttribute("/MediaBox", false);
       if (mb.isArray() && mb.getArrayNItems() == 4) {
         double w = std::fabs(numOf(mb.getArrayItem(2), 0) - numOf(mb.getArrayItem(0), 0));
         double h = std::fabs(numOf(mb.getArrayItem(3), 0) - numOf(mb.getArrayItem(1), 0));
