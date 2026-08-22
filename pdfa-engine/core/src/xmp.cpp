@@ -507,6 +507,10 @@ void passMetadata(Ctx& ctx) {
            "</pdfvtid:GTS_PDFVTVersion>\n";
     xmp += "      <pdfvtid:GTS_PDFVTModDate>" + info.modifyIso +
            "</pdfvtid:GTS_PDFVTModDate>\n";
+    if (ctx.pdf20Print()) {
+      xmp += "      <pdfvtid:GTS_PDFVTRev>2020</pdfvtid:GTS_PDFVTRev>\n";
+      xmp += "      <pdfvtid:rev>2020</pdfvtid:rev>\n";
+    }
   }
   if (ctx.isE()) {
     xmp += "      <pdfe:ISO_PDFEVersion>PDF/E-1</pdfe:ISO_PDFEVersion>\n";

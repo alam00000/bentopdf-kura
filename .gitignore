@@ -4,6 +4,7 @@
 out/
 
 suite
+preflight-parity/
 calpoly/
 cert/
 corpus/
