@@ -22,6 +22,19 @@
 
 namespace pdfa {
 namespace {
+bool containsInlineTerminator(const std::string& data) {
+  auto isWs = [](unsigned char c) {
+    return c == ' ' || c == '\t' || c == '\r' || c == '\n' || c == '\f' || c == '\0';
+  };
+  for (size_t i = 0; i + 1 < data.size(); ++i) {
+    if (data[i] != 'E' || data[i + 1] != 'I') continue;
+    bool beforeOk = i == 0 || isWs(static_cast<unsigned char>(data[i - 1]));
+    bool afterOk = i + 2 >= data.size() || isWs(static_cast<unsigned char>(data[i + 2]));
+    if (beforeOk && afterOk) return true;
+  }
+  return false;
+}
+
 constexpr double kMaxReal = 32767.0;
 constexpr double kMaxReal2 = 3.402823e38;
 constexpr double kMinDenorm = 1.175494e-38;
@@ -251,10 +264,10 @@ class ContentFixFilter : public QPDFObjectHandle::TokenFilter {
       double v = std::strtod(token.getValue().c_str(), nullptr);
       double bound = pdf14 ? kMaxReal : kMaxReal2;
       if (v > bound || v < -bound) {
-        double clamped = v > 0 ? kMaxReal : -kMaxReal;
+        double clamped = v > 0 ? bound : -bound;
         writeToken(QPDFTokenizer::Token(
             QPDFTokenizer::tt_real,
-            QPDFObjectHandle::newReal(clamped, 1).getRealValue()));
+            QPDFObjectHandle::newReal(clamped, pdf14 ? 1 : 0).getRealValue()));
         return;
       }
       if (v != 0 && v > -kMinDenorm && v < kMinDenorm) {
@@ -374,16 +387,28 @@ class ContentFixFilter : public QPDFObjectHandle::TokenFilter {
         passthrough();
         return;
       }
+      QPDFObjectHandle dp = dict.getKey("/DP");
+      if (dp.isNull()) dp = dict.getKey("/DecodeParms");
+      long long predictor = 1;
+      if (dp.isDictionary() && dp.getKey("/Predictor").isInteger()) {
+        predictor = dp.getKey("/Predictor").getIntValue();
+      }
+      bool mustStayFiltered = predictor > 1;
       std::string packed = flateCompress(raw);
-      if (!packed.empty() && packed.size() < raw.size()) {
+      if (!packed.empty() && (mustStayFiltered || packed.size() < raw.size())) {
         newData = packed;
         outNames.assign(1, "/Fl");
-      } else {
+      } else if (!mustStayFiltered) {
         newData = raw;
         outNames.clear();
+      } else {
+        passthrough();
+        return;
       }
-      dict.removeKey("/DP");
-      dict.removeKey("/DecodeParms");
+      if (!mustStayFiltered) {
+        dict.removeKey("/DP");
+        dict.removeKey("/DecodeParms");
+      }
       changed = true;
     }
     if (filterChanged || changed) {
@@ -397,6 +422,27 @@ class ContentFixFilter : public QPDFObjectHandle::TokenFilter {
         QPDFObjectHandle arr = QPDFObjectHandle::newArray();
         for (const std::string& n : outNames) arr.appendItem(QPDFObjectHandle::newName(n));
         dict.replaceKey("/F", arr);
+      }
+      if (containsInlineTerminator(newData)) {
+        static const char* kHex = "0123456789ABCDEF";
+        std::string hex;
+        hex.reserve(newData.size() * 2 + 1);
+        for (unsigned char c : newData) {
+          hex += kHex[c >> 4];
+          hex += kHex[c & 0x0F];
+        }
+        hex += '>';
+        newData = hex;
+        outNames.insert(outNames.begin(), "/AHx");
+        dict.removeKey("/F");
+        dict.removeKey("/Filter");
+        if (outNames.size() == 1) {
+          dict.replaceKey("/F", QPDFObjectHandle::newName(outNames[0]));
+        } else {
+          QPDFObjectHandle arr = QPDFObjectHandle::newArray();
+          for (const std::string& n : outNames) arr.appendItem(QPDFObjectHandle::newName(n));
+          dict.replaceKey("/F", arr);
+        }
       }
       std::string out = "BI";
       for (const std::string& k : dict.getKeys()) {
@@ -435,7 +481,8 @@ QPDFObjectHandle clampScalar(QPDFObjectHandle v, LimitStats& st, bool& changed) 
     if (d > st.maxReal || d < -st.maxReal) {
       changed = true;
       ++st.reals;
-      return QPDFObjectHandle::newReal(d > 0 ? kMaxReal : -kMaxReal, 1);
+      return QPDFObjectHandle::newReal(d > 0 ? st.maxReal : -st.maxReal,
+                                       st.maxReal > kMaxReal ? 0 : 1);
     }
     if (d != 0 && d > -kMinDenorm && d < kMinDenorm) {
       changed = true;
