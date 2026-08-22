@@ -27,6 +27,9 @@ struct Ctx {
   bool isE() const { return fam == Family::PDFE; }
   bool isVT() const { return fam == Family::PDFVT; }
   bool x1a() const { return opt.level == Level::X1A; }
+  bool cmykIntentOnly() const {
+    return opt.level == Level::X1A || opt.level == Level::VT1;
+  }
   bool pdf20Print() const {
     return opt.level == Level::X6 || opt.level == Level::VT3 ||
            opt.level == Level::X6N || opt.level == Level::X6P;

@@ -171,6 +171,7 @@ RawImage decodeImage(QPDFObjectHandle image) {
           img.samples[i] = static_cast<char>(255 - static_cast<unsigned char>(img.samples[i]));
         }
       }
+      if (img.ok) applyDecode(img.samples, d.getKey("/Decode"), img.comps);
       return img;
     }
   }

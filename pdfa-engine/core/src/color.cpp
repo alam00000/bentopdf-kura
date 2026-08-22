@@ -458,16 +458,19 @@ void fixSpecialColorSpaces(Ctx& ctx) {
     collectSpecialSpaces(obj, visited, seps, dns);
   }
   int renamed = 0, deduped = 0, colorants = 0;
+  auto generatedName = [](const std::string& bare) {
+    unsigned hash = 2166136261u;
+    for (unsigned char c : bare) hash = (hash ^ c) * 16777619u;
+    char buf[24];
+    std::snprintf(buf, sizeof(buf), "/C%08X", hash);
+    return std::string(buf);
+  };
   auto fixName = [&](QPDFObjectHandle arr, int idx) {
     QPDFObjectHandle nm = arr.getArrayItem(idx);
     if (!nm.isName()) return;
     std::string bare = nm.getName().substr(1);
     if (validUtf8Bare(bare)) return;
-    unsigned hash = 2166136261u;
-    for (unsigned char c : bare) hash = (hash ^ c) * 16777619u;
-    char buf[24];
-    std::snprintf(buf, sizeof(buf), "/C%08X", hash);
-    arr.setArrayItem(idx, QPDFObjectHandle::newName(buf));
+    arr.setArrayItem(idx, QPDFObjectHandle::newName(generatedName(bare)));
     ++renamed;
   };
   std::map<std::string, std::pair<QPDFObjectHandle, QPDFObjectHandle>> canon;
@@ -503,23 +506,27 @@ void fixSpecialColorSpaces(Ctx& ctx) {
       }
     }
   }
+  int malformedDn = 0;
   for (QPDFObjectHandle dn : dns) {
     QPDFObjectHandle names = dn.getArrayItem(1);
+    std::map<std::string, std::string> dnRenames;
     if (names.isArray()) {
       for (int i = 0; i < names.getArrayNItems(); ++i) {
         QPDFObjectHandle nm = names.getArrayItem(i);
         if (nm.isName() && !validUtf8Bare(nm.getName().substr(1))) {
-          unsigned hash = 2166136261u;
-          for (unsigned char c : nm.getName()) hash = (hash ^ c) * 16777619u;
-          char buf[24];
-          std::snprintf(buf, sizeof(buf), "/C%08X", hash);
-          names.setArrayItem(i, QPDFObjectHandle::newName(buf));
+          std::string fresh = generatedName(nm.getName().substr(1));
+          dnRenames[nm.getName()] = fresh;
+          names.setArrayItem(i, QPDFObjectHandle::newName(fresh));
           ++renamed;
         }
       }
     }
     if (!ctx.isA() || ctx.part < 2) continue;
     if (!names.isArray()) continue;
+    if (dn.getArrayNItems() < 4) {
+      ++malformedDn;
+      continue;
+    }
     QPDFObjectHandle attrs = dn.getArrayNItems() >= 5 ? dn.getArrayItem(4)
                                                       : QPDFObjectHandle::newNull();
     if (!attrs.isDictionary()) {
@@ -531,10 +538,18 @@ void fixSpecialColorSpaces(Ctx& ctx) {
       }
       attrs = dn.getArrayItem(4);
     }
+    if (!attrs.isDictionary()) continue;
     QPDFObjectHandle colDict = attrs.getKey("/Colorants");
     if (!colDict.isDictionary()) {
       attrs.replaceKey("/Colorants", QPDFObjectHandle::newDictionary());
       colDict = attrs.getKey("/Colorants");
+    }
+    for (const auto& kv : dnRenames) {
+      QPDFObjectHandle moved = colDict.getKey(kv.first);
+      if (!moved.isNull()) {
+        colDict.removeKey(kv.first);
+        colDict.replaceKey(kv.second, moved);
+      }
     }
     for (const std::string& ck : colDict.getKeys()) {
       QPDFObjectHandle csep = colDict.getKey(ck);
@@ -593,6 +608,13 @@ void fixSpecialColorSpaces(Ctx& ctx) {
       ++colorants;
     }
     (void)added;
+  }
+  if (malformedDn) {
+    ctx.issue("DEVICEN_MALFORMED",
+              "left " + std::to_string(malformedDn) +
+                  " DeviceN space(s) without a tint transform untouched; the array is too "
+                  "short to carry attributes",
+              false);
   }
   if (renamed) {
     ctx.issue("COLORANT_RENAMED",
@@ -961,7 +983,7 @@ void passColorPrint(Ctx& ctx, ColorUsage& usage) {
           }
         }
         if (embeddedOk) {
-          if (ctx.isE() || cs == "CMYK") {
+          if (ctx.isE() || cs == "CMYK" || (cs == "RGB " && !ctx.cmykIntentOnly())) {
             anchor = cs;
             keepIntent = oi;
             break;

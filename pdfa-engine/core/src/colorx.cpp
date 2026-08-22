@@ -342,7 +342,7 @@ bool spaceIsLab(QPDFObjectHandle cs) {
   return cs.isArray() && cs.getArrayNItems() >= 1 && nameOf(cs.getArrayItem(0)) == "/Lab";
 }
 
-void convertImage(Ctx&, ConvertState& st, QPDFObjectHandle image) {
+void convertImage(Ctx& ctx, ConvertState& st, QPDFObjectHandle image) {
   if (!st.imagesDone.enter(image)) return;
   QPDFObjectHandle d = image.getDict();
   QPDFObjectHandle cs = d.getKey("/ColorSpace");
@@ -386,9 +386,15 @@ void convertImage(Ctx&, ConvertState& st, QPDFObjectHandle image) {
   std::string out(pixels * 4, '\0');
   st.xf.rgbBuffer(reinterpret_cast<const unsigned char*>(img.samples.data()),
                   reinterpret_cast<unsigned char*>(&out[0]), pixels);
+  QPDFObjectHandle srcFilter = d.getKey("/Filter");
+  std::string srcFilterName = nameOf(srcFilter);
+  if (srcFilter.isArray() && srcFilter.getArrayNItems() > 0) {
+    srcFilterName = nameOf(srcFilter.getArrayItem(srcFilter.getArrayNItems() - 1));
+  }
+  bool srcWasLossy = srcFilterName == "/DCTDecode" || srcFilterName == "/JPXDecode";
   std::string encoded;
   const char* newFilter = nullptr;
-  if (pixels > 262144) {
+  if (pixels > 262144 && srcWasLossy) {
     encoded = encodeCmykJpeg(out, img.width, img.height, 90);
     if (!encoded.empty()) newFilter = "/DCTDecode";
   }
@@ -412,8 +418,20 @@ void convertImage(Ctx&, ConvertState& st, QPDFObjectHandle image) {
   d.replaceKey("/Height", QPDFObjectHandle::newInteger(img.height));
   d.removeKey("/Decode");
   d.removeKey("/DecodeParms");
-  d.removeKey("/Mask");
+  QPDFObjectHandle mask = d.getKey("/Mask");
+  if (mask.isArray()) {
+    d.removeKey("/Mask");
+    ctx.issue("IMAGE_MASK_DROPPED",
+              "removed colour-key /Mask whose ranges no longer apply after conversion to CMYK "
+              "(previously masked pixels are now painted)",
+              true);
+  }
   d.removeKey("/Intent");
+  if (newFilter && std::string(newFilter) == "/DCTDecode") {
+    ctx.issue("IMAGE_RECOMPRESSED",
+              "re-encoded a lossy image as CMYK JPEG at quality 90 during colour conversion",
+              true);
+  }
   ++st.images;
 }
 
@@ -816,8 +834,14 @@ void processResources(Ctx& ctx, ConvertState& st, QPDFObjectHandle res, Visited&
         convertImage(ctx, st, xo);
         if (st.failed) return;
       } else if (subtype == "/Form" && visited.enter(xo)) {
+        QPDFObjectHandle formRes = xo.getDict().getKey("/Resources");
+        QPDFObjectHandle localCs =
+            formRes.isDictionary() ? formRes.getKey("/ColorSpace") : QPDFObjectHandle::newNull();
         std::map<std::string, int> inner;
-        processResources(ctx, st, xo.getDict().getKey("/Resources"), visited, inner, depth + 1);
+        for (const auto& kv : fixNames) {
+          if (!localCs.isDictionary() || !localCs.hasKey(kv.first)) inner.insert(kv);
+        }
+        processResources(ctx, st, formRes, visited, inner, depth + 1);
         if (st.failed) return;
         rewriteContent(ctx, st, xo, inner);
         if (st.failed) return;
