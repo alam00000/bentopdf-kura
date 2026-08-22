@@ -18,131 +18,71 @@
 #include "util.hh"
 
 namespace pdfa {
+namespace {
+struct LevelRow {
+  Level level;
+  const char* name;
+  int part;
+  char conformance;
+  Family family;
+  bool verifyOnly;
+};
+
+constexpr LevelRow kLevelTable[] = {
+    {Level::A1B,  "1b",   1, 'B', Family::PDFA,  false},
+    {Level::A1A,  "1a",   1, 'A', Family::PDFA,  false},
+    {Level::A2B,  "2b",   2, 'B', Family::PDFA,  false},
+    {Level::A2U,  "2u",   2, 'U', Family::PDFA,  false},
+    {Level::A2A,  "2a",   2, 'A', Family::PDFA,  false},
+    {Level::A3B,  "3b",   3, 'B', Family::PDFA,  false},
+    {Level::A3U,  "3u",   3, 'U', Family::PDFA,  false},
+    {Level::A3A,  "3a",   3, 'A', Family::PDFA,  false},
+    {Level::A4,   "4",    4, 0,   Family::PDFA,  false},
+    {Level::A4F,  "4f",   4, 'F', Family::PDFA,  false},
+    {Level::A4E,  "4e",   4, 'E', Family::PDFA,  false},
+    {Level::X1A,  "x1a",  0, 0,   Family::PDFX,  false},
+    {Level::X3,   "x3",   0, 0,   Family::PDFX,  false},
+    {Level::X4,   "x4",   0, 0,   Family::PDFX,  false},
+    {Level::X6,   "x6",   0, 0,   Family::PDFX,  false},
+    {Level::E1,   "e1",   0, 0,   Family::PDFE,  false},
+    {Level::VT1,  "vt1",  0, 0,   Family::PDFVT, false},
+    {Level::VT3,  "vt3",  0, 0,   Family::PDFVT, false},
+    {Level::X4P,  "x4p",  0, 0,   Family::PDFX,  true},
+    {Level::X5G,  "x5g",  0, 0,   Family::PDFX,  true},
+    {Level::X5N,  "x5n",  0, 0,   Family::PDFX,  true},
+    {Level::X5PG, "x5pg", 0, 0,   Family::PDFX,  true},
+    {Level::X6N,  "x6n",  0, 0,   Family::PDFX,  true},
+    {Level::X6P,  "x6p",  0, 0,   Family::PDFX,  true},
+    {Level::VT2,  "vt2",  0, 0,   Family::PDFVT, true},
+};
+
+const LevelRow& levelRow(Level level) {
+  for (const LevelRow& r : kLevelTable) {
+    if (r.level == level) return r;
+  }
+  return kLevelTable[2];
+}
+}
+
 bool levelFromString(const std::string& s, Level& out) {
-  if (s == "1b") { out = Level::A1B; return true; }
-  if (s == "1a") { out = Level::A1A; return true; }
-  if (s == "2b") { out = Level::A2B; return true; }
-  if (s == "2u") { out = Level::A2U; return true; }
-  if (s == "2a") { out = Level::A2A; return true; }
-  if (s == "3b") { out = Level::A3B; return true; }
-  if (s == "3u") { out = Level::A3U; return true; }
-  if (s == "3a") { out = Level::A3A; return true; }
-  if (s == "4") { out = Level::A4; return true; }
-  if (s == "4f") { out = Level::A4F; return true; }
-  if (s == "4e") { out = Level::A4E; return true; }
-  if (s == "x1a") { out = Level::X1A; return true; }
-  if (s == "x3") { out = Level::X3; return true; }
-  if (s == "x4") { out = Level::X4; return true; }
-  if (s == "e1") { out = Level::E1; return true; }
-  if (s == "vt1") { out = Level::VT1; return true; }
-  if (s == "x6") { out = Level::X6; return true; }
-  if (s == "vt3") { out = Level::VT3; return true; }
-  if (s == "x4p") { out = Level::X4P; return true; }
-  if (s == "x5g") { out = Level::X5G; return true; }
-  if (s == "x5n") { out = Level::X5N; return true; }
-  if (s == "x5pg") { out = Level::X5PG; return true; }
-  if (s == "x6n") { out = Level::X6N; return true; }
-  if (s == "x6p") { out = Level::X6P; return true; }
-  if (s == "vt2") { out = Level::VT2; return true; }
+  for (const LevelRow& r : kLevelTable) {
+    if (s == r.name) {
+      out = r.level;
+      return true;
+    }
+  }
   return false;
 }
 
-std::string levelToString(Level level) {
-  switch (level) {
-    case Level::A1B: return "1b";
-    case Level::A1A: return "1a";
-    case Level::A2B: return "2b";
-    case Level::A2U: return "2u";
-    case Level::A2A: return "2a";
-    case Level::A3B: return "3b";
-    case Level::A3U: return "3u";
-    case Level::A3A: return "3a";
-    case Level::A4: return "4";
-    case Level::A4F: return "4f";
-    case Level::A4E: return "4e";
-    case Level::X1A: return "x1a";
-    case Level::X3: return "x3";
-    case Level::X4: return "x4";
-    case Level::E1: return "e1";
-    case Level::VT1: return "vt1";
-    case Level::X6: return "x6";
-    case Level::VT3: return "vt3";
-    case Level::X4P: return "x4p";
-    case Level::X5G: return "x5g";
-    case Level::X5N: return "x5n";
-    case Level::X5PG: return "x5pg";
-    case Level::X6N: return "x6n";
-    case Level::X6P: return "x6p";
-    case Level::VT2: return "vt2";
-  }
-  return "2b";
-}
+std::string levelToString(Level level) { return levelRow(level).name; }
 
-int levelPart(Level level) {
-  switch (level) {
-    case Level::A1B:
-    case Level::A1A: return 1;
-    case Level::A2B:
-    case Level::A2U:
-    case Level::A2A: return 2;
-    case Level::A3B:
-    case Level::A3U:
-    case Level::A3A: return 3;
-    case Level::A4:
-    case Level::A4F:
-    case Level::A4E: return 4;
-    default: return 0;
-  }
-}
+int levelPart(Level level) { return levelRow(level).part; }
 
-char levelConformance(Level level) {
-  switch (level) {
-    case Level::A1B:
-    case Level::A2B:
-    case Level::A3B: return 'B';
-    case Level::A2U:
-    case Level::A3U: return 'U';
-    case Level::A1A:
-    case Level::A2A:
-    case Level::A3A: return 'A';
-    case Level::A4F: return 'F';
-    case Level::A4E: return 'E';
-    default: return 0;
-  }
-}
+char levelConformance(Level level) { return levelRow(level).conformance; }
 
-Family levelFamily(Level level) {
-  switch (level) {
-    case Level::X1A:
-    case Level::X3:
-    case Level::X4:
-    case Level::X6:
-    case Level::X4P:
-    case Level::X5G:
-    case Level::X5N:
-    case Level::X5PG:
-    case Level::X6N:
-    case Level::X6P: return Family::PDFX;
-    case Level::E1: return Family::PDFE;
-    case Level::VT1:
-    case Level::VT3:
-    case Level::VT2: return Family::PDFVT;
-    default: return Family::PDFA;
-  }
-}
+Family levelFamily(Level level) { return levelRow(level).family; }
 
-bool levelVerifyOnly(Level level) {
-  switch (level) {
-    case Level::X4P:
-    case Level::X5G:
-    case Level::X5N:
-    case Level::X5PG:
-    case Level::X6N:
-    case Level::X6P:
-    case Level::VT2: return true;
-    default: return false;
-  }
-}
+bool levelVerifyOnly(Level level) { return levelRow(level).verifyOnly; }
 
 namespace {
 std::string detectSecurityHandler(const unsigned char* data, std::size_t size) {

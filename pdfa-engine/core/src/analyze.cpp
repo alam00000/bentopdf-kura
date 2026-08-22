@@ -11,6 +11,7 @@
 #include <vector>
 
 #include "passes.hh"
+#include "limits.hh"
 #include "util.hh"
 
 namespace pdfa {
@@ -86,7 +87,7 @@ double strokeScale(const Mat& m) {
 }
 
 void classifySpace(QPDFObjectHandle cs, Tally& t, int depth = 0) {
-  if (depth > 4) return;
+  if (depth > kMaxColorSpaceNest) return;
   if (cs.isName()) {
     std::string n = cs.getName();
     if (n == "/DeviceRGB" || n == "/CalRGB") ++t.rgbOps;
@@ -317,7 +318,7 @@ struct Scanner : QPDFObjectHandle::ParserCallbacks {
 
 void scanContent(QPDFObjectHandle contents, QPDFObjectHandle res, const Gs& initial,
                  int page, int depth, Visited& seen, Tally& tally) {
-  if (depth > 12) return;
+  if (depth > kMaxContentNest) return;
   Scanner scan(res, tally, page, initial);
   try {
     QPDFObjectHandle::parseContentStream(contents, &scan);

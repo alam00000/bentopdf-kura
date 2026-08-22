@@ -20,6 +20,7 @@
 #include "assets/cmyk_icc.hh"
 #include "assets/srgb_icc.hh"
 #include "images.hh"
+#include "limits.hh"
 #include "util.hh"
 
 namespace pdfa {
@@ -112,8 +113,6 @@ struct Xform {
 };
 
 enum OpFix { kOpFixNone = 0, kOpFixRgb = 1, kOpFixLab = 2 };
-
-enum class SpaceClass { Keep, Rgb, Gray, CmykIcc, Lab, IndexedRgb, SepRgbAlt, ShadeHandled };
 
 std::string fmtReal(double v) { return fmtFixed(v, 4); }
 
@@ -329,7 +328,7 @@ struct ConvertState {
 bool spaceIsRgbLike(QPDFObjectHandle cs, int depth = 0);
 
 bool spaceIsRgbLike(QPDFObjectHandle cs, int depth) {
-  if (depth > 6) return false;
+  if (depth > kMaxColorSpaceNest) return false;
   if (cs.isName()) return isRgbClassName(cs.getName());
   if (!cs.isArray() || cs.getArrayNItems() < 1) return false;
   std::string family = nameOf(cs.getArrayItem(0));
@@ -815,7 +814,7 @@ void processResources(Ctx& ctx, ConvertState& st, QPDFObjectHandle res, Visited&
                       std::map<std::string, int>& fixNames, int depth) {
   static thread_local int liveDepth = 0;
   RecurGuard guard(liveDepth);
-  if (guard.over || depth > 64) return;
+  if (guard.over || depth > kMaxObjectWalk) return;
   if (!res.isDictionary() || !visited.enter(res)) return;
   QPDFObjectHandle csd = res.getKey("/ColorSpace");
   if (csd.isDictionary()) {
@@ -922,16 +921,7 @@ void convertColorsX1a(Ctx& ctx) {
       for (int i = 0; i < annots.getArrayNItems() && !st.failed; ++i) {
         QPDFObjectHandle a = annots.getArrayItem(i);
         if (!a.isDictionary()) continue;
-        QPDFObjectHandle ap = a.getKey("/AP");
-        if (!ap.isDictionary()) continue;
-        QPDFObjectHandle n = ap.getKey("/N");
-        std::vector<QPDFObjectHandle> streams;
-        if (n.isStream()) streams.push_back(n);
-        else if (n.isDictionary()) {
-          for (const std::string& k : n.getKeys()) {
-            if (n.getKey(k).isStream()) streams.push_back(n.getKey(k));
-          }
-        }
+        std::vector<QPDFObjectHandle> streams = normalAppearanceStreams(a);
         for (QPDFObjectHandle s : streams) {
           if (!visited.enter(s)) continue;
           std::map<std::string, int> inner;

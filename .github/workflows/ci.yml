@@ -54,7 +54,10 @@ jobs:
             -DCMAKE_EXE_LINKER_FLAGS="-fsanitize=address,undefined"
       - name: Build
         working-directory: pdfa-engine
-        run: cmake --build build-asan --target kura fuzz_replay
+        run: |
+          cmake --build build-asan --target kura \
+            fuzz_replay_convert fuzz_replay_profile fuzz_replay_invoice \
+            fuzz_replay_icc fuzz_replay_password
       - name: Generate seeds + regression sentinels
         working-directory: pdfa-engine
         run: python3 fuzz/gen_seeds.py build-asan/seeds
@@ -63,7 +66,13 @@ jobs:
         env:
           ASAN_OPTIONS: halt_on_error=1:detect_leaks=0
           UBSAN_OPTIONS: halt_on_error=1:print_stacktrace=1
-        run: ./build-asan/fuzz/fuzz_replay build-asan/seeds/*.pdf
+        run: |
+          set -e
+          ./build-asan/fuzz/fuzz_replay_convert build-asan/seeds/*.pdf
+          ./build-asan/fuzz/fuzz_replay_profile build-asan/seeds/*.xml build-asan/seeds/*.json
+          ./build-asan/fuzz/fuzz_replay_invoice build-asan/seeds/*.xml
+          ./build-asan/fuzz/fuzz_replay_icc build-asan/seeds/*.icc
+          ./build-asan/fuzz/fuzz_replay_password build-asan/seeds/*.bin
       - name: CLI handles deep-nested sentinels without a sanitizer abort
         working-directory: pdfa-engine
         env:

@@ -1,4 +1,5 @@
 #include <qpdf/QPDF.hh>
+#include "limits.hh"
 #include <qpdf/QPDFObjectHandle.hh>
 
 #include <set>
@@ -19,7 +20,7 @@ std::string nameStr(QPDFObjectHandle o) {
 
 void walkNameTree(QPDFObjectHandle node, std::set<QPDFObjGen>& seen,
                   std::vector<std::pair<std::string, QPDFObjectHandle>>& out, int depth) {
-  if (depth > 64 || !node.isDictionary()) return;
+  if (depth > kMaxObjectWalk || !node.isDictionary()) return;
   if (node.isIndirect() && !seen.insert(node.getObjGen()).second) return;
   QPDFObjectHandle names = node.getKey("/Names");
   if (names.isArray()) {

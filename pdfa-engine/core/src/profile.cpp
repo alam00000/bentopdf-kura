@@ -22,6 +22,7 @@
 #include "fonts_ft.hh"
 #include "images.hh"
 #include "passes.hh"
+#include "limits.hh"
 #include "util.hh"
 
 namespace pdfa {
@@ -138,7 +139,7 @@ struct JsonParser {
   Json parse() {
     ws();
     if (i >= s.size()) { ok = false; return {}; }
-    if (depth > 64) { ok = false; return {}; }
+    if (depth > kMaxObjectWalk) { ok = false; return {}; }
     DepthCounter dc(depth);
     char c = s[i];
     if (c == '{') return parseObj();
@@ -862,7 +863,7 @@ struct Gs {
 
 ColorInfo classifyColor(QPDFObjectHandle cs, QPDFObjectHandle res, int depth = 0) {
   ColorInfo ci;
-  if (depth > 4) return ci;
+  if (depth > kMaxColorSpaceNest) return ci;
   if (cs.isName()) {
     std::string n = cs.getName();
     if (n == "/DeviceGray" || n == "/G") { ci.cls = "gray"; ci.declaredComps = 1; }
@@ -1526,7 +1527,7 @@ struct EvScanner : QPDFObjectHandle::ParserCallbacks {
 
 void scanEvents(QPDFObjectHandle contents, QPDFObjectHandle res, const Gs& initial,
                 int page, int depth, Visited& seen, Events& ev) {
-  if (depth > 12) return;
+  if (depth > kMaxContentNest) return;
   EvScanner scan(res, ev, page, initial);
   try {
     QPDFObjectHandle::parseContentStream(contents, &scan);
@@ -3134,18 +3135,7 @@ void passProfile(Ctx& ctx, const unsigned char* inputData, std::size_t inputSize
         for (int ai = 0; ai < pannots.getArrayNItems(); ++ai) {
           QPDFObjectHandle an = pannots.getArrayItem(ai);
           if (!an.isDictionary()) continue;
-          QPDFObjectHandle ap = an.getKey("/AP");
-          if (!ap.isDictionary()) continue;
-          QPDFObjectHandle nap = ap.getKey("/N");
-          std::vector<QPDFObjectHandle> streams;
-          if (nap.isStream()) {
-            streams.push_back(nap);
-          } else if (nap.isDictionary()) {
-            for (const std::string& k : nap.getKeys()) {
-              QPDFObjectHandle st = nap.getKey(k);
-              if (st.isStream()) streams.push_back(st);
-            }
-          }
+          std::vector<QPDFObjectHandle> streams = normalAppearanceStreams(an);
           QPDFObjectHandle rect = an.getKey("/Rect");
           long long afl = an.getKey("/F").isInteger() ? an.getKey("/F").getIntValue() : 0;
           if (afl & 2) continue;
@@ -3819,7 +3809,7 @@ void passProfile(Ctx& ctx, const unsigned char* inputData, std::size_t inputSize
       if (md.isStream()) {
         try {
           auto buf = md.getStreamData(qpdf_dl_all);
-          size_t n = std::min<size_t>(buf->getSize(), 4u << 20);
+          size_t n = std::min<size_t>(buf->getSize(), kMaxXmpBytes);
           ev.xmpRaw.assign(reinterpret_cast<const char*>(buf->getBuffer()), n);
         } catch (...) {
           ctx.scanIncomplete("the XMP metadata packet");

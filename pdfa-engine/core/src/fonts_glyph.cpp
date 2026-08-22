@@ -21,6 +21,7 @@
 #include "encodings.hh"
 #include "fonts_ft.hh"
 #include "passes.hh"
+#include "limits.hh"
 #include "util.hh"
 
 namespace pdfa {
@@ -503,7 +504,7 @@ void glyphCleanHolder(Ctx& ctx, FtLib& lib, QPDFObjectHandle holder, QPDFObjectH
 void glyphCleanResources(Ctx& ctx, FtLib& lib, QPDFObjectHandle res, Visited& visited,
                          std::map<QPDFObjGen, FontGlyphInfo>& cache, int& dropped,
                          int& refDropped, int& langFixed, int depth = 0) {
-  if (depth > 24) return;
+  if (depth > kMaxResourceNest) return;
   if (!res.isDictionary() || !visited.enter(res)) return;
   QPDFObjectHandle xod = res.getKey("/XObject");
   if (xod.isDictionary()) {
@@ -654,16 +655,7 @@ void passGlyphClean(Ctx& ctx) {
     for (int i = 0; i < annots.getArrayNItems(); ++i) {
       QPDFObjectHandle a = annots.getArrayItem(i);
       if (!a.isDictionary()) continue;
-      QPDFObjectHandle ap = a.getKey("/AP");
-      if (!ap.isDictionary()) continue;
-      QPDFObjectHandle nap = ap.getKey("/N");
-      std::vector<QPDFObjectHandle> streams;
-      if (nap.isStream()) streams.push_back(nap);
-      else if (nap.isDictionary()) {
-        for (const std::string& k : nap.getKeys()) {
-          if (nap.getKey(k).isStream()) streams.push_back(nap.getKey(k));
-        }
-      }
+      std::vector<QPDFObjectHandle> streams = normalAppearanceStreams(a);
       for (QPDFObjectHandle& st : streams) {
         if (!visited.enter(st)) continue;
         glyphCleanHolder(ctx, lib, st, st.getDict().getKey("/Resources"), visited, cache,

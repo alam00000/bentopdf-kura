@@ -1,4 +1,5 @@
 #include <cstddef>
+#include "limits.hh"
 #include <cstdio>
 
 #include <jpeglib.h>
@@ -41,7 +42,7 @@ bool inflateData(const std::string& in, std::string& out) {
       return false;
     }
     out.append(buf.data(), buf.size() - zs.avail_out);
-    if (out.size() > (size_t{1} << 29)) {
+    if (out.size() > kMaxInflateBytes) {
       inflateEnd(&zs);
       return false;
     }
@@ -78,7 +79,7 @@ RawImage decodeDctData(const std::string& data, bool& cmykInverted) {
   int height = static_cast<int>(cinfo.output_height);
   int comps = cinfo.output_components;
   if (width <= 0 || height <= 0 ||
-      static_cast<long long>(width) * height > 100000000LL ||
+      static_cast<long long>(width) * height > kMaxImagePixels ||
       (comps != 1 && comps != 3 && comps != 4)) {
     jpeg_destroy_decompress(&cinfo);
     out.error = "jpeg unsupported geometry";

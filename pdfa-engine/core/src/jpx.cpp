@@ -6,6 +6,7 @@
 #include <vector>
 
 #include "images.hh"
+#include "limits.hh"
 #include "util.hh"
 
 namespace pdfa {
@@ -66,7 +67,7 @@ uint32_t be32(const unsigned char* p) {
 
 bool scanJp2Boxes(const unsigned char* d, size_t n, int& colrCount, bool& colrOk,
                   int& nc, int& bpcVal, bool& bpcVaries, bool& bpccEqual, int depth) {
-  if (depth > 4) return false;
+  if (depth > kMaxJp2BoxNest) return false;
   size_t i = 0;
   bool sawIhdr = false;
   while (i + 8 <= n) {
@@ -190,7 +191,7 @@ RawImage decodeJpxDataAt(const std::string& data, std::string& alphaOut) {
   int width = static_cast<int>(image->comps[0].w);
   int height = static_cast<int>(image->comps[0].h);
   if (ncomps == 0 || width <= 0 || height <= 0 ||
-      static_cast<long long>(width) * height > 100000000LL) {
+      static_cast<long long>(width) * height > kMaxImagePixels) {
     opj_image_destroy(image);
     out.error = "jpx unsupported geometry";
     return out;

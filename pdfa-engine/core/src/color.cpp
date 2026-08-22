@@ -14,6 +14,7 @@
 #include "colorx.hh"
 #include "ctx.hh"
 #include "passes.hh"
+#include "limits.hh"
 #include "util.hh"
 
 namespace pdfa {
@@ -71,7 +72,7 @@ void classifyByName(Ctx& ctx, const std::string& name, QPDFObjectHandle res, Col
 
 void classifySpace(Ctx& ctx, QPDFObjectHandle cs, QPDFObjectHandle res, ColorUsage& usage,
                    int depth) {
-  if (depth > 8) return;
+  if (depth > kMaxColorSpaceNest) return;
   if (cs.isName()) {
     classifyByName(ctx, cs.getName(), res, usage, depth);
     return;
@@ -203,7 +204,7 @@ void scanContent(Ctx& ctx, QPDFObjectHandle contentHolder, QPDFObjectHandle res,
 
 void scanResources(Ctx& ctx, QPDFObjectHandle res, Visited& visited, ColorUsage& usage,
                    int depth = 0) {
-  if (depth > 96) return;
+  if (depth > kMaxPageTreeNest) return;
   if (!res.isDictionary() || !visited.enter(res)) return;
   QPDFObjectHandle xod = res.getKey("/XObject");
   if (xod.isDictionary()) {
@@ -305,16 +306,7 @@ ColorUsage scanUsage(Ctx& ctx) {
       for (int i = 0; i < annots.getArrayNItems(); ++i) {
         QPDFObjectHandle a = annots.getArrayItem(i);
         if (!a.isDictionary()) continue;
-        QPDFObjectHandle ap = a.getKey("/AP");
-        if (!ap.isDictionary()) continue;
-        QPDFObjectHandle n = ap.getKey("/N");
-        std::vector<QPDFObjectHandle> streams;
-        if (n.isStream()) streams.push_back(n);
-        else if (n.isDictionary()) {
-          for (const std::string& k : n.getKeys()) {
-            if (n.getKey(k).isStream()) streams.push_back(n.getKey(k));
-          }
-        }
+        std::vector<QPDFObjectHandle> streams = normalAppearanceStreams(a);
         for (QPDFObjectHandle s : streams) {
           if (!visited.enter(s)) continue;
           QPDFObjectHandle inner = s.getDict().getKey("/Resources");
@@ -382,20 +374,6 @@ bool validExistingProfile(Ctx& ctx, QPDFObjectHandle profile, std::string& csOut
   return true;
 }
 
-bool validUtf8Bare(const std::string& s) {
-  size_t i = 0;
-  while (i < s.size()) {
-    unsigned char c = s[i];
-    int extra = c < 0x80 ? 0 : (c >> 5) == 6 ? 1 : (c >> 4) == 14 ? 2 : (c >> 3) == 30 ? 3 : -1;
-    if (extra < 0) return false;
-    for (int k = 1; k <= extra; ++k) {
-      if (i + k >= s.size() || (static_cast<unsigned char>(s[i + k]) >> 6) != 2) return false;
-    }
-    i += extra + 1;
-  }
-  return true;
-}
-
 int altComponents(QPDFObjectHandle alt) {
   if (alt.isName()) {
     std::string n = alt.getName();
@@ -422,7 +400,7 @@ int altComponents(QPDFObjectHandle alt) {
 void collectSpecialSpaces(QPDFObjectHandle o, Visited& visited,
                           std::vector<QPDFObjectHandle>& seps,
                           std::vector<QPDFObjectHandle>& dns, int depth = 0) {
-  if (depth > 24) return;
+  if (depth > kMaxResourceNest) return;
   if (o.isIndirect() && !visited.enter(o)) return;
   if (o.isStream()) {
     collectSpecialSpaces(o.getDict(), visited, seps, dns, depth + 1);
@@ -460,17 +438,15 @@ void fixSpecialColorSpaces(Ctx& ctx) {
   }
   int renamed = 0, deduped = 0, colorants = 0;
   auto generatedName = [](const std::string& bare) {
-    unsigned hash = 2166136261u;
-    for (unsigned char c : bare) hash = (hash ^ c) * 16777619u;
     char buf[24];
-    std::snprintf(buf, sizeof(buf), "/C%08X", hash);
+    std::snprintf(buf, sizeof(buf), "/C%08X", fnv1a32(bare));
     return std::string(buf);
   };
   auto fixName = [&](QPDFObjectHandle arr, int idx) {
     QPDFObjectHandle nm = arr.getArrayItem(idx);
     if (!nm.isName()) return;
     std::string bare = nm.getName().substr(1);
-    if (validUtf8Bare(bare)) return;
+    if (validUtf8(bare)) return;
     arr.setArrayItem(idx, QPDFObjectHandle::newName(generatedName(bare)));
     ++renamed;
   };
@@ -514,7 +490,7 @@ void fixSpecialColorSpaces(Ctx& ctx) {
     if (names.isArray()) {
       for (int i = 0; i < names.getArrayNItems(); ++i) {
         QPDFObjectHandle nm = names.getArrayItem(i);
-        if (nm.isName() && !validUtf8Bare(nm.getName().substr(1))) {
+        if (nm.isName() && !validUtf8(nm.getName().substr(1))) {
           std::string fresh = generatedName(nm.getName().substr(1));
           dnRenames[nm.getName()] = fresh;
           names.setArrayItem(i, QPDFObjectHandle::newName(fresh));
@@ -700,7 +676,7 @@ void fixIccIdenticalToIntent(Ctx& ctx, QPDFObjectHandle keepIntent) {
   int replaced = 0;
   Visited visited;
   std::function<void(QPDFObjectHandle, int)> hunt = [&](QPDFObjectHandle o, int depth) {
-    if (depth > 64) return;
+    if (depth > kMaxObjectWalk) return;
     if (o.isIndirect() && !visited.enter(o)) return;
     if (o.isStream()) {
       hunt(o.getDict(), depth + 1);
@@ -763,7 +739,7 @@ bool cmykIccStream(QPDFObjectHandle s) {
 
 void collectGroupProfiles(QPDFObjectHandle holder, Visited& seen,
                           std::set<std::string>& profiles, int depth = 0) {
-  if (depth > 24 || !holder.isDictionary()) return;
+  if (depth > kMaxResourceNest || !holder.isDictionary()) return;
   QPDFObjectHandle grp = holder.getKey("/Group");
   if (grp.isDictionary() && nameIs(grp.getKey("/S"), "/Transparency")) {
     QPDFObjectHandle cs = grp.getKey("/CS");
@@ -788,7 +764,7 @@ void collectGroupProfiles(QPDFObjectHandle holder, Visited& seen,
 
 void replaceIccUses(QPDFObjectHandle o, const std::set<QPDFObjGen>& identical,
                     Visited& visited, int& replaced, int depth = 0) {
-  if (depth > 64) return;
+  if (depth > kMaxObjectWalk) return;
   if (o.isIndirect() && !visited.enter(o)) return;
   if (o.isStream()) {
     replaceIccUses(o.getDict(), identical, visited, replaced, depth + 1);
@@ -1102,7 +1078,7 @@ void passColor(Ctx& ctx) {
     std::vector<QPDFObjectHandle> wide;
     Visited hunt;
     std::function<void(QPDFObjectHandle, int)> collect = [&](QPDFObjectHandle o, int depth) {
-      if (depth > 64) return;
+      if (depth > kMaxObjectWalk) return;
       if (o.isIndirect() && !hunt.enter(o)) return;
       if (o.isStream()) {
         collect(o.getDict(), depth + 1);

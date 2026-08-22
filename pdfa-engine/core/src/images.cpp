@@ -12,6 +12,7 @@
 #include <cstring>
 #include <vector>
 
+#include "limits.hh"
 #include "util.hh"
 
 namespace pdfa {
@@ -28,7 +29,7 @@ int componentsForName(const std::string& name) {
 
 int componentsForSpace(QPDFObjectHandle cs, QPDFObjectHandle* indexedBase,
                        QPDFObjectHandle* indexedLookup, int* hival, int depth) {
-  if (depth > 4) return 0;
+  if (depth > kMaxColorSpaceNest) return 0;
   if (cs.isName()) return componentsForName(cs.getName());
   if (!cs.isArray() || cs.getArrayNItems() < 1) return 0;
   std::string family = nameOf(cs.getArrayItem(0));
@@ -180,7 +181,7 @@ RawImage decodeImage(QPDFObjectHandle image) {
   int bpc = d.getKey("/BitsPerComponent").isInteger()
                 ? static_cast<int>(d.getKey("/BitsPerComponent").getIntValue())
                 : 8;
-  if (width <= 0 || height <= 0 || static_cast<long long>(width) * height > 100000000LL) {
+  if (width <= 0 || height <= 0 || static_cast<long long>(width) * height > kMaxImagePixels) {
     out.error = "unsupported image dimensions";
     return out;
   }
@@ -194,7 +195,7 @@ RawImage decodeImage(QPDFObjectHandle image) {
   int comps = componentsForSpace(d.getKey("/ColorSpace"), &indexedBase, &lookup, &hival);
   bool isMask = d.getKey("/ImageMask").isBool() && d.getKey("/ImageMask").getBoolValue();
   if (!isMask && (comps < 1 || comps > 32 ||
-                  static_cast<long long>(width) * height * comps > 400000000LL)) {
+                  static_cast<long long>(width) * height * comps > kMaxImageSamples)) {
     out.error = "unsupported component count";
     return out;
   }
@@ -549,7 +550,7 @@ struct ImageUse {
 void collectImageUses(QPDFObjectHandle stream, QPDFObjectHandle res,
                       PlacementScanner::Mat ctm, int depth, Visited& seen,
                       std::map<std::string, ImageUse>& uses) {
-  if (depth > 12 || !res.isDictionary()) return;
+  if (depth > kMaxContentNest || !res.isDictionary()) return;
   PlacementScanner scan;
   scan.cur = ctm;
   try {
