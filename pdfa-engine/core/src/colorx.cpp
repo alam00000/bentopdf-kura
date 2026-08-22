@@ -103,14 +103,7 @@ struct Xform {
 
 enum class SpaceClass { Keep, Rgb, Gray, CmykIcc, Lab, IndexedRgb, SepRgbAlt, ShadeHandled };
 
-std::string fmtReal(double v) {
-  char buf[32];
-  std::snprintf(buf, sizeof(buf), "%.4f", v);
-  std::string s = buf;
-  size_t last = s.find_last_not_of('0');
-  if (last != std::string::npos && s[last] == '.') --last;
-  return s.substr(0, last + 1);
-}
+std::string fmtReal(double v) { return fmtFixed(v, 4); }
 
 bool isRgbClassName(const std::string& n) {
   return n == "/DeviceRGB" || n == "/RGB" || n == "/CalRGB";

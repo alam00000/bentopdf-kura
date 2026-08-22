@@ -360,9 +360,7 @@ bool parseKuraJson(const std::string& text, PfProfile& out) {
       const Json* val = a.get("value");
       if (val) {
         if (val->type == Json::kNum) {
-          char buf[40];
-          std::snprintf(buf, sizeof(buf), "%g", val->num);
-          atom.vals.push_back(buf);
+          atom.vals.push_back(fmtFixed(val->num, 6));
         } else if (val->type == Json::kStr) {
           atom.vals.push_back(val->str);
         } else if (val->type == Json::kBool) {
@@ -2677,9 +2675,7 @@ std::vector<PfFix> collectFixes(const std::string& text) {
         for (const Json& p : params->arr) {
           if (p.type == Json::kStr) fix.params.push_back(p.str);
           else if (p.type == Json::kNum) {
-            char buf[40];
-            std::snprintf(buf, sizeof(buf), "%g", p.num);
-            fix.params.push_back(buf);
+            fix.params.push_back(fmtFixed(p.num, 6));
           }
         }
       }
@@ -4623,9 +4619,7 @@ class OverprintFilter : public QPDFObjectHandle::TokenFilter {
     if (minWidth_ > 0 && op == "w" && !nums_.empty() && nums_.back() < minWidth_) {
       pending_.clear();
       nums_.clear();
-      char buf[40];
-      std::snprintf(buf, sizeof(buf), "%g w", minWidth_);
-      writeToken(QPDFTokenizer::Token(TT::tt_word, buf));
+      writeToken(QPDFTokenizer::Token(TT::tt_word, fmtFixed(minWidth_, 4) + " w"));
       write("\n");
       return;
     }
@@ -4847,9 +4841,9 @@ void passProfileFixups(Ctx& ctx) {
           if (w < 1 || h < 1) continue;
           double sc = std::min(tw / w, th / h);
           if (std::abs(sc - 1.0) < 0.001) continue;
-          char buf[80];
-          std::snprintf(buf, sizeof(buf), "q %g 0 0 %g 0 0 cm\n", sc, sc);
-          ph.addPageContents(QPDFObjectHandle::newStream(&ctx.pdf, std::string(buf)), true);
+          std::string scaleOp =
+              "q " + fmtFixed(sc, 6) + " 0 0 " + fmtFixed(sc, 6) + " 0 0 cm\n";
+          ph.addPageContents(QPDFObjectHandle::newStream(&ctx.pdf, scaleOp), true);
           ph.addPageContents(QPDFObjectHandle::newStream(&ctx.pdf, std::string("\nQ")), false);
           QPDFObjectHandle nb = QPDFObjectHandle::newArray();
           for (double v : {0.0, 0.0, w * sc, h * sc}) {
@@ -5110,11 +5104,11 @@ void passProfileFixups(Ctx& ctx) {
       for (auto& ph : pages) {
         QPDFObjectHandle b = boxOnPage(ph, bx);
         if (!b.isArray() || b.getArrayNItems() != 4) continue;
-        char buf[160];
         double x0 = numOf(b.getArrayItem(0), 0), y0 = numOf(b.getArrayItem(1), 0);
-        std::snprintf(buf, sizeof(buf), "q %g %g %g %g re W n\n", x0, y0,
-                      numOf(b.getArrayItem(2), 0) - x0, numOf(b.getArrayItem(3), 0) - y0);
-        ph.addPageContents(QPDFObjectHandle::newStream(&ctx.pdf, std::string(buf)), true);
+        std::string clipOp = "q " + fmtFixed(x0, 4) + " " + fmtFixed(y0, 4) + " " +
+                             fmtFixed(numOf(b.getArrayItem(2), 0) - x0, 4) + " " +
+                             fmtFixed(numOf(b.getArrayItem(3), 0) - y0, 4) + " re W n\n";
+        ph.addPageContents(QPDFObjectHandle::newStream(&ctx.pdf, clipOp), true);
         ph.addPageContents(QPDFObjectHandle::newStream(&ctx.pdf, std::string("\nQ")), false);
       }
       note("clipped page content to the " + bx);

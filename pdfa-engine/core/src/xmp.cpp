@@ -26,6 +26,19 @@ std::string xmlEscape(const std::string& in) {
   return out;
 }
 
+bool isXmpDate(const std::string& s) {
+  if (s.size() < 4 || s.size() > 40) return false;
+  for (size_t i = 0; i < 4; ++i) {
+    if (s[i] < '0' || s[i] > '9') return false;
+  }
+  for (unsigned char c : s) {
+    bool allowed = (c >= '0' && c <= '9') || c == '-' || c == ':' || c == 'T' || c == 'Z' ||
+                   c == '+' || c == '.';
+    if (!allowed) return false;
+  }
+  return true;
+}
+
 bool parseIntField(const std::string& s, size_t pos, size_t len, int lo, int hi, int& out) {
   if (pos + len > s.size()) return false;
   int v = 0;
@@ -117,7 +130,7 @@ bool pdfDateToIso(const std::string& raw, std::string& iso) {
 
 struct InfoData {
   std::string title, author, subject, keywords, creator, producer;
-  std::string createIso, modifyIso;
+  std::string createIso, modifyIso, trapped;
 };
 
 std::string pdfNow(Ctx& ctx) {
@@ -269,20 +282,24 @@ InfoData collectInfo(Ctx& ctx) {
       declaredVt = xmpElementText(xmpOld, "GTS_PDFVTVersion");
       if (d.createIso.empty()) {
         std::string c = xmpElementText(xmpOld, "xmp:CreateDate");
-        if (!c.empty()) d.createIso = c;
+        if (isXmpDate(c)) d.createIso = c;
       }
       if (d.modifyIso.empty()) {
         std::string m = xmpElementText(xmpOld, "xmp:ModifyDate");
-        if (!m.empty()) d.modifyIso = m;
+        if (isXmpDate(m)) d.modifyIso = m;
       }
       if (d.title.empty()) {
-        size_t tp = xmpOld.find("dc:title");
-        if (tp != std::string::npos) {
+        size_t tp = xmpOld.find("<dc:title");
+        size_t tend = tp == std::string::npos ? std::string::npos
+                                             : xmpOld.find("</dc:title", tp);
+        if (tend != std::string::npos) {
           size_t li = xmpOld.find("<rdf:li", tp);
-          size_t open = li == std::string::npos ? std::string::npos : xmpOld.find('>', li);
-          size_t close = open == std::string::npos ? std::string::npos
-                                                   : xmpOld.find('<', open + 1);
-          if (close != std::string::npos && close > open + 1) {
+          size_t open = (li == std::string::npos || li > tend) ? std::string::npos
+                                                               : xmpOld.find('>', li);
+          size_t close = (open == std::string::npos || open > tend)
+                             ? std::string::npos
+                             : xmpOld.find('<', open + 1);
+          if (close != std::string::npos && close <= tend && close > open + 1) {
             d.title = xmpOld.substr(open + 1, close - open - 1);
           }
         }
@@ -348,7 +365,18 @@ InfoData collectInfo(Ctx& ctx) {
       clean.replaceKey("/GTS_PDFVTVersion",
                        QPDFObjectHandle::newString(vtVersionString(ctx)));
     }
-    clean.replaceKey("/Trapped", QPDFObjectHandle::newName("/False"));
+    std::string trapped = nameOf(info.getKey("/Trapped"));
+    if (trapped != "/True" && trapped != "/False") {
+      std::string fromXmp = xmpElementText(oldXmpText(ctx), "pdf:Trapped");
+      if (fromXmp == "True" || fromXmp == "False") trapped = "/" + fromXmp;
+    }
+    if (trapped != "/True" && trapped != "/False") {
+      trapped = "/False";
+      ctx.issue("TRAPPED_SET",
+                "PDF/X requires /Trapped to state True or False; set False", true);
+    }
+    clean.replaceKey("/Trapped", QPDFObjectHandle::newName(trapped));
+    d.trapped = trapped == "/True" ? "True" : "False";
     trailer.replaceKey("/Info", ctx.pdf.makeIndirectObject(clean));
     return d;
   }
@@ -500,12 +528,13 @@ void passMetadata(Ctx& ctx) {
   if (ctx.isX()) {
     xmp += "      <pdfxid:GTS_PDFXVersion>" + xVersionString(ctx) +
            "</pdfxid:GTS_PDFXVersion>\n";
-    xmp += "      <pdf:Trapped>False</pdf:Trapped>\n";
+    xmp += "      <pdf:Trapped>" + (info.trapped.empty() ? std::string("False") : info.trapped) +
+           "</pdf:Trapped>\n";
   }
   if (ctx.isVT()) {
     xmp += "      <pdfvtid:GTS_PDFVTVersion>" + vtVersionString(ctx) +
            "</pdfvtid:GTS_PDFVTVersion>\n";
-    xmp += "      <pdfvtid:GTS_PDFVTModDate>" + info.modifyIso +
+    xmp += "      <pdfvtid:GTS_PDFVTModDate>" + xmlEscape(info.modifyIso) +
            "</pdfvtid:GTS_PDFVTModDate>\n";
     if (ctx.pdf20Print()) {
       xmp += "      <pdfvtid:GTS_PDFVTRev>2020</pdfvtid:GTS_PDFVTRev>\n";

@@ -2,6 +2,7 @@
 
 #include <qpdf/QPDFObjGen.hh>
 #include <qpdf/QPDFObjectHandle.hh>
+#include <cmath>
 #include <cstdint>
 #include <set>
 #include <string>
@@ -90,4 +91,34 @@ struct DepthGuard {
   }
   ~DepthGuard() { --v.depth; }
 };
+
+constexpr double kPdfRealLimit = 32767.0;
+
+inline std::string fmtFixed(double v, int decimals) {
+  if (!std::isfinite(v)) return "0";
+  if (v > kPdfRealLimit) v = kPdfRealLimit;
+  if (v < -kPdfRealLimit) v = -kPdfRealLimit;
+  if (decimals < 0) decimals = 0;
+  if (decimals > 6) decimals = 6;
+  bool neg = v < 0;
+  if (neg) v = -v;
+  long long scale = 1;
+  for (int i = 0; i < decimals; ++i) scale *= 10;
+  long long scaled = static_cast<long long>(v * static_cast<double>(scale) + 0.5);
+  long long whole = scaled / scale;
+  long long frac = scaled % scale;
+  std::string out;
+  if (neg && (whole || frac)) out += '-';
+  out += std::to_string(whole);
+  if (decimals > 0 && frac) {
+    std::string f = std::to_string(frac);
+    f.insert(f.begin(), static_cast<size_t>(decimals) - f.size(), '0');
+    while (!f.empty() && f.back() == '0') f.pop_back();
+    if (!f.empty()) {
+      out += '.';
+      out += f;
+    }
+  }
+  return out;
+}
 }

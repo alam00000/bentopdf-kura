@@ -15,6 +15,7 @@
 #include "ocr.hh"
 #include "sign.hh"
 #include "pdfa/pdfa.hh"
+#include "util.hh"
 
 namespace pdfa {
 bool levelFromString(const std::string& s, Level& out) {
@@ -264,13 +265,12 @@ std::string wrapJpegAsPdf(const unsigned char* data, std::size_t size) {
   img.replaceStreamData(std::string(reinterpret_cast<const char*>(data), size),
                         QPDFObjectHandle::newName("/DCTDecode"), QPDFObjectHandle::newNull());
   QPDFObjectHandle imgRef = out.makeIndirectObject(img);
-  char content[128];
-  std::snprintf(content, sizeof(content), "q %.2f 0 0 %.2f 0 0 cm /Im0 Do Q", pw, ph);
+  std::string content =
+      "q " + fmtFixed(pw, 2) + " 0 0 " + fmtFixed(ph, 2) + " 0 0 cm /Im0 Do Q";
   QPDFObjectHandle page = QPDFObjectHandle::newDictionary();
   page.replaceKey("/Type", QPDFObjectHandle::newName("/Page"));
-  char mb[96];
-  std::snprintf(mb, sizeof(mb), "[0 0 %.2f %.2f]", pw, ph);
-  page.replaceKey("/MediaBox", QPDFObjectHandle::parse(mb));
+  page.replaceKey("/MediaBox", QPDFObjectHandle::parse("[0 0 " + fmtFixed(pw, 2) + " " +
+                                                      fmtFixed(ph, 2) + "]"));
   QPDFObjectHandle resd = QPDFObjectHandle::newDictionary();
   QPDFObjectHandle xod = QPDFObjectHandle::newDictionary();
   xod.replaceKey("/Im0", imgRef);
@@ -296,19 +296,24 @@ bool issueIsNormalization(const std::string& code) {
 Result convert(const unsigned char* data, std::size_t size, const Options& optIn) {
   Result res;
   Options opt = optIn;
-  if (!opt.preflightProfile.empty() && !opt.verifyOnly) applyProfileFixes(opt, res.analysis);
   std::string wrapped;
-  if (size > 4 && data[0] == 0xFF && data[1] == 0xD8) {
-    wrapped = wrapJpegAsPdf(data, size);
-    if (!wrapped.empty()) {
-      data = reinterpret_cast<const unsigned char*>(wrapped.data());
-      size = wrapped.size();
-      res.issues.push_back({"IMAGE_INPUT_WRAPPED",
-                            "JPEG input wrapped as a single-page PDF (300 dpi placement)",
-                            true});
-    }
+  if (!data && size) {
+    res.errorCode = "BAD_INPUT";
+    res.error = "no input buffer supplied";
+    return res;
   }
   try {
+    if (!opt.preflightProfile.empty() && !opt.verifyOnly) applyProfileFixes(opt, res.analysis);
+    if (size > 4 && data[0] == 0xFF && data[1] == 0xD8) {
+      wrapped = wrapJpegAsPdf(data, size);
+      if (!wrapped.empty()) {
+        data = reinterpret_cast<const unsigned char*>(wrapped.data());
+        size = wrapped.size();
+        res.issues.push_back({"IMAGE_INPUT_WRAPPED",
+                              "JPEG input wrapped as a single-page PDF (300 dpi placement)",
+                              true});
+      }
+    }
     QPDF pdf;
     pdf.setSuppressWarnings(true);
     pdf.setAttemptRecovery(true);
@@ -430,7 +435,7 @@ Result convert(const unsigned char* data, std::size_t size, const Options& optIn
     if (!ctx.failed()) passPages(ctx);
     if (!ctx.failed()) passImageResolution(ctx);
     lap("pages");
-    if (!ctx.failed()) passOcr(ctx);
+    if (!ctx.failed() && !opt.verifyOnly) passOcr(ctx);
     lap("ocr");
     if (!ctx.failed()) passCompleteResources(ctx);
     lap("resources");
@@ -438,7 +443,7 @@ Result convert(const unsigned char* data, std::size_t size, const Options& optIn
     lap("color");
     if (!ctx.failed()) passPrint(ctx);
     lap("print");
-    if (!ctx.failed()) passOutlineFonts(ctx);
+    if (!ctx.failed() && !opt.verifyOnly) passOutlineFonts(ctx);
     lap("outline");
     if (!ctx.failed()) passFonts(ctx);
     lap("fonts");
@@ -446,7 +451,7 @@ Result convert(const unsigned char* data, std::size_t size, const Options& optIn
     lap("glyphclean");
     if (!ctx.failed()) passTagging(ctx);
     lap("tagging");
-    if (!ctx.failed() && opt.signDocument) addSignaturePlaceholder(ctx);
+    if (!ctx.failed() && !opt.verifyOnly && opt.signDocument) addSignaturePlaceholder(ctx);
     if (!ctx.failed()) passMetadata(ctx);
     lap("metadata");
     if (!ctx.failed()) passLimits(ctx);
@@ -521,7 +526,12 @@ Result convert(const unsigned char* data, std::size_t size, const Options& optIn
       res.errorCode = "PARSE_ERROR";
       res.error = msg;
     }
+  } catch (...) {
+    res.ok = false;
+    res.errorCode = "INTERNAL_ERROR";
+    res.error = "conversion aborted by an unrecognized error";
   }
+  if (!res.ok) res.pdf.clear();
   return res;
 }
 }
