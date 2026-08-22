@@ -4,7 +4,10 @@
 #include <stddef.h>
 
 #ifdef __cplusplus
+#define KURA_NOEXCEPT noexcept
 extern "C" {
+#else
+#define KURA_NOEXCEPT
 #endif
 
 #define KURA_VERSION "1.1.0"
@@ -36,13 +39,13 @@ typedef struct {
 } kura_result;
 
 kura_result* kura_convert(const unsigned char* data, size_t size, const char* level,
-                          const kura_options* options);
+                          const kura_options* options) KURA_NOEXCEPT;
 
-void kura_result_free(kura_result* result);
+void kura_result_free(kura_result* result) KURA_NOEXCEPT;
 
-const char* kura_version(void);
+const char* kura_version(void) KURA_NOEXCEPT;
 
-const char* kura_engine_name(void);
+const char* kura_engine_name(void) KURA_NOEXCEPT;
 
 #ifdef __cplusplus
 }

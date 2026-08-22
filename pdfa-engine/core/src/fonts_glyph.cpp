@@ -630,6 +630,7 @@ void glyphCleanHolder(Ctx& ctx, FtLib& lib, QPDFObjectHandle holder, QPDFObjectH
           ctx.pdf.makeIndirectObject(QPDFObjectHandle::newStream(&ctx.pdf, rewritten)));
     }
   } catch (...) {
+    ctx.scanIncomplete("a content stream being rewritten for fonts");
   }
   glyphCleanResources(ctx, lib, res, visited, cache, dropped, refDropped, langFixed, depth);
 }

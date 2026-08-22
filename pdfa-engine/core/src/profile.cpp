@@ -790,6 +790,8 @@ struct PageFacts {
 };
 
 struct Events {
+  std::set<QPDFObjGen> formPath;
+  int formScans = 0;
   std::vector<PaintEvent> paints;
   std::vector<TextEvent> texts;
   std::vector<ImageEvent> images;
@@ -851,6 +853,7 @@ struct Gs {
   bool overprintStroke = false;
   int opm = 0;
   bool transparency = false;
+  bool smaskActive = false;
   GsExtra x;
   std::string fontName;
   QPDFObjGen fontOg;
@@ -942,6 +945,7 @@ struct EvScanner : QPDFObjectHandle::ParserCallbacks {
   Box pathBox;
   int pathNodes = 0;
   bool pathIsClip = false;
+  std::set<std::string> directFontsSeen;
   double tmX = 0, tmY = 0;
   int biW = 0, biH = 0, biBpc = 0;
   bool biMask = false;
@@ -1006,9 +1010,13 @@ struct EvScanner : QPDFObjectHandle::ParserCallbacks {
       gs.x.hasHalftoneOrigin = true;
     }
     QPDFObjectHandle sm = g.getKey("/SMask");
-    if (nameIs(sm, "/None")) gs.x.smaskExplicitNone = true;
+    if (nameIs(sm, "/None")) {
+      gs.x.smaskExplicitNone = true;
+      gs.smaskActive = false;
+    }
     if (!sm.isNull() && !nameIs(sm, "/None")) {
       tr = true;
+      gs.smaskActive = true;
       gs.x.hasSMask = true;
       if (sm.isDictionary()) {
         gs.x.smaskIsLuminosity = nameIs(sm.getKey("/S"), "/Luminosity");
@@ -1032,7 +1040,10 @@ struct EvScanner : QPDFObjectHandle::ParserCallbacks {
       gs.x.blendMode = bmName.substr(1);
       if (bmName != "/Normal" && bmName != "/Compatible") tr = true;
     }
-    if (tr) gs.transparency = true;
+    bool blendTransparent = !gs.x.blendMode.empty() && gs.x.blendMode != "Normal" &&
+                            gs.x.blendMode != "Compatible";
+    gs.transparency = tr || gs.smaskActive || blendTransparent || gs.x.alphaFill < 1.0 ||
+                      gs.x.alphaStroke < 1.0;
   }
 
   void setSpace(bool stroke) {
@@ -1040,6 +1051,18 @@ struct EvScanner : QPDFObjectHandle::ParserCallbacks {
     ColorInfo ci = classifyColor(QPDFObjectHandle::newName(lastName), res);
     if (stroke) gs.strokeColor = ci;
     else gs.fillColor = ci;
+  }
+
+  void applyPendingClip() {
+    if (!pathIsClip || !pathBox.valid) return;
+    if (!gs.clip.valid) {
+      gs.clip = pathBox;
+    } else {
+      gs.clip.x0 = std::max(gs.clip.x0, pathBox.x0);
+      gs.clip.y0 = std::max(gs.clip.y0, pathBox.y0);
+      gs.clip.x1 = std::min(gs.clip.x1, pathBox.x1);
+      gs.clip.y1 = std::min(gs.clip.y1, pathBox.y1);
+    }
   }
 
   void addPaint(bool stroke, bool fill) {
@@ -1083,17 +1106,25 @@ struct EvScanner : QPDFObjectHandle::ParserCallbacks {
       e.pathNodes = pathNodes;
       ev.paints.push_back(e);
     }
+    applyPendingClip();
     pathBox = Box();
     pathNodes = 0;
     pathIsClip = false;
   }
 
   void recordFont(QPDFObjectHandle fnt) {
-    if (!fnt.isIndirect()) return;
-    QPDFObjGen og = fnt.getObjGen();
-    for (const FontFacts& f : ev.fonts) {
-      if (f.og == og) return;
+    if (!fnt.isDictionary()) return;
+    if (fnt.isIndirect()) {
+      QPDFObjGen og = fnt.getObjGen();
+      for (const FontFacts& f : ev.fonts) {
+        if (f.og == og) return;
+      }
+    } else {
+      std::string sig = nameOf(fnt.getKey("/Subtype")) + "|" + nameOf(fnt.getKey("/BaseFont")) +
+                        "|" + nameOf(fnt.getKey("/Encoding"));
+      if (!directFontsSeen.insert(sig).second) return;
     }
+    QPDFObjGen og = fnt.isIndirect() ? fnt.getObjGen() : QPDFObjGen();
     FontFacts ff;
     ff.og = og;
     ff.dict = fnt;
@@ -1210,9 +1241,19 @@ struct EvScanner : QPDFObjectHandle::ParserCallbacks {
 
   std::string lastString;
   bool inBI = false;
+  int biTokens = 0;
   std::vector<std::string> biNames;
   std::vector<double> biNums;
   std::string biCsName;
+
+  void resetInlineImage() {
+    inBI = false;
+    biTokens = 0;
+    biW = biH = biBpc = 0;
+    biMask = false;
+    biCsName.clear();
+    biLastKey.clear();
+  }
 
   void handleObject(QPDFObjectHandle obj, size_t, size_t) override {
     if (obj.isInlineImage()) {
@@ -1246,14 +1287,11 @@ struct EvScanner : QPDFObjectHandle::ParserCallbacks {
       }
       e.clip = gs.clip;
       ev.images.push_back(e);
-      inBI = false;
-      biW = biH = biBpc = 0;
-      biMask = false;
-      biCsName.clear();
-      biLastKey.clear();
+      resetInlineImage();
       return;
     }
     if (!obj.isOperator()) {
+      if (inBI && ++biTokens > 64) resetInlineImage();
       if (inBI) {
         if (obj.isName()) {
           std::string n = obj.getName();
@@ -1299,11 +1337,13 @@ struct EvScanner : QPDFObjectHandle::ParserCallbacks {
     std::string op = obj.getOperatorValue();
     if (op == "BI") {
       inBI = true;
+      biTokens = 0;
       biLastKey.clear();
       nums.clear();
       lastName.clear();
       return;
     }
+    if (inBI) resetInlineImage();
     if (op == "q") {
       if (stack.size() < 256) stack.push_back(gs);
       else ++qSuppressed;
@@ -1350,16 +1390,7 @@ struct EvScanner : QPDFObjectHandle::ParserCallbacks {
     } else if (op == "W" || op == "W*") {
       pathIsClip = true;
     } else if (op == "n") {
-      if (pathIsClip && pathBox.valid) {
-        if (!gs.clip.valid) {
-          gs.clip = pathBox;
-        } else {
-          gs.clip.x0 = std::max(gs.clip.x0, pathBox.x0);
-          gs.clip.y0 = std::max(gs.clip.y0, pathBox.y0);
-          gs.clip.x1 = std::min(gs.clip.x1, pathBox.x1);
-          gs.clip.y1 = std::min(gs.clip.y1, pathBox.y1);
-        }
-      }
+      applyPendingClip();
       if (pathNodes > 0 && !pathIsClip) {
         PaintEvent e;
         e.page = page;
@@ -1389,7 +1420,7 @@ struct EvScanner : QPDFObjectHandle::ParserCallbacks {
     } else if (op == "i" && !nums.empty()) {
       gs.x.flatness = nums.back();
     } else if (op == "Tf" && !lastName.empty() && res.isDictionary()) {
-      gs.fontSize = nums.empty() ? gs.fontSize : nums.back();
+      gs.fontSize = nums.empty() ? gs.fontSize : std::fabs(nums.back());
       QPDFObjectHandle fd = res.getKey("/Font");
       if (fd.isDictionary()) {
         QPDFObjectHandle fnt = fd.getKey(lastName);
@@ -1399,7 +1430,7 @@ struct EvScanner : QPDFObjectHandle::ParserCallbacks {
             ev.baseFonts.insert(bf.substr(1));
             gs.fontName = bf.substr(1);
           }
-          if (fnt.isIndirect()) gs.fontOg = fnt.getObjGen();
+          gs.fontOg = fnt.isIndirect() ? fnt.getObjGen() : QPDFObjGen();
           curFont = fnt;
         }
       }
@@ -1417,8 +1448,14 @@ struct EvScanner : QPDFObjectHandle::ParserCallbacks {
     } else if (op == "cs" || op == "CS") {
       setSpace(op == "CS");
     } else if (op == "sc" || op == "scn" || op == "SC" || op == "SCN") {
-      if (!nums.empty()) setColor(op == "SC" || op == "SCN",
-                                  static_cast<int>(nums.size() > 4 ? 4 : nums.size()));
+      bool strokeOp = op == "SC" || op == "SCN";
+      if (!nums.empty()) {
+        const ColorInfo& ci = strokeOp ? gs.strokeColor : gs.fillColor;
+        int want = static_cast<int>(nums.size());
+        if (ci.declaredComps > 0 && ci.declaredComps < want) want = ci.declaredComps;
+        if (want > 32) want = 32;
+        setColor(strokeOp, want);
+      }
       if ((op == "scn" || op == "SCN") && !lastName.empty()) {
         const ColorInfo& ci = op == "SCN" ? gs.strokeColor : gs.fillColor;
         if (ci.cls == "pattern") patternUses.push_back({lastName, gs});
@@ -1596,7 +1633,11 @@ void scanEvents(QPDFObjectHandle contents, QPDFObjectHandle res, const Gs& initi
       e.obj = xo;
       ev.images.push_back(e);
     } else if (sub == "/Form") {
-      if (!seen.enter(xo)) continue;
+      if (!ev.formPath.insert(xo.getObjGen()).second) continue;
+      if (++ev.formScans > 4096) {
+        ev.formPath.erase(xo.getObjGen());
+        continue;
+      }
       Gs inner = d.second;
       QPDFObjectHandle fgrp = dict.getKey("/Group");
       if (fgrp.isDictionary() && nameIs(fgrp.getKey("/S"), "/Transparency")) {
@@ -1609,8 +1650,32 @@ void scanEvents(QPDFObjectHandle contents, QPDFObjectHandle res, const Gs& initi
               numOf(mtx.getArrayItem(4), 0), numOf(mtx.getArrayItem(5), 0)};
         inner.ctm = mul(m, inner.ctm);
       }
+      QPDFObjectHandle fbox = dict.getKey("/BBox");
+      if (fbox.isArray() && fbox.getArrayNItems() == 4) {
+        double bx0 = numOf(fbox.getArrayItem(0), 0), by0 = numOf(fbox.getArrayItem(1), 0);
+        double bx1 = numOf(fbox.getArrayItem(2), 0), by1 = numOf(fbox.getArrayItem(3), 0);
+        const Mat& m = inner.ctm;
+        double cx[4] = {bx0, bx1, bx0, bx1};
+        double cy[4] = {by0, by0, by1, by1};
+        double xs[4], ys[4];
+        for (int i = 0; i < 4; ++i) {
+          xs[i] = m.a * cx[i] + m.c * cy[i] + m.e;
+          ys[i] = m.b * cx[i] + m.d * cy[i] + m.f;
+        }
+        Box bb{*std::min_element(xs, xs + 4), *std::min_element(ys, ys + 4),
+               *std::max_element(xs, xs + 4), *std::max_element(ys, ys + 4), true};
+        if (!inner.clip.valid) {
+          inner.clip = bb;
+        } else {
+          inner.clip.x0 = std::max(inner.clip.x0, bb.x0);
+          inner.clip.y0 = std::max(inner.clip.y0, bb.y0);
+          inner.clip.x1 = std::min(inner.clip.x1, bb.x1);
+          inner.clip.y1 = std::min(inner.clip.y1, bb.y1);
+        }
+      }
       QPDFObjectHandle sres = dict.getKey("/Resources");
       scanEvents(xo, sres.isDictionary() ? sres : res, inner, page, depth + 1, seen, ev);
+      ev.formPath.erase(xo.getObjGen());
     }
   }
 }
@@ -3757,6 +3822,7 @@ void passProfile(Ctx& ctx, const unsigned char* inputData, std::size_t inputSize
           size_t n = std::min<size_t>(buf->getSize(), 4u << 20);
           ev.xmpRaw.assign(reinterpret_cast<const char*>(buf->getBuffer()), n);
         } catch (...) {
+          ctx.scanIncomplete("the XMP metadata packet");
         }
       }
     }
@@ -3934,6 +4000,7 @@ void passProfile(Ctx& ctx, const unsigned char* inputData, std::size_t inputSize
                               buf->getSize());
             if (bytes.compare(0, 4, "%PDF") == 0) out.push_back(std::move(bytes));
           } catch (...) {
+            ctx.scanIncomplete("an embedded PDF attachment");
           }
           if (out.size() >= 16) return;
         }
@@ -4838,6 +4905,7 @@ void passProfileFixups(Ctx& ctx) {
           auto buf = meta.getStreamData(qpdf_dl_all);
           xmp.assign(reinterpret_cast<const char*>(buf->getBuffer()), buf->getSize());
         } catch (...) {
+          ctx.scanIncomplete("the XMP metadata packet");
         }
         std::string before = xmp;
         size_t pos = 0;

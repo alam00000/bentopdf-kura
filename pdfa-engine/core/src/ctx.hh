@@ -17,10 +17,11 @@ struct Ctx {
   int part;
   char conf;
   Family fam;
-  std::set<QPDFObjGen> identityCmaps;
-  InvoiceProfile inv;
+  std::set<QPDFObjGen> identityCmaps{};
+  InvoiceProfile inv{};
   int inlineImagesFixed = 0;
   int contentPuaFixed = 0;
+  std::set<std::string> incompleteScans{};
 
   bool isA() const { return fam == Family::PDFA; }
   bool isX() const { return fam == Family::PDFX || fam == Family::PDFVT; }
@@ -60,6 +61,14 @@ struct Ctx {
 
   void issue(const std::string& code, const std::string& detail, bool fixed) {
     res.issues.push_back({code, detail, fixed});
+  }
+
+  void scanIncomplete(const std::string& what) {
+    if (incompleteScans.insert(what).second) {
+      issue("SCAN_INCOMPLETE",
+            "could not read " + what + "; findings below may be incomplete for that content",
+            false);
+    }
   }
 
   void fatal(const std::string& code, const std::string& detail) {

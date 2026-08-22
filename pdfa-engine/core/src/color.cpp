@@ -197,6 +197,7 @@ void scanContent(Ctx& ctx, QPDFObjectHandle contentHolder, QPDFObjectHandle res,
       QPDFObjectHandle::parseContentStream(contentHolder, &scanner);
     }
   } catch (...) {
+    ctx.scanIncomplete("page content colour scan");
   }
 }
 

@@ -232,6 +232,7 @@ void completeStreamResources(Ctx& ctx, QPDFObjectHandle holder, QPDFObjectHandle
           try {
             QPDFObjectHandle::parseContentStream(cp.getKey(g), &t3scan);
           } catch (...) {
+            ctx.scanIncomplete("a Type 3 glyph procedure");
           }
         }
         QPDFObjectHandle fres = fnt.getKey("/Resources");
