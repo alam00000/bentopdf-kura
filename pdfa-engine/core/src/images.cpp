@@ -571,6 +571,7 @@ void collectImageUses(QPDFObjectHandle stream, QPDFObjectHandle res,
                         std::to_string(xo.getObjGen().getGen());
       double wpt = std::sqrt(d.second.a * d.second.a + d.second.b * d.second.b);
       double hpt = std::sqrt(d.second.c * d.second.c + d.second.d * d.second.d);
+      if (!std::isfinite(wpt) || !std::isfinite(hpt)) continue;
       ImageUse& u = uses[key];
       u.image = xo;
       if (wpt > u.wpt) u.wpt = wpt;
@@ -610,6 +611,7 @@ void passImageResolution(Ctx& ctx) {
   [[maybe_unused]] long long saved = 0;
   for (auto& kv : uses) {
     ImageUse& u = kv.second;
+    if (!std::isfinite(u.wpt) || !std::isfinite(u.hpt)) continue;
     if (u.wpt <= 0.01 || u.hpt <= 0.01) continue;
     QPDFObjectHandle img = u.image;
     QPDFObjectHandle d = img.getDict();
@@ -625,8 +627,7 @@ void passImageResolution(Ctx& ctx) {
     double scale = ctx.opt.imageMaxPpi / ppi;
     int nw = static_cast<int>(pw * scale + 0.5);
     int nh = static_cast<int>(phh * scale + 0.5);
-    if (nw < 1) nw = 1;
-    if (nh < 1) nh = 1;
+    if (nw < 8 || nh < 8) continue;
     if (nw >= pw && nh >= phh) continue;
 
     RawImage src = decodeImage(img);

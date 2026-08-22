@@ -62,7 +62,8 @@ void fixPageBoxes(Ctx&, QPDFPageObjectHelper& ph, bool& boxAdded, bool& boxFixed
   }
   Box crop = readBox(ph.getAttribute("/CropBox", true));
   Box effCrop = crop.ok ? clampTo(crop, media) : media;
-  if (crop.ok && effCrop.ok &&
+  if (crop.ok && !effCrop.ok) effCrop = media;
+  if (crop.ok &&
       (effCrop.x1 != crop.x1 || effCrop.y1 != crop.y1 || effCrop.x2 != crop.x2 ||
        effCrop.y2 != crop.y2)) {
     page.replaceKey("/CropBox", boxArray(effCrop));
@@ -81,24 +82,27 @@ void fixPageBoxes(Ctx&, QPDFPageObjectHelper& ph, bool& boxAdded, bool& boxFixed
     boxAdded = true;
   } else if (trim.ok) {
     Box clamped = clampTo(trim, effCrop);
-    if (clamped.ok &&
-        (clamped.x1 != trim.x1 || clamped.y1 != trim.y1 || clamped.x2 != trim.x2 ||
-         clamped.y2 != trim.y2)) {
+    if (!clamped.ok) clamped = effCrop;
+    if (clamped.x1 != trim.x1 || clamped.y1 != trim.y1 || clamped.x2 != trim.x2 ||
+        clamped.y2 != trim.y2) {
       page.replaceKey("/TrimBox", boxArray(clamped));
       trim = clamped;
       boxFixed = true;
     }
   } else if (art.ok) {
     Box clamped = clampTo(art, effCrop);
-    if (clamped.ok && (clamped.x1 != art.x1 || clamped.y1 != art.y1 || clamped.x2 != art.x2 ||
-                       clamped.y2 != art.y2)) {
+    if (!clamped.ok) clamped = effCrop;
+    if (clamped.x1 != art.x1 || clamped.y1 != art.y1 || clamped.x2 != art.x2 ||
+        clamped.y2 != art.y2) {
       page.replaceKey("/ArtBox", boxArray(clamped));
+      art = clamped;
       boxFixed = true;
     }
   }
   Box bleed = readBox(page.getKey("/BleedBox"));
   if (bleed.ok) {
     Box clamped = clampTo(bleed, effCrop);
+    if (!clamped.ok) clamped = effCrop;
     Box target = trim.ok ? trim : art;
     if (target.ok) {
       clamped.x1 = std::min(clamped.x1, target.x1);
@@ -106,8 +110,8 @@ void fixPageBoxes(Ctx&, QPDFPageObjectHelper& ph, bool& boxAdded, bool& boxFixed
       clamped.x2 = std::max(clamped.x2, target.x2);
       clamped.y2 = std::max(clamped.y2, target.y2);
     }
-    if (clamped.ok && (clamped.x1 != bleed.x1 || clamped.y1 != bleed.y1 ||
-                       clamped.x2 != bleed.x2 || clamped.y2 != bleed.y2)) {
+    if (clamped.x1 != bleed.x1 || clamped.y1 != bleed.y1 ||
+        clamped.x2 != bleed.x2 || clamped.y2 != bleed.y2) {
       page.replaceKey("/BleedBox", boxArray(clamped));
       boxFixed = true;
     }
@@ -191,6 +195,7 @@ void buildDPartTree(Ctx& ctx) {
   nodeNames.appendItem(QPDFObjectHandle::newName("/Root"));
   nodeNames.appendItem(QPDFObjectHandle::newName("/Record"));
   dpartRoot.replaceKey("/NodeNameList", nodeNames);
+  dpartRoot.replaceKey("/RecordLevel", QPDFObjectHandle::newInteger(1));
   QPDFObjectHandle dpartRootRef = ctx.pdf.makeIndirectObject(dpartRoot);
   rootDPart.replaceKey("/Parent", dpartRootRef);
 
@@ -209,9 +214,7 @@ void buildDPartTree(Ctx& ctx) {
       pages[p - 1].getObjectHandle().replaceKey("/DPart", leafRef);
     }
   }
-  QPDFObjectHandle dparts = QPDFObjectHandle::newArray();
-  dparts.appendItem(leaves);
-  rootDPart.replaceKey("/DParts", dparts);
+  rootDPart.replaceKey("/DParts", leaves);
   ctx.pdf.getRoot().replaceKey("/DPartRoot", dpartRootRef);
   ctx.issue(records.size() == 1 && ctx.opt.vtRecords.empty() ? "VT_SINGLE_PART"
                                                              : "VT_DPART_BUILT",

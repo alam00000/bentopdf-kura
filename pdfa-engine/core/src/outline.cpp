@@ -580,11 +580,11 @@ struct OutlineFilter : public QPDFObjectHandle::TokenFilter {
         funcs.cubic_to = GlyphEmitter::cubicTo;
         funcs.shift = 0;
         funcs.delta = 0;
-        std::string before = out;
+        size_t mark = out.size();
         if (FT_Outline_Decompose(&face->glyph->outline, &funcs, &em) == 0) {
           out += "f\n";
         } else {
-          out = before;
+          out.resize(mark);
         }
       }
       double adv = (w1000 / 1000.0 * st.size + st.charSpace +
