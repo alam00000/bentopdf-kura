@@ -6,6 +6,7 @@
 #include <cstdint>
 #include <set>
 #include <string>
+#include <vector>
 
 namespace pdfa {
 inline bool validUtf8(const std::string& s) {
@@ -91,6 +92,28 @@ struct DepthGuard {
   }
   ~DepthGuard() { --v.depth; }
 };
+
+inline std::vector<QPDFObjectHandle> normalAppearanceStreams(QPDFObjectHandle annot) {
+  std::vector<QPDFObjectHandle> streams;
+  if (!annot.isDictionary()) return streams;
+  QPDFObjectHandle ap = annot.getKey("/AP");
+  if (!ap.isDictionary()) return streams;
+  QPDFObjectHandle n = ap.getKey("/N");
+  if (n.isStream()) {
+    streams.push_back(n);
+  } else if (n.isDictionary()) {
+    for (const std::string& k : n.getKeys()) {
+      if (n.getKey(k).isStream()) streams.push_back(n.getKey(k));
+    }
+  }
+  return streams;
+}
+
+inline uint32_t fnv1a32(const std::string& s) {
+  uint32_t hash = 2166136261u;
+  for (unsigned char c : s) hash = (hash ^ c) * 16777619u;
+  return hash;
+}
 
 constexpr double kPdfRealLimit = 32767.0;
 

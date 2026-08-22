@@ -19,6 +19,7 @@
 #include "ctx.hh"
 #include "fonts_ft.hh"
 #include "passes.hh"
+#include "limits.hh"
 #include "util.hh"
 
 namespace pdfa {
@@ -822,7 +823,7 @@ void outlineHolder(Ctx& ctx, FtLib& lib, QPDFObjectHandle holder, QPDFObjectHand
                    std::map<QPDFObjGen, std::shared_ptr<OutFont>>& cache, Visited& visited,
                    int& runs, int& fontsFlagged, std::set<QPDFObjGen>& flaggedSet,
                    int depth = 0) {
-  if (depth > 24 || !res.isDictionary()) return;
+  if (depth > kMaxResourceNest || !res.isDictionary()) return;
   std::map<std::string, std::shared_ptr<OutFont>> fonts;
   QPDFObjectHandle fd = res.getKey("/Font");
   if (fd.isDictionary()) {

@@ -8,6 +8,7 @@
 
 #include "ctx.hh"
 #include "passes.hh"
+#include "limits.hh"
 #include "util.hh"
 
 namespace pdfa {
@@ -81,7 +82,7 @@ void sanitizeActionsIn(Ctx& ctx, QPDFObjectHandle dict, const std::string& where
 }
 
 void walkOutlines(Ctx& ctx, QPDFObjectHandle node, Visited& visited, int depth = 0) {
-  if (depth > 128) return;
+  if (depth > kMaxOutlineDepth) return;
   for (QPDFObjectHandle item = node; item.isDictionary() && visited.enter(item);
        item = item.getKey("/Next")) {
     sanitizeActionsIn(ctx, item, "outline item");
@@ -533,142 +534,6 @@ void handleOptionalContent(Ctx& ctx, QPDFObjectHandle root) {
 }
 
 namespace {
-void collectTreePairs(QPDFObjectHandle node, bool numberTree, Visited& visited, int depth,
-                      std::vector<std::pair<std::string, QPDFObjectHandle>>& strPairs,
-                      std::vector<std::pair<long long, QPDFObjectHandle>>& numPairs,
-                      bool& malformed) {
-  if (depth > 64 || !node.isDictionary() || !visited.enter(node)) {
-    malformed = malformed || depth > 64 || !node.isDictionary();
-    return;
-  }
-  QPDFObjectHandle kids = node.getKey("/Kids");
-  if (kids.isArray()) {
-    for (int i = 0; i < kids.getArrayNItems(); ++i) {
-      collectTreePairs(kids.getArrayItem(i), numberTree, visited, depth + 1, strPairs,
-                       numPairs, malformed);
-    }
-  }
-  QPDFObjectHandle entries = node.getKey(numberTree ? "/Nums" : "/Names");
-  if (entries.isArray()) {
-    for (int i = 0; i + 1 < entries.getArrayNItems(); i += 2) {
-      QPDFObjectHandle k = entries.getArrayItem(i);
-      QPDFObjectHandle v = entries.getArrayItem(i + 1);
-      if (numberTree) {
-        if (!k.isInteger()) { malformed = true; continue; }
-        numPairs.emplace_back(k.getIntValue(), v);
-      } else {
-        if (!k.isString()) { malformed = true; continue; }
-        strPairs.emplace_back(k.getStringValue(), v);
-      }
-    }
-    if (entries.getArrayNItems() % 2 != 0) malformed = true;
-  }
-  if (!kids.isArray() && !entries.isArray()) malformed = true;
-}
-
-bool normalizeTree(Ctx& ctx, QPDFObjectHandle holder, const std::string& key,
-                   bool numberTree) {
-  QPDFObjectHandle root = holder.getKey(key);
-  if (!root.isDictionary()) return false;
-  std::vector<std::pair<std::string, QPDFObjectHandle>> strPairs;
-  std::vector<std::pair<long long, QPDFObjectHandle>> numPairs;
-  bool malformed = false;
-  {
-    Visited visited;
-    collectTreePairs(root, numberTree, visited, 0, strPairs, numPairs, malformed);
-  }
-  bool unsorted = false;
-  if (numberTree) {
-    for (size_t i = 1; i < numPairs.size(); ++i) {
-      if (numPairs[i].first <= numPairs[i - 1].first) { unsorted = true; break; }
-    }
-  } else {
-    for (size_t i = 1; i < strPairs.size(); ++i) {
-      if (strPairs[i].first < strPairs[i - 1].first) { unsorted = true; break; }
-    }
-  }
-  if (!malformed && !unsorted) return false;
-  if (numberTree) {
-    std::stable_sort(numPairs.begin(), numPairs.end(),
-                     [](const auto& a, const auto& b) { return a.first < b.first; });
-    numPairs.erase(std::unique(numPairs.begin(), numPairs.end(),
-                               [](const auto& a, const auto& b) { return a.first == b.first; }),
-                   numPairs.end());
-  } else {
-    std::stable_sort(strPairs.begin(), strPairs.end(),
-                     [](const auto& a, const auto& b) { return a.first < b.first; });
-    strPairs.erase(std::unique(strPairs.begin(), strPairs.end(),
-                               [](const auto& a, const auto& b) { return a.first == b.first; }),
-                   strPairs.end());
-  }
-  size_t total = numberTree ? numPairs.size() : strPairs.size();
-  const size_t kChunk = 800;
-  std::vector<QPDFObjectHandle> leaves;
-  for (size_t i = 0; i < total; i += kChunk) {
-    size_t end = std::min(total, i + kChunk);
-    QPDFObjectHandle leaf = QPDFObjectHandle::newDictionary();
-    QPDFObjectHandle arr = QPDFObjectHandle::newArray();
-    for (size_t j = i; j < end; ++j) {
-      if (numberTree) {
-        arr.appendItem(QPDFObjectHandle::newInteger(numPairs[j].first));
-        arr.appendItem(numPairs[j].second);
-      } else {
-        arr.appendItem(QPDFObjectHandle::newString(strPairs[j].first));
-        arr.appendItem(strPairs[j].second);
-      }
-    }
-    leaf.replaceKey(numberTree ? "/Nums" : "/Names", arr);
-    if (total > kChunk) {
-      QPDFObjectHandle lim = QPDFObjectHandle::newArray();
-      if (numberTree) {
-        lim.appendItem(QPDFObjectHandle::newInteger(numPairs[i].first));
-        lim.appendItem(QPDFObjectHandle::newInteger(numPairs[end - 1].first));
-      } else {
-        lim.appendItem(QPDFObjectHandle::newString(strPairs[i].first));
-        lim.appendItem(QPDFObjectHandle::newString(strPairs[end - 1].first));
-      }
-      leaf.replaceKey("/Limits", lim);
-    }
-    leaves.push_back(ctx.pdf.makeIndirectObject(leaf));
-  }
-  QPDFObjectHandle newRoot;
-  if (leaves.size() == 1) {
-    newRoot = leaves[0];
-  } else {
-    newRoot = QPDFObjectHandle::newDictionary();
-    QPDFObjectHandle kids = QPDFObjectHandle::newArray();
-    for (QPDFObjectHandle& l : leaves) kids.appendItem(l);
-    newRoot.replaceKey("/Kids", kids);
-    newRoot = ctx.pdf.makeIndirectObject(newRoot);
-  }
-  holder.replaceKey(key, newRoot);
-  return true;
-}
-
-[[maybe_unused]] void normalizeNameTrees(Ctx& ctx) {
-  QPDFObjectHandle root = ctx.pdf.getRoot();
-  int fixed = 0;
-  QPDFObjectHandle names = root.getKey("/Names");
-  if (names.isDictionary()) {
-    for (const std::string& k : names.getKeys()) {
-      if (normalizeTree(ctx, names, k, false)) ++fixed;
-    }
-  }
-  QPDFObjectHandle str = root.getKey("/StructTreeRoot");
-  if (str.isDictionary()) {
-    if (normalizeTree(ctx, str, "/ParentTree", true)) ++fixed;
-    if (normalizeTree(ctx, str, "/IDTree", false)) ++fixed;
-  }
-  if (root.getKey("/PageLabels").isDictionary()) {
-    if (normalizeTree(ctx, root, "/PageLabels", true)) ++fixed;
-  }
-  if (fixed) {
-    ctx.issue("NAME_TREE_NORMALIZED",
-              "rebuilt " + std::to_string(fixed) +
-                  " name/number tree(s) with unsorted or malformed nodes",
-              true);
-  }
-}
 }
 
 namespace {

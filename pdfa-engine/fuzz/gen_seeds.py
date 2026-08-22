@@ -73,6 +73,49 @@ def deep_dict(path, n=6000):
          (3, f"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Nest {inner} >>")]
     write_pdf(path, o)
 
+def profile_seeds(d):
+    open(os.path.join(d, "flat.xml"), "wb").write(
+        b'<?xml version="1.0"?><pdfpreflight><profile><name>p</name>'
+        b'<check name="PRCWzPage_OnePageEmpty" check_severity="0"></check>'
+        b'</profile></pdfpreflight>')
+    open(os.path.join(d, "deep_ruleset.xml"), "wb").write(
+        b'<?xml version="1.0"?><pdfpreflight>' + b'<ruleset><id1>a</id1>' * 400 +
+        b'</ruleset>' * 400 + b'</pdfpreflight>')
+    open(os.path.join(d, "unterminated.xml"), "wb").write(
+        b'<?xml version="1.0"?><pdfpreflight><profile><name>x' + b'A' * 4096)
+    open(os.path.join(d, "flat.json"), "wb").write(
+        b'{"name":"p","checks":[{"name":"c","severity":"error","atoms":'
+        b'[{"property":"CSGST_F::TotalAmountOfInk","op":">","value":300}]}]}')
+    open(os.path.join(d, "deep.json"), "wb").write(
+        b'{"a":' * 300 + b'1' + b'}' * 300)
+
+def invoice_seeds(d):
+    open(os.path.join(d, "cii.xml"), "wb").write(
+        b'<?xml version="1.0" encoding="UTF-8"?>'
+        b'<rsm:CrossIndustryInvoice xmlns:rsm="urn:un:unece:uncefact:data:standard:'
+        b'CrossIndustryInvoice:100"><rsm:ExchangedDocument><ram:ID>INV-1</ram:ID>'
+        b'</rsm:ExchangedDocument></rsm:CrossIndustryInvoice>')
+    open(os.path.join(d, "nested.xml"), "wb").write(
+        b'<?xml version="1.0"?>' + b'<a>' * 2000 + b'x' + b'</a>' * 2000)
+    open(os.path.join(d, "truncated.xml"), "wb").write(b'<?xml version="1.0"?><rsm:Cross')
+
+def icc_seeds(d):
+    hdr = bytearray(132)
+    hdr[0:4] = (128).to_bytes(4, "big")
+    hdr[12:16] = b"mntr"
+    hdr[16:20] = b"CMYK"
+    hdr[20:24] = b"Lab "
+    hdr[36:40] = b"acsp"
+    open(os.path.join(d, "header_only.icc"), "wb").write(bytes(hdr))
+    open(os.path.join(d, "truncated.icc"), "wb").write(bytes(hdr[:64]))
+    bogus = bytearray(hdr)
+    bogus[0:4] = (0xFFFFFFFF).to_bytes(4, "big")
+    open(os.path.join(d, "huge_size.icc"), "wb").write(bytes(bogus))
+
+def password_seeds(d):
+    open(os.path.join(d, "empty.bin"), "wb").write(b"\x00%PDF-1.7\n%%EOF\n")
+    open(os.path.join(d, "long.bin"), "wb").write(b"\x40" + b"p" * 64 + b"%PDF-1.7\n%%EOF\n")
+
 def main():
     outdir = sys.argv[1] if len(sys.argv) > 1 else os.path.join(
         os.path.dirname(os.path.abspath(__file__)), "..", "build-fuzz", "seeds")
@@ -83,6 +126,10 @@ def main():
     deep_form(p("deep_form.pdf"))
     deep_acroform(p("deep_acroform.pdf"))
     deep_dict(p("deep_dict.pdf"))
+    profile_seeds(outdir)
+    invoice_seeds(outdir)
+    icc_seeds(outdir)
+    password_seeds(outdir)
     print(f"seeds written to {outdir}: {sorted(os.listdir(outdir))}")
 
 if __name__ == "__main__":

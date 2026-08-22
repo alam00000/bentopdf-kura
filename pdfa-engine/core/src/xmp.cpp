@@ -577,9 +577,7 @@ void passMetadata(Ctx& ctx) {
   appendSimple(xmp, "xmp:ModifyDate", info.modifyIso);
   if (ctx.isX()) {
     appendSimple(xmp, "xmp:MetadataDate", info.modifyIso);
-    unsigned hash = 2166136261u;
-    std::string seed = info.createIso + info.modifyIso + levelToString(ctx.opt.level);
-    for (unsigned char c : seed) hash = (hash ^ c) * 16777619u;
+    uint32_t hash = fnv1a32(info.createIso + info.modifyIso + levelToString(ctx.opt.level));
     char idbuf[64];
     std::snprintf(idbuf, sizeof(idbuf), "uuid:%08x-0000-4000-8000-%08x0000", hash,
                   hash ^ 0x9e3779b9u);

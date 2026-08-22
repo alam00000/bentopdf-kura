@@ -12,6 +12,7 @@
 
 #include "ctx.hh"
 #include "passes.hh"
+#include "limits.hh"
 #include "util.hh"
 
 namespace pdfa {
@@ -30,7 +31,7 @@ bool isHeadingType(const std::string& s) {
 
 void collectElems(QPDFObjectHandle node, Visited& seen, std::vector<QPDFObjectHandle>& out,
                   int depth = 0) {
-  if (depth > 200) return;
+  if (depth > kMaxStructDepth) return;
   if (node.isArray()) {
     for (int i = 0; i < node.getArrayNItems(); ++i) {
       collectElems(node.getArrayItem(i), seen, out, depth + 1);
@@ -45,7 +46,7 @@ void collectElems(QPDFObjectHandle node, Visited& seen, std::vector<QPDFObjectHa
 
 void replaceInParentTree(QPDFObjectHandle node, const QPDFObjGen& from,
                          QPDFObjectHandle to, Visited& seen, int depth = 0) {
-  if (depth > 64 || !node.isDictionary() || !seen.enter(node)) return;
+  if (depth > kMaxObjectWalk || !node.isDictionary() || !seen.enter(node)) return;
   QPDFObjectHandle kids = node.getKey("/Kids");
   if (kids.isArray()) {
     for (int i = 0; i < kids.getArrayNItems(); ++i) {
@@ -205,7 +206,7 @@ bool rebuildIdTree(Ctx& ctx, const std::vector<QPDFObjectHandle>& elems) {
 }
 
 bool hasLblDescendant(QPDFObjectHandle elem, int depth = 0) {
-  if (depth > 8) return false;
+  if (depth > kMaxAttrNest) return false;
   QPDFObjectHandle k = elem.getKey("/K");
   std::vector<QPDFObjectHandle> kids;
   if (k.isArray()) {
@@ -225,7 +226,7 @@ bool hasLblDescendant(QPDFObjectHandle elem, int depth = 0) {
 }
 
 bool listNumberingPresent(QPDFObjectHandle attr, Visited& seen, int depth = 0) {
-  if (depth > 8) return false;
+  if (depth > kMaxAttrNest) return false;
   if (attr.isDictionary()) {
     return nameIs(attr.getKey("/O"), "/List") && attr.hasKey("/ListNumbering");
   }

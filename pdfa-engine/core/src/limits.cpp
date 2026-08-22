@@ -18,6 +18,7 @@
 #include "ctx.hh"
 #include "images.hh"
 #include "passes.hh"
+#include "limits.hh"
 #include "util.hh"
 
 namespace pdfa {
@@ -69,10 +70,8 @@ const std::set<std::string> kValidOps = {
     "true", "false", "null"};
 
 std::string shortenName(const std::string& n) {
-  unsigned hash = 2166136261u;
-  for (unsigned char c : n) hash = (hash ^ c) * 16777619u;
   char suffix[16];
-  std::snprintf(suffix, sizeof(suffix), "X%08X", hash);
+  std::snprintf(suffix, sizeof(suffix), "X%08X", fnv1a32(n));
   return n.substr(0, kMaxName - 9) + suffix;
 }
 
@@ -650,7 +649,7 @@ void rebalancePageTree(Ctx& ctx) {
     std::set<QPDFObjGen> seen;
     std::function<long long(QPDFObjectHandle, QPDFObjectHandle, int)> walk =
         [&](QPDFObjectHandle node, QPDFObjectHandle parent, int depth) -> long long {
-      if (inconsistent || depth > 64) { inconsistent = true; return 0; }
+      if (inconsistent || depth > kMaxObjectWalk) { inconsistent = true; return 0; }
       if (!node.isDictionary()) { inconsistent = true; return 0; }
       if (node.isIndirect() && !seen.insert(node.getObjGen()).second) {
         inconsistent = true;
@@ -916,16 +915,7 @@ void passLimits(Ctx& ctx) {
       for (int i = 0; i < annots.getArrayNItems(); ++i) {
         QPDFObjectHandle a = annots.getArrayItem(i);
         if (!a.isDictionary()) continue;
-        QPDFObjectHandle ap = a.getKey("/AP");
-        if (!ap.isDictionary()) continue;
-        QPDFObjectHandle n = ap.getKey("/N");
-        std::vector<QPDFObjectHandle> streams;
-        if (n.isStream()) streams.push_back(n);
-        else if (n.isDictionary()) {
-          for (const std::string& k : n.getKeys()) {
-            if (n.getKey(k).isStream()) streams.push_back(n.getKey(k));
-          }
-        }
+        std::vector<QPDFObjectHandle> streams = normalAppearanceStreams(a);
         for (QPDFObjectHandle s : streams) {
           if (streamVisited.enter(s)) {
             attachFilter(ctx, s, pdf14, limits23);

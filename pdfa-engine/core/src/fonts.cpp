@@ -1840,26 +1840,6 @@ bool embedCidSubstitute(Ctx& ctx, FtLib& lib, EmbedCache& cache, QPDFObjectHandl
   return true;
 }
 
-bool validUtf8(const std::string& s) {
-  size_t i = 0;
-  while (i < s.size()) {
-    unsigned char c = s[i];
-    int extra = 0;
-    if (c < 0x80) extra = 0;
-    else if ((c & 0xE0) == 0xC0) extra = 1;
-    else if ((c & 0xF0) == 0xE0) extra = 2;
-    else if ((c & 0xF8) == 0xF0) extra = 3;
-    else return false;
-    for (int j = 1; j <= extra; ++j) {
-      if (i + j >= s.size() || (static_cast<unsigned char>(s[i + j]) & 0xC0) != 0x80) {
-        return false;
-      }
-    }
-    i += extra + 1;
-  }
-  return true;
-}
-
 std::string hexSafeName(const std::string& raw) {
   std::string prefix;
   std::string body = raw;
@@ -1979,16 +1959,7 @@ void passFonts(Ctx& ctx) {
       for (int i = 0; i < annots.getArrayNItems(); ++i) {
         QPDFObjectHandle a = annots.getArrayItem(i);
         if (!a.isDictionary()) continue;
-        QPDFObjectHandle ap = a.getKey("/AP");
-        if (!ap.isDictionary()) continue;
-        QPDFObjectHandle n = ap.getKey("/N");
-        std::vector<QPDFObjectHandle> streams;
-        if (n.isStream()) streams.push_back(n);
-        else if (n.isDictionary()) {
-          for (const std::string& k : n.getKeys()) {
-            if (n.getKey(k).isStream()) streams.push_back(n.getKey(k));
-          }
-        }
+        std::vector<QPDFObjectHandle> streams = normalAppearanceStreams(a);
         for (QPDFObjectHandle s : streams) {
           collectFonts(ctx, s.getDict().getKey("/Resources"), visited, fonts);
         }
@@ -2168,16 +2139,7 @@ void passFonts(Ctx& ctx) {
         for (int ai = 0; ai < annots.getArrayNItems(); ++ai) {
           QPDFObjectHandle a = annots.getArrayItem(ai);
           if (!a.isDictionary()) continue;
-          QPDFObjectHandle ap = a.getKey("/AP");
-          if (!ap.isDictionary()) continue;
-          QPDFObjectHandle nap = ap.getKey("/N");
-          std::vector<QPDFObjectHandle> streams;
-          if (nap.isStream()) streams.push_back(nap);
-          else if (nap.isDictionary()) {
-            for (const std::string& k : nap.getKeys()) {
-              if (nap.getKey(k).isStream()) streams.push_back(nap.getKey(k));
-            }
-          }
+          std::vector<QPDFObjectHandle> streams = normalAppearanceStreams(a);
           bool badAp = false;
           for (QPDFObjectHandle& st : streams) {
             std::vector<QPDFObjectHandle> af;
