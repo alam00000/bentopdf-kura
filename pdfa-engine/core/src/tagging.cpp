@@ -225,6 +225,7 @@ void stripFormMarkedContent(Ctx& ctx, QPDFObjectHandle res, Visited& visited) {
       xo.replaceStreamData(rewritten, QPDFObjectHandle::newNull(),
                            QPDFObjectHandle::newNull());
     } catch (...) {
+      ctx.scanIncomplete("a form XObject being retagged");
     }
     stripFormMarkedContent(ctx, xo.getDict().getKey("/Resources"), visited);
   }

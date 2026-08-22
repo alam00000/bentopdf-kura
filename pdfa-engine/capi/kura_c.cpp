@@ -16,11 +16,28 @@ struct KuraResultImpl {
   std::string error;
   std::string suggested;
 };
+
+void fillFailure(KuraResultImpl* impl, const char* code, const char* text) {
+  impl->pub.ok = 0;
+  impl->pub.pdf = nullptr;
+  impl->pub.pdf_len = 0;
+  impl->pub.error_code = code;
+  impl->pub.error = text;
+  impl->pub.suggested_level = nullptr;
+  impl->pub.compliant = 0;
+  impl->pub.findings = 0;
+}
 }
 
 extern "C" kura_result* kura_convert(const unsigned char* data, size_t size, const char* level,
-                                     const kura_options* options) {
-  auto* impl = new KuraResultImpl;
+                                     const kura_options* options) noexcept {
+  KuraResultImpl* impl = nullptr;
+  try {
+    impl = new KuraResultImpl;
+  } catch (...) {
+    return nullptr;
+  }
+  try {
   pdfa::Options opt;
   pdfa::Level parsed;
   if (!level || !pdfa::levelFromString(level, parsed)) {
@@ -76,12 +93,16 @@ extern "C" kura_result* kura_convert(const unsigned char* data, size_t size, con
     if (i.fixed && !pdfa::issueIsNormalization(i.code)) ++impl->pub.findings;
   }
   return &impl->pub;
+  } catch (...) {
+    fillFailure(impl, "INTERNAL_ERROR", "conversion aborted by an unrecognized error");
+    return &impl->pub;
+  }
 }
 
-extern "C" void kura_result_free(kura_result* result) {
+extern "C" void kura_result_free(kura_result* result) noexcept {
   if (result) delete reinterpret_cast<KuraResultImpl*>(result);
 }
 
-extern "C" const char* kura_version(void) { return pdfa::kEngineVersion; }
+extern "C" const char* kura_version(void) noexcept { return pdfa::kEngineVersion; }
 
-extern "C" const char* kura_engine_name(void) { return pdfa::kEngineName; }
+extern "C" const char* kura_engine_name(void) noexcept { return pdfa::kEngineName; }

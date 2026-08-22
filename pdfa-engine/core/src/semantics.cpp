@@ -461,6 +461,7 @@ int artifactMarkUntagged(Ctx& ctx) {
           ctx.pdf.makeIndirectObject(QPDFObjectHandle::newStream(&ctx.pdf, rewritten)));
       wrapped += filter.wrapped;
     } catch (...) {
+      ctx.scanIncomplete("a content stream being retagged");
     }
   }
   return wrapped;

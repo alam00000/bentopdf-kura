@@ -895,6 +895,7 @@ void outlineHolder(Ctx& ctx, FtLib& lib, QPDFObjectHandle holder, QPDFObjectHand
           }
         }
       } catch (...) {
+        ctx.scanIncomplete("a content stream being outlined");
       }
     }
   }

@@ -351,7 +351,7 @@ Result convert(const unsigned char* data, std::size_t size, const Options& optIn
       active = &decrypted;
     }
     Ctx ctx{*active, opt, res, levelPart(opt.level), levelConformance(opt.level),
-            levelFamily(opt.level), {}, {}, 0, 0};
+            levelFamily(opt.level)};
     if (!opt.attachXml.empty()) {
       ctx.inv = detectInvoice(opt.attachXml, opt.facturxProfile, opt.attachXmlName);
     }
