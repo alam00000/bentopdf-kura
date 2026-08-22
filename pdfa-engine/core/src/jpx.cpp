@@ -79,7 +79,7 @@ bool scanJp2Boxes(const unsigned char* d, size_t n, int& colrCount, bool& colrOk
     } else if (len == 0) {
       len = n - i;
     }
-    if (len < hdr || i + len > n) return false;
+    if (len < hdr || len > n - i) return false;
     const unsigned char* p = d + i + hdr;
     size_t plen = static_cast<size_t>(len - hdr);
     if (type == "jp2h") {
@@ -146,6 +146,7 @@ bool jpxPdfaConformant(const std::string& data) {
 namespace {
 RawImage decodeJpxDataAt(const std::string& data, std::string& alphaOut) {
   RawImage out;
+  alphaOut.clear();
   if (data.size() < 12) {
     out.error = "jpx data too short";
     return out;

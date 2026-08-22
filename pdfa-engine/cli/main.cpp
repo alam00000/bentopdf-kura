@@ -377,7 +377,7 @@ void pdfa_watchdog(unsigned seconds) {
       "malformed or crafted with pathological nesting\"\n}\n",
       stdout);
   std::fflush(stdout);
-  std::_Exit(0);
+  std::_Exit(3);
 }
 
 #ifdef KURA_WITH_PDFIUM

@@ -192,6 +192,11 @@ RawImage decodeImage(QPDFObjectHandle image) {
   int hival = 0;
   int comps = componentsForSpace(d.getKey("/ColorSpace"), &indexedBase, &lookup, &hival);
   bool isMask = d.getKey("/ImageMask").isBool() && d.getKey("/ImageMask").getBoolValue();
+  if (!isMask && (comps < 1 || comps > 32 ||
+                  static_cast<long long>(width) * height * comps > 400000000LL)) {
+    out.error = "unsupported component count";
+    return out;
+  }
   if (isMask) {
     out.error = "stencil mask";
     return out;
@@ -285,9 +290,11 @@ bool transcodeJpxImage(Ctx& ctx, QPDFObjectHandle image) {
     ctx.fatal("JPX_IN_PDFA1", "JPEG2000 image could not be transcoded (" + img.error + ")");
     return false;
   }
+  size_t pixelCount = static_cast<size_t>(img.width) * img.height;
+  if (alpha.size() < pixelCount) alpha.clear();
   if (!alpha.empty()) {
     bool cmyk = img.comps == 4;
-    size_t pixels = static_cast<size_t>(img.width) * img.height;
+    size_t pixels = pixelCount;
     for (size_t p = 0; p < pixels; ++p) {
       unsigned a = static_cast<unsigned char>(alpha[p]);
       for (int c = 0; c < img.comps; ++c) {

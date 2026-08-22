@@ -180,7 +180,7 @@ inline int cffCustomEncodingGid(const std::string& file, int code) {
     }
     if (!found) return -1;
   }
-  if (base + 4 > n || d[base] != 1) return -1;
+  if (base > n || n - base < 4 || d[base] != 1) return -1;
   size_t pos = base + d[base + 2];
   auto readIndex = [&](size_t p, size_t& first, size_t& firstLen, size_t& end) -> bool {
     if (p + 2 > n) return false;
@@ -195,16 +195,20 @@ inline int cffCustomEncodingGid(const std::string& file, int code) {
     if (offSize < 1 || offSize > 4) return false;
     size_t offArr = p + 3;
     size_t dataStart = offArr + static_cast<size_t>(count + 1) * offSize - 1;
+    if (dataStart >= n) return false;
     auto off = [&](unsigned i) -> size_t {
       size_t q = offArr + static_cast<size_t>(i) * offSize;
       size_t v = 0;
       for (unsigned b = 0; b < offSize; ++b) v = (v << 8) | d[q + b];
       return v;
     };
-    if (dataStart + off(count) > n) return false;
-    first = dataStart + off(0);
-    firstLen = off(1) - off(0);
-    end = dataStart + off(count);
+    size_t last = off(count);
+    if (last > n - dataStart) return false;
+    size_t o0 = off(0), o1 = off(1);
+    if (o1 < o0 || o1 > last) return false;
+    first = dataStart + o0;
+    firstLen = o1 - o0;
+    end = dataStart + last;
     return true;
   };
   size_t f1, l1, end;
@@ -214,7 +218,7 @@ inline int cffCustomEncodingGid(const std::string& file, int code) {
   long long encOff = -1;
   {
     size_t i = tdFirst;
-    size_t e = tdFirst + tdLen;
+    size_t e = std::min(tdFirst + tdLen, n);
     long long stack[48];
     int sp = 0;
     while (i < e) {
@@ -222,6 +226,7 @@ inline int cffCustomEncodingGid(const std::string& file, int code) {
       if (b <= 21) {
         unsigned op = b;
         if (b == 12) {
+          if (i + 2 > e) break;
           op = 1200 + d[i + 1];
           i += 2;
         } else {
@@ -230,9 +235,11 @@ inline int cffCustomEncodingGid(const std::string& file, int code) {
         if (op == 16 && sp > 0) encOff = stack[sp - 1];
         sp = 0;
       } else if (b == 28) {
+        if (i + 3 > e) break;
         if (sp < 48) stack[sp++] = static_cast<int16_t>((d[i + 1] << 8) | d[i + 2]);
         i += 3;
       } else if (b == 29) {
+        if (i + 5 > e) break;
         long long v = (static_cast<long long>(d[i + 1]) << 24) | (d[i + 2] << 16) |
                       (d[i + 3] << 8) | d[i + 4];
         if (sp < 48) stack[sp++] = static_cast<int32_t>(v);
@@ -249,9 +256,11 @@ inline int cffCustomEncodingGid(const std::string& file, int code) {
         if (sp < 48) stack[sp++] = static_cast<int>(b) - 139;
         i += 1;
       } else if (b >= 247 && b <= 250) {
+        if (i + 2 > e) break;
         if (sp < 48) stack[sp++] = (static_cast<int>(b) - 247) * 256 + d[i + 1] + 108;
         i += 2;
       } else if (b >= 251 && b <= 254) {
+        if (i + 2 > e) break;
         if (sp < 48) stack[sp++] = -(static_cast<int>(b) - 251) * 256 - d[i + 1] - 108;
         i += 2;
       } else {

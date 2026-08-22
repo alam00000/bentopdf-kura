@@ -224,13 +224,15 @@ bool hasLblDescendant(QPDFObjectHandle elem, int depth = 0) {
   return false;
 }
 
-bool listNumberingPresent(QPDFObjectHandle attr) {
+bool listNumberingPresent(QPDFObjectHandle attr, Visited& seen, int depth = 0) {
+  if (depth > 8) return false;
   if (attr.isDictionary()) {
     return nameIs(attr.getKey("/O"), "/List") && attr.hasKey("/ListNumbering");
   }
   if (attr.isArray()) {
+    if (attr.isIndirect() && !seen.enter(attr)) return false;
     for (int i = 0; i < attr.getArrayNItems(); ++i) {
-      if (listNumberingPresent(attr.getArrayItem(i))) return true;
+      if (listNumberingPresent(attr.getArrayItem(i), seen, depth + 1)) return true;
     }
   }
   return false;
@@ -242,7 +244,8 @@ int setListNumbering(Ctx& ctx, const std::vector<QPDFObjectHandle>& elems) {
     if (nameOf(e.getKey("/S")) != "/L") continue;
     if (!hasLblDescendant(e)) continue;
     QPDFObjectHandle attr = e.getKey("/A");
-    if (listNumberingPresent(attr)) continue;
+    Visited attrSeen;
+    if (listNumberingPresent(attr, attrSeen)) continue;
     QPDFObjectHandle la = QPDFObjectHandle::newDictionary();
     la.replaceKey("/O", QPDFObjectHandle::newName("/List"));
     la.replaceKey("/ListNumbering", QPDFObjectHandle::newName("/Disc"));

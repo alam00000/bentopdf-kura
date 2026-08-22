@@ -465,6 +465,7 @@ void uaTagging(Ctx& ctx) {
   }
   QPDFObjectHandle docElem = makeElem(ctx, "/Document", treeRef, QPDFObjectHandle());
   treeRoot.replaceKey("/K", docElem);
+  std::map<QPDFObjGen, QPDFObjectHandle> pageFirstElem;
   root.replaceKey("/StructTreeRoot", treeRef);
 
   QPDFObjectHandle nums = QPDFObjectHandle::newArray();
@@ -532,11 +533,17 @@ void uaTagging(Ctx& ctx) {
         fig.replaceKey("/K", QPDFObjectHandle::newInteger(seg.mcid));
         appendKid(docElem, fig);
         pageParents.appendItem(fig);
+        if (page.isIndirect() && !pageFirstElem.count(page.getObjGen())) {
+          pageFirstElem[page.getObjGen()] = fig;
+        }
         ++figures;
       } else {
         if (!pElem.isInitialized()) {
           pElem = makeElem(ctx, "/P", docElem, page);
           appendKid(docElem, pElem);
+          if (page.isIndirect() && !pageFirstElem.count(page.getObjGen())) {
+            pageFirstElem[page.getObjGen()] = pElem;
+          }
         }
         appendKid(pElem, QPDFObjectHandle::newInteger(seg.mcid));
         pageParents.appendItem(pElem);
@@ -609,9 +616,20 @@ void uaTagging(Ctx& ctx) {
     QPDFObjectHandle sdElem = docElem.isIndirect() ? docElem
                                                    : ctx.pdf.makeIndirectObject(docElem);
     int fixedDest = 0;
-    auto structDestArray = [&]() {
+    int keptDest = 0;
+    auto elemForDest = [&](QPDFObjectHandle dest) {
+      if (dest.isArray() && dest.getArrayNItems() >= 1) {
+        QPDFObjectHandle target = dest.getArrayItem(0);
+        if (target.isIndirect()) {
+          auto it = pageFirstElem.find(target.getObjGen());
+          if (it != pageFirstElem.end()) return it->second;
+        }
+      }
+      return QPDFObjectHandle();
+    };
+    auto structDestArray = [&](QPDFObjectHandle elem) {
       QPDFObjectHandle sd = QPDFObjectHandle::newArray();
-      sd.appendItem(sdElem);
+      sd.appendItem(elem);
       sd.appendItem(QPDFObjectHandle::newName("/Fit"));
       return sd;
     };
@@ -620,8 +638,13 @@ void uaTagging(Ctx& ctx) {
       QPDFObjectHandle d = action.getKey("/D");
       bool inDoc = d.isString() || d.isName() ||
                    (d.isArray() && d.getArrayNItems() >= 1 && !d.getArrayItem(0).isString());
-      if (!inDoc && !action.getKey("/SD").isNull()) return;
-      action.replaceKey("/SD", structDestArray());
+      if (!inDoc) return;
+      QPDFObjectHandle elem = elemForDest(d);
+      if (!elem.isInitialized()) {
+        ++keptDest;
+        return;
+      }
+      action.replaceKey("/SD", structDestArray(elem));
       ++fixedAction;
     };
     auto toStructDest = [&](QPDFObjectHandle owner, const std::string& key) {
@@ -632,21 +655,25 @@ void uaTagging(Ctx& ctx) {
                    (dest.isArray() && dest.getArrayNItems() >= 1 &&
                     !dest.getArrayItem(0).isString());
       if (!inDoc) return;
-      QPDFObjectHandle sd = QPDFObjectHandle::newArray();
-      sd.appendItem(sdElem);
-      sd.appendItem(QPDFObjectHandle::newName("/Fit"));
-      owner.replaceKey(key, sd);
+      QPDFObjectHandle elem = elemForDest(dest);
+      if (!elem.isInitialized()) {
+        ++keptDest;
+        return;
+      }
+      owner.replaceKey(key, structDestArray(elem));
       ++fixedDest;
     };
     QPDFObjectHandle oa = root.getKey("/OpenAction");
     if (oa.isDictionary() && nameIs(oa.getKey("/S"), "/GoTo")) {
       toStructActionDest(oa);
     } else if (oa.isArray() || oa.isName() || oa.isString()) {
-      QPDFObjectHandle sd = QPDFObjectHandle::newArray();
-      sd.appendItem(sdElem);
-      sd.appendItem(QPDFObjectHandle::newName("/Fit"));
-      root.replaceKey("/OpenAction", sd);
-      ++fixedDest;
+      QPDFObjectHandle elem = elemForDest(oa);
+      if (elem.isInitialized()) {
+        root.replaceKey("/OpenAction", structDestArray(elem));
+        ++fixedDest;
+      } else {
+        ++keptDest;
+      }
     }
     for (auto& ph2 : pages) {
       QPDFObjectHandle an = ph2.getObjectHandle().getKey("/Annots");
@@ -683,11 +710,13 @@ void uaTagging(Ctx& ctx) {
             toStructDest(entry, "/D");
           } else if (entry.isArray() && entry.getArrayNItems() >= 1 &&
                      !entry.getArrayItem(0).isString()) {
-            QPDFObjectHandle sd = QPDFObjectHandle::newArray();
-            sd.appendItem(sdElem);
-            sd.appendItem(QPDFObjectHandle::newName("/Fit"));
-            nm.setArrayItem(i, sd);
-            ++fixedDest;
+            QPDFObjectHandle elem = elemForDest(entry);
+            if (elem.isInitialized()) {
+              nm.setArrayItem(i, structDestArray(elem));
+              ++fixedDest;
+            } else {
+              ++keptDest;
+            }
           }
         }
       }
@@ -714,6 +743,13 @@ void uaTagging(Ctx& ctx) {
                 "converted " + std::to_string(fixedDest + fixedAction) +
                     " in-document destination(s) to structure destinations (PDF/UA-2 8.8)",
                 true);
+    }
+    if (keptDest) {
+      ctx.issue("UA_STRUCT_DEST_KEPT",
+                "kept " + std::to_string(keptDest) +
+                    " destination(s) unchanged; no structure element was tagged on the "
+                    "target page",
+                false);
     }
   }
 
