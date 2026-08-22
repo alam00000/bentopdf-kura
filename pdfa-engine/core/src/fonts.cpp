@@ -479,11 +479,14 @@ void syncCidFontWidths(Ctx& ctx, FtLib& lib, QPDFObjectHandle type0) {
         }
         idx += 2;
       } else if (b.isNumber() && idx + 2 < nw && oldW.getArrayItem(idx + 2).isNumber()) {
-        long long end = static_cast<long long>(b.getNumericValue());
+        double endRaw = b.getNumericValue();
+        long long end = std::isfinite(endRaw)
+                            ? static_cast<long long>(std::min(endRaw, 1e9))
+                            : -1;
         double val = oldW.getArrayItem(idx + 2).getNumericValue();
-        for (long long cid = start; cid <= end; ++cid) {
-          if (cid >= 0 && static_cast<size_t>(cid) < numCids) declared[cid] = val;
-        }
+        long long lo = std::max<long long>(start, 0);
+        long long hi = std::min<long long>(end, static_cast<long long>(numCids) - 1);
+        for (long long cid = lo; cid <= hi; ++cid) declared[cid] = val;
         idx += 3;
       } else {
         break;

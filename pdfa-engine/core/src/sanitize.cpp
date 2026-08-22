@@ -247,6 +247,29 @@ void handleEmbeddedFiles(Ctx& ctx, QPDFObjectHandle root) {
       for (int i = 1; i < vals.getArrayNItems(); i += 2) specs.push_back(vals.getArrayItem(i));
     }
   }
+  std::vector<std::pair<std::string, QPDFObjectHandle>> treePairs;
+  {
+    std::vector<QPDFObjectHandle> pstack;
+    if (tree.isDictionary()) pstack.push_back(tree);
+    Visited pseen;
+    while (!pstack.empty()) {
+      QPDFObjectHandle node = pstack.back();
+      pstack.pop_back();
+      if (!node.isDictionary() || !pseen.enter(node)) continue;
+      QPDFObjectHandle kids = node.getKey("/Kids");
+      if (kids.isArray()) {
+        for (int i = 0; i < kids.getArrayNItems(); ++i) pstack.push_back(kids.getArrayItem(i));
+      }
+      QPDFObjectHandle vals = node.getKey("/Names");
+      if (vals.isArray()) {
+        for (int i = 0; i + 1 < vals.getArrayNItems(); i += 2) {
+          if (vals.getArrayItem(i).isString()) {
+            treePairs.push_back({vals.getArrayItem(i).getUTF8Value(), vals.getArrayItem(i + 1)});
+          }
+        }
+      }
+    }
+  }
   for (QPDFObjectHandle fs : specs) normalizeFilespecPart3(ctx, fs);
   std::vector<QPDFObjectHandle> orphans;
   {
@@ -275,17 +298,9 @@ void handleEmbeddedFiles(Ctx& ctx, QPDFObjectHandle root) {
       used.insert(k);
       return k;
     };
-    if (tree.isDictionary()) {
-      QPDFObjectHandle vals = tree.getKey("/Names");
-      if (vals.isArray()) {
-        for (int i = 0; i + 1 < vals.getArrayNItems(); i += 2) {
-          if (vals.getArrayItem(i).isString()) {
-            std::string k = vals.getArrayItem(i).getUTF8Value();
-            used.insert(k);
-            pairs.push_back({k, vals.getArrayItem(i + 1)});
-          }
-        }
-      }
+    for (const auto& [k, v] : treePairs) {
+      used.insert(k);
+      pairs.push_back({k, v});
     }
     int idx = 0;
     for (QPDFObjectHandle fs : orphans) {

@@ -66,15 +66,25 @@ struct Xform {
       if (n > 1) {
         std::vector<std::thread> ts;
         size_t chunk = pixels / n;
-        for (unsigned t = 0; t < n; ++t) {
-          size_t off = t * chunk;
-          size_t cnt = t == n - 1 ? pixels - off : chunk;
-          ts.emplace_back([this, in, out, off, cnt] {
-            cmsDoTransform(rgb2cmyk, in + off * 3, out + off * 4,
-                           static_cast<cmsUInt32Number>(cnt));
-          });
+        size_t started = 0;
+        try {
+          for (unsigned t = 0; t < n; ++t) {
+            size_t off = t * chunk;
+            size_t cnt = t == n - 1 ? pixels - off : chunk;
+            ts.emplace_back([this, in, out, off, cnt] {
+              cmsDoTransform(rgb2cmyk, in + off * 3, out + off * 4,
+                             static_cast<cmsUInt32Number>(cnt));
+            });
+            started = off + cnt;
+          }
+        } catch (const std::system_error&) {
         }
-        for (auto& th : ts) th.join();
+        for (auto& th : ts) {
+          if (th.joinable()) th.join();
+        }
+        if (started >= pixels) return;
+        cmsDoTransform(rgb2cmyk, in + started * 3, out + started * 4,
+                       static_cast<cmsUInt32Number>(pixels - started));
         return;
       }
     }
@@ -701,13 +711,25 @@ void rewriteContent(Ctx& ctx, ConvertState& st, QPDFObjectHandle holder,
                     const std::map<std::string, bool>& fixNames) {
   if (!st.streamsDone.enter(holder)) return;
   try {
-    QPDFPageObjectHelper ph(holder);
     RgbOpFilter filter(st, fixNames);
     Pl_Buffer buf("x1a color rewrite");
-    ph.filterContents(&filter, &buf);
+    size_t sourceLen = 0;
+    if (holder.isStream()) {
+      auto src = holder.getStreamData(qpdf_dl_all);
+      sourceLen = src->getSize();
+      holder.filterAsContents(&filter, &buf);
+    } else {
+      QPDFPageObjectHelper ph(holder);
+      ph.filterContents(&filter, &buf);
+    }
     auto data = buf.getBufferSharedPointer();
     std::string rewritten(reinterpret_cast<const char*>(data->getBuffer()), data->getSize());
     if (holder.isStream()) {
+      if (rewritten.empty() && sourceLen > 0) {
+        st.failed = true;
+        st.failReason = "content stream rewrite produced no output";
+        return;
+      }
       holder.replaceStreamData(rewritten, QPDFObjectHandle::newNull(),
                                QPDFObjectHandle::newNull());
     } else {

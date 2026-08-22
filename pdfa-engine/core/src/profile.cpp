@@ -117,6 +117,13 @@ struct JsonParser {
   const std::string& s;
   size_t i = 0;
   bool ok = true;
+  int depth = 0;
+
+  struct DepthCounter {
+    int& d;
+    explicit DepthCounter(int& v) : d(v) { ++d; }
+    ~DepthCounter() { --d; }
+  };
 
   explicit JsonParser(const std::string& text) : s(text) {}
 
@@ -129,6 +136,8 @@ struct JsonParser {
   Json parse() {
     ws();
     if (i >= s.size()) { ok = false; return {}; }
+    if (depth > 64) { ok = false; return {}; }
+    DepthCounter dc(depth);
     char c = s[i];
     if (c == '{') return parseObj();
     if (c == '[') return parseArr();
@@ -447,6 +456,7 @@ bool parsePreflightXml(const std::string& text, PfProfile& out) {
         p = text.find("<condition>", p);
         if (p == std::string::npos || p > cend) break;
         size_t q = text.find("</condition>", p);
+        if (q == std::string::npos || q > cend) break;
         rule.condIds.push_back(text.substr(p + 11, q - p - 11));
         p = q + 1;
       }
@@ -464,6 +474,7 @@ bool parsePreflightXml(const std::string& text, PfProfile& out) {
         q = text.find("<varvalue>", q);
         if (q == std::string::npos || (vend != std::string::npos && q > vend)) break;
         size_t qc = text.find("</varvalue>", q);
+        if (qc == std::string::npos || (vend != std::string::npos && qc > vend)) break;
         varVals.push_back(text.substr(q + 10, qc - q - 10));
         q = qc + 1;
       }
@@ -478,6 +489,7 @@ bool parsePreflightXml(const std::string& text, PfProfile& out) {
       sp = text.find("<ruleset>", sp);
       if (sp == std::string::npos || sp > end) break;
       size_t send = text.find("</ruleset>", sp);
+      if (send == std::string::npos || send > end) break;
       std::string sid = tagText(text, "id1", sp, send);
       size_t p = sp;
       while (true) {
@@ -485,7 +497,9 @@ bool parsePreflightXml(const std::string& text, PfProfile& out) {
         if (p == std::string::npos || p > send) break;
         int sev = text[p + 22] - '0';
         size_t open = text.find('>', p);
+        if (open == std::string::npos || open > send) break;
         size_t close = text.find("</rule>", open);
+        if (close == std::string::npos || close > send) break;
         std::string attrs = text.substr(p, open - p);
         bool varOff = false;
         if (attrs.find("var_usage=\"1\"") != std::string::npos) {
@@ -550,6 +564,7 @@ bool parsePreflightXml(const std::string& text, PfProfile& out) {
       rp = text.find("<ruleset>", rp);
       if (rp == std::string::npos || (pend != std::string::npos && rp > pend)) break;
       size_t rclose = text.find("</ruleset>", rp);
+      if (rclose == std::string::npos || (pend != std::string::npos && rclose > pend)) break;
       std::string sid = text.substr(rp + 9, rclose - rp - 9);
       size_t b = sid.find_first_not_of(" \t\r\n");
       if (b != std::string::npos) {
@@ -909,6 +924,8 @@ ColorInfo classifyColor(QPDFObjectHandle cs, QPDFObjectHandle res, int depth = 0
 struct EvScanner : QPDFObjectHandle::ParserCallbacks {
   Gs gs;
   std::vector<Gs> stack;
+  int qSuppressed = 0;
+  std::map<QPDFObjGen, std::string> programCache;
   std::vector<double> nums;
   std::string lastName;
   QPDFObjectHandle res;
@@ -1103,9 +1120,21 @@ struct EvScanner : QPDFObjectHandle::ParserCallbacks {
         if (ffs.isStream()) {
           ff.embedded = true;
           try {
+            if (ffs.isIndirect()) {
+              auto hit = programCache.find(ffs.getObjGen());
+              if (hit != programCache.end()) {
+                ff.fontProgram = hit->second;
+                ff.openType = ff.fontProgram.rfind("OTTO", 0) == 0 ||
+                              nameIs(ffs.getDict().getKey("/Subtype"), "/OpenType");
+                break;
+              }
+            }
             auto buf = ffs.getStreamData(qpdf_dl_all);
             ff.fontProgram.assign(reinterpret_cast<const char*>(buf->getBuffer()),
                                   buf->getSize());
+            if (ffs.isIndirect() && programCache.size() < 512) {
+              programCache[ffs.getObjGen()] = ff.fontProgram;
+            }
             if (ff.fontProgram.rfind("OTTO", 0) == 0 ||
                 nameIs(ffs.getDict().getKey("/Subtype"), "/OpenType")) {
               ff.openType = true;
@@ -1270,9 +1299,14 @@ struct EvScanner : QPDFObjectHandle::ParserCallbacks {
       lastName.clear();
       return;
     }
-    if (op == "q") stack.push_back(gs);
+    if (op == "q") {
+      if (stack.size() < 256) stack.push_back(gs);
+      else ++qSuppressed;
+    }
     else if (op == "Q") {
-      if (!stack.empty()) {
+      if (qSuppressed > 0) {
+        --qSuppressed;
+      } else if (!stack.empty()) {
         gs = stack.back();
         stack.pop_back();
       }
@@ -3477,9 +3511,11 @@ void passProfile(Ctx& ctx, const unsigned char* inputData, std::size_t inputSize
               size_t a = txt.find('<', q);
               if (a == std::string::npos || a > end) break;
               size_t ac = txt.find('>', a);
+              if (ac == std::string::npos || ac > end) break;
               size_t b = txt.find('<', ac);
               if (b == std::string::npos || b > end) break;
               size_t bc = txt.find('>', b);
+              if (bc == std::string::npos || bc > end) break;
               int src = static_cast<int>(std::strtol(txt.substr(a + 1, ac - a - 1).c_str(),
                                                      nullptr, 16));
               if (src < 256 && goodDst(txt.substr(b + 1, bc - b - 1))) valid.insert(src);
@@ -3496,15 +3532,18 @@ void passProfile(Ctx& ctx, const unsigned char* inputData, std::size_t inputSize
               size_t a = txt.find('<', q);
               if (a == std::string::npos || a > end) break;
               size_t ac = txt.find('>', a);
+              if (ac == std::string::npos || ac > end) break;
               size_t b = txt.find('<', ac);
               if (b == std::string::npos || b > end) break;
               size_t bc = txt.find('>', b);
+              if (bc == std::string::npos || bc > end) break;
               long lo = std::strtol(txt.substr(a + 1, ac - a - 1).c_str(), nullptr, 16);
               long hi = std::strtol(txt.substr(b + 1, bc - b - 1).c_str(), nullptr, 16);
               size_t dststart = txt.find_first_not_of(" \r\n\t", bc + 1);
               bool ok = false;
               if (dststart != std::string::npos && txt[dststart] == '<') {
                 size_t dc = txt.find('>', dststart);
+                if (dc == std::string::npos) break;
                 ok = goodDst(txt.substr(dststart + 1, dc - dststart - 1));
                 q = dc + 1;
               } else if (dststart != std::string::npos && txt[dststart] == '[') {
@@ -3521,6 +3560,7 @@ void passProfile(Ctx& ctx, const unsigned char* inputData, std::size_t inputSize
             p = end + 1;
           }
         }
+        std::map<QPDFObjGen, std::map<std::string, bool>> charProcCache;
         for (TextEvent& e : ev.texts) {
           char key[32];
           std::snprintf(key, sizeof(key), "%d,%d", e.fontOg.getObj(), e.fontOg.getGen());
@@ -3536,6 +3576,7 @@ void passProfile(Ctx& ctx, const unsigned char* inputData, std::size_t inputSize
           if (ff && ff->type3 && ff->dict.isInitialized()) {
             QPDFObjectHandle cp = ff->dict.getKey("/CharProcs");
             SimpleEncoding t3enc = readEncoding(ff->dict, false);
+            std::map<std::string, bool>& charProcPaints = charProcCache[e.fontOg];
             for (unsigned char c : e.bytes) {
               if (c == ' ') e.glyphWhitespace = true;
               const std::string& dn = t3enc.diffs[c];
@@ -3544,19 +3585,25 @@ void passProfile(Ctx& ctx, const unsigned char* inputData, std::size_t inputSize
                 QPDFObjectHandle pr = cp.getKey(dn);
                 if (pr.isStream()) {
                   has = true;
-                  try {
-                    auto buf = pr.getStreamData(qpdf_dl_all);
-                    std::string t(reinterpret_cast<const char*>(buf->getBuffer()),
-                                  std::min<size_t>(buf->getSize(), 8192));
-                    for (const char* op :
-                         {" re", " f", "\nf", " S", "\nS", " c", " l", " Do", " sh"}) {
-                      if (t.find(op) != std::string::npos) {
-                        paints = true;
-                        break;
+                  auto cached = charProcPaints.find(dn);
+                  if (cached != charProcPaints.end()) {
+                    paints = cached->second;
+                  } else {
+                    try {
+                      auto buf = pr.getStreamData(qpdf_dl_all);
+                      std::string t(reinterpret_cast<const char*>(buf->getBuffer()),
+                                    std::min<size_t>(buf->getSize(), 8192));
+                      for (const char* op :
+                           {" re", " f", "\nf", " S", "\nS", " c", " l", " Do", " sh"}) {
+                        if (t.find(op) != std::string::npos) {
+                          paints = true;
+                          break;
+                        }
                       }
+                    } catch (...) {
+                      paints = true;
                     }
-                  } catch (...) {
-                    paints = true;
+                    charProcPaints[dn] = paints;
                   }
                 }
               }
@@ -3787,6 +3834,13 @@ void passProfile(Ctx& ctx, const unsigned char* inputData, std::size_t inputSize
       }
       return out;
     };
+    struct VerifyResult {
+      bool pass = false;
+      long long count = 0;
+      std::string detail;
+    };
+    auto verifyCache = std::make_shared<std::map<std::pair<const void*, std::string>,
+                                                 VerifyResult>>();
     auto verifyBytes = [&](const unsigned char* data, std::size_t size,
                            const std::vector<std::string>& lvls, std::string& failDetail,
                            long long& worst) {
@@ -3794,12 +3848,27 @@ void passProfile(Ctx& ctx, const unsigned char* inputData, std::size_t inputSize
       for (const std::string& ls : lvls) {
         Level lv;
         if (!levelFromString(ls, lv)) continue;
+        auto ckey = std::make_pair(static_cast<const void*>(data), ls);
+        auto cached = verifyCache->find(ckey);
+        if (cached != verifyCache->end()) {
+          if (cached->second.pass) {
+            worst = 0;
+            failDetail.clear();
+            return true;
+          }
+          if (worst < 0 || cached->second.count < worst) {
+            worst = cached->second.count;
+            failDetail = cached->second.detail;
+          }
+          continue;
+        }
         Options o;
         o.level = lv;
         o.verifyOnly = true;
         o.password = ctx.opt.password;
         Result r = convert(data, size, o);
         if (r.ok && r.compliant) {
+          (*verifyCache)[ckey] = {true, 0, std::string()};
           worst = 0;
           failDetail.clear();
           return true;
@@ -3818,6 +3887,7 @@ void passProfile(Ctx& ctx, const unsigned char* inputData, std::size_t inputSize
           }
           if (cnt == 0) cnt = 1;
         }
+        (*verifyCache)[ckey] = {false, cnt, first};
         if (worst < 0 || cnt < worst) {
           worst = cnt;
           failDetail = first;
@@ -3836,9 +3906,11 @@ void passProfile(Ctx& ctx, const unsigned char* inputData, std::size_t inputSize
     };
     auto embeddedPdfPayloads = [&]() {
       std::vector<std::string> out;
+      Visited walkSeen;
       std::function<void(QPDFObjectHandle, int)> walk = [&](QPDFObjectHandle node,
                                                             int depth) {
         if (depth > 8 || out.size() >= 16 || !node.isDictionary()) return;
+        if (node.isIndirect() && !walkSeen.enter(node)) return;
         QPDFObjectHandle kids = node.getKey("/Kids");
         if (kids.isArray()) {
           for (int i = 0; i < kids.getArrayNItems(); ++i) walk(kids.getArrayItem(i), depth + 1);
@@ -4517,12 +4589,24 @@ class OverprintFilter : public QPDFObjectHandle::TokenFilter {
       pending_.push_back(tok);
       return;
     }
+    if (tok.getType() == TT::tt_inline_image) {
+      flushPending();
+      writeToken(tok);
+      return;
+    }
     if (tok.getType() != TT::tt_word) {
       pending_.push_back(tok);
-      flushPending();
+      if (pending_.size() > 4096) flushPending();
       return;
     }
     std::string op = tok.getValue();
+    static const std::set<std::string> kPathOps = {"m", "l", "c", "v", "y", "h", "re"};
+    if (kPathOps.count(op)) {
+      pending_.push_back(tok);
+      nums_.clear();
+      if (pending_.size() > 4096) flushPending();
+      return;
+    }
     bool isFillOp = op == "f" || op == "F" || op == "f*" || op == "B" || op == "B*" ||
                     op == "b" || op == "b*";
     bool isStrokeOp = op == "S" || op == "s" || op == "B" || op == "B*" || op == "b" ||
@@ -4555,11 +4639,22 @@ class OverprintFilter : public QPDFObjectHandle::TokenFilter {
       return;
     }
     bool actOn = (isFillOp || isStrokeOp) ? !textOnly_ : (isTextOp ? !vectorOnly_ : false);
+    const char* gsName = nullptr;
     if (actOn && (isFillOp || isStrokeOp || isTextOp)) {
       const std::vector<double>& c = (isStrokeOp && !isFillOp) ? stroke_ : fill_;
-      if (knockWhite_ && isWhiteVec(c)) write("/KuraKO gs\n");
-      else if (opBlack_ && is100kVec(c)) write("/KuraOB gs\n");
+      if (knockWhite_ && isWhiteVec(c)) gsName = "/KuraKO gs\n";
+      else if (opBlack_ && is100kVec(c)) gsName = "/KuraOB gs\n";
     }
+    if (gsName && (isFillOp || isStrokeOp)) {
+      write("q\n");
+      write(gsName);
+      pending_.push_back(tok);
+      flushPending();
+      write("\nQ\n");
+      nums_.clear();
+      return;
+    }
+    if (gsName) write(gsName);
     pending_.push_back(tok);
     flushPending();
     nums_.clear();
@@ -4767,7 +4862,10 @@ void passProfileFixups(Ctx& ctx) {
         note("scaled pages to fit the requested size");
       }
     } else if (op == "setpagebox" || op == "setpageboxesbasedonmarks") {
+      static const std::set<std::string> kPageBoxes = {"MediaBox", "CropBox", "TrimBox",
+                                                       "BleedBox", "ArtBox"};
       std::string target = op == "setpagebox" && !p(0).empty() ? p(0) : "TrimBox";
+      if (!kPageBoxes.count(target)) continue;
       bool onlyMissing = true;
       for (const std::string& prm : params) {
         if (prm == "Always") onlyMissing = false;
@@ -5177,6 +5275,8 @@ void passProfileFixups(Ctx& ctx) {
           egs.replaceKey("/KuraOB", ctx.pdf.makeIndirectObject(ob));
         }
       }
+      QPDFObjectHandle pageContents = ph.getObjectHandle().getKey("/Contents");
+      if (!pageContents.isStream() && !pageContents.isArray()) continue;
       auto filter = std::make_shared<OverprintFilter>(knockWhite, opBlack, textOnly,
                                                       vectorOnly, minWidth, forceTr);
       ph.addContentTokenFilter(filter);
