@@ -302,7 +302,7 @@ class TagWrapFilter : public QPDFObjectHandle::TokenFilter {
         }
       }
       if (imageNames.count(name)) {
-        openP();
+        closeP();
         write("/Figure << /MCID " + std::to_string(nextMcid) + " >> BDC ");
         segments.push_back({true, nextMcid});
         ++nextMcid;
@@ -356,16 +356,14 @@ class TagWrapFilter : public QPDFObjectHandle::TokenFilter {
   bool pOpen = false;
 };
 
-QPDFObjectHandle gNsRef;
-
 QPDFObjectHandle makeElem(Ctx& ctx, const std::string& type, QPDFObjectHandle parent,
-                          QPDFObjectHandle page) {
+                          QPDFObjectHandle page, QPDFObjectHandle nsRef) {
   QPDFObjectHandle e = QPDFObjectHandle::newDictionary();
   e.replaceKey("/Type", QPDFObjectHandle::newName("/StructElem"));
   e.replaceKey("/S", QPDFObjectHandle::newName(type));
   e.replaceKey("/P", parent);
   if (page.isInitialized()) e.replaceKey("/Pg", page);
-  if (gNsRef.isInitialized()) e.replaceKey("/NS", gNsRef);
+  if (nsRef.isInitialized()) e.replaceKey("/NS", nsRef);
   return ctx.pdf.makeIndirectObject(e);
 }
 
@@ -453,7 +451,7 @@ void uaTagging(Ctx& ctx) {
   QPDFObjectHandle treeRoot = QPDFObjectHandle::newDictionary();
   treeRoot.replaceKey("/Type", QPDFObjectHandle::newName("/StructTreeRoot"));
   QPDFObjectHandle treeRef = ctx.pdf.makeIndirectObject(treeRoot);
-  gNsRef = QPDFObjectHandle();
+  QPDFObjectHandle gNsRef;
   if (ctx.ua2()) {
     QPDFObjectHandle ns = QPDFObjectHandle::newDictionary();
     ns.replaceKey("/Type", QPDFObjectHandle::newName("/Namespace"));
@@ -463,7 +461,7 @@ void uaTagging(Ctx& ctx) {
     nsArr.appendItem(gNsRef);
     treeRoot.replaceKey("/Namespaces", nsArr);
   }
-  QPDFObjectHandle docElem = makeElem(ctx, "/Document", treeRef, QPDFObjectHandle());
+  QPDFObjectHandle docElem = makeElem(ctx, "/Document", treeRef, QPDFObjectHandle(), gNsRef);
   treeRoot.replaceKey("/K", docElem);
   std::map<QPDFObjGen, QPDFObjectHandle> pageFirstElem;
   root.replaceKey("/StructTreeRoot", treeRef);
@@ -528,7 +526,7 @@ void uaTagging(Ctx& ctx) {
         pageParents.appendItem(QPDFObjectHandle::newNull());
       }
       if (seg.figure) {
-        QPDFObjectHandle fig = makeElem(ctx, "/Figure", docElem, page);
+        QPDFObjectHandle fig = makeElem(ctx, "/Figure", docElem, page, gNsRef);
         fig.replaceKey("/Alt", QPDFObjectHandle::newUnicodeString("Image"));
         fig.replaceKey("/K", QPDFObjectHandle::newInteger(seg.mcid));
         appendKid(docElem, fig);
@@ -539,7 +537,7 @@ void uaTagging(Ctx& ctx) {
         ++figures;
       } else {
         if (!pElem.isInitialized()) {
-          pElem = makeElem(ctx, "/P", docElem, page);
+          pElem = makeElem(ctx, "/P", docElem, page, gNsRef);
           appendKid(docElem, pElem);
           if (page.isIndirect() && !pageFirstElem.count(page.getObjGen())) {
             pageFirstElem[page.getObjGen()] = pElem;
@@ -568,7 +566,7 @@ void uaTagging(Ctx& ctx) {
         std::string elemType = "/Annot";
         if (subtype == "/Link") elemType = "/Link";
         if (subtype == "/Widget") elemType = "/Form";
-        QPDFObjectHandle elem = makeElem(ctx, elemType, docElem, page);
+        QPDFObjectHandle elem = makeElem(ctx, elemType, docElem, page, gNsRef);
         QPDFObjectHandle objr = QPDFObjectHandle::newDictionary();
         objr.replaceKey("/Type", QPDFObjectHandle::newName("/OBJR"));
         objr.replaceKey("/Pg", page);

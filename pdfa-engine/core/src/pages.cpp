@@ -965,6 +965,18 @@ bool fieldTypeIsBtn(QPDFObjectHandle annot) {
   return false;
 }
 
+std::string buttonStateName(QPDFObjectHandle annot) {
+  std::string as = nameOf(annot.getKey("/AS"));
+  if (!as.empty()) return as;
+  QPDFObjectHandle node = annot;
+  for (int i = 0; i < 32 && node.isDictionary(); ++i) {
+    QPDFObjectHandle v = node.getKey("/V");
+    if (v.isName()) return v.getName();
+    node = node.getKey("/Parent");
+  }
+  return "/Off";
+}
+
 bool valid3DContent(Ctx& ctx, QPDFObjectHandle annot) {
   QPDFObjectHandle dd = annot.getKey("/3DD");
   if (dd.isDictionary() && dd.getKey("/3DD").isStream()) dd = dd.getKey("/3DD");
@@ -1062,9 +1074,15 @@ void fixAnnotation(Ctx& ctx, QPDFObjectHandle annot) {
     bool isBtn = subtype == "/Widget" && fieldTypeIsBtn(annot);
     QPDFObjectHandle n = ap.getKey("/N");
     if (isBtn && n.isStream()) {
+      std::string state = buttonStateName(annot);
       QPDFObjectHandle states = QPDFObjectHandle::newDictionary();
-      states.replaceKey("/Off", n);
+      states.replaceKey(state, n);
+      if (state != "/Off") {
+        states.replaceKey("/Off", ctx.pdf.makeIndirectObject(
+                                      makeEmptyAppearance(ctx, annot.getKey("/Rect"))));
+      }
       ap.replaceKey("/N", states);
+      annot.replaceKey("/AS", QPDFObjectHandle::newName(state));
       ctx.issue("APPEARANCE_STATES_WRAPPED",
                 "wrapped button widget appearance stream into a state subdictionary", true);
     } else if (!isBtn && n.isDictionary() && !n.isStream()) {
@@ -1103,10 +1121,15 @@ void fixAnnotation(Ctx& ctx, QPDFObjectHandle annot) {
     QPDFObjectHandle n = makeEmptyAppearance(ctx, annot.getKey("/Rect"));
     QPDFObjectHandle newAp = QPDFObjectHandle::newDictionary();
     if (subtype == "/Widget" && fieldTypeIsBtn(annot)) {
+      std::string state = buttonStateName(annot);
       QPDFObjectHandle states = QPDFObjectHandle::newDictionary();
-      states.replaceKey("/Off", ctx.pdf.makeIndirectObject(n));
+      states.replaceKey(state, ctx.pdf.makeIndirectObject(n));
+      if (state != "/Off") {
+        states.replaceKey("/Off", ctx.pdf.makeIndirectObject(
+                                      makeEmptyAppearance(ctx, annot.getKey("/Rect"))));
+      }
       newAp.replaceKey("/N", states);
-      annot.replaceKey("/AS", QPDFObjectHandle::newName("/Off"));
+      annot.replaceKey("/AS", QPDFObjectHandle::newName(state));
     } else {
       newAp.replaceKey("/N", ctx.pdf.makeIndirectObject(n));
     }

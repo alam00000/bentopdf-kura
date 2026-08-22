@@ -550,7 +550,8 @@ struct OutlineFilter : public QPDFObjectHandle::TokenFilter {
     return need;
   }
 
-  void emitGlyphRun(std::string& out, const std::string& bytes, const OutFont& of,
+  void emitGlyphRun(std::string& out, std::string& clipOut, const std::string& bytes,
+                    const OutFont& of,
                     TextState& st, Mat& tm) {
     FT_Face face = of.face->face;
     size_t step = of.cid ? 2 : 1;
@@ -564,8 +565,10 @@ struct OutlineFilter : public QPDFObjectHandle::TokenFilter {
       }
       uint32_t gid = gidForCode(of, code);
       double w1000 = widthForCode(of, code, gid);
-      bool visible = st.renderMode != 3 && st.renderMode != 7;
-      if (visible && gid &&
+      int mode = st.renderMode;
+      bool paints = mode == 0 || mode == 1 || mode == 2 || mode == 4 || mode == 5 || mode == 6;
+      bool clips = mode >= 4 && mode <= 7;
+      if ((paints || clips) && gid &&
           FT_Load_Glyph(face, gid, FT_LOAD_NO_SCALE | FT_LOAD_NO_BITMAP) == 0 &&
           face->glyph->format == FT_GLYPH_FORMAT_OUTLINE &&
           face->glyph->outline.n_contours > 0) {
@@ -582,7 +585,12 @@ struct OutlineFilter : public QPDFObjectHandle::TokenFilter {
         funcs.delta = 0;
         size_t mark = out.size();
         if (FT_Outline_Decompose(&face->glyph->outline, &funcs, &em) == 0) {
-          out += "f\n";
+          if (clips) clipOut.append(out, mark, out.size() - mark);
+          if (paints) {
+            out += mode == 1 ? "S\n" : (mode == 2 || mode == 5 || mode == 6 ? "B\n" : "f\n");
+          } else {
+            out.resize(mark);
+          }
         } else {
           out.resize(mark);
         }
@@ -623,6 +631,7 @@ struct OutlineFilter : public QPDFObjectHandle::TokenFilter {
     }
     touched = true;
     std::string out;
+    std::string clipOut;
     Mat tm, tlm;
     std::vector<QPDFTokenizer::Token> rawArgs;
     for (const auto& t : buffer) {
@@ -698,7 +707,7 @@ struct OutlineFilter : public QPDFObjectHandle::TokenFilter {
               if (a.getType() == QPDFTokenizer::tt_array_open) inArray = true;
               else if (a.getType() == QPDFTokenizer::tt_array_close) inArray = false;
               else if (a.getType() == QPDFTokenizer::tt_string) {
-                emitGlyphRun(out, a.getValue(), *of, ts, tm);
+                emitGlyphRun(out, clipOut, a.getValue(), *of, ts, tm);
               } else if (inArray && (a.getType() == QPDFTokenizer::tt_integer ||
                                      a.getType() == QPDFTokenizer::tt_real)) {
                 double adj = std::atof(a.getValue().c_str());
@@ -711,7 +720,7 @@ struct OutlineFilter : public QPDFObjectHandle::TokenFilter {
           } else {
             for (const auto& a : args) {
               if (a.getType() == QPDFTokenizer::tt_string) {
-                emitGlyphRun(out, a.getValue(), *of, ts, tm);
+                emitGlyphRun(out, clipOut, a.getValue(), *of, ts, tm);
               }
             }
           }
@@ -728,6 +737,10 @@ struct OutlineFilter : public QPDFObjectHandle::TokenFilter {
       }
       out += op + "\n";
       rawArgs.clear();
+    }
+    if (!clipOut.empty()) {
+      out += clipOut;
+      out += "W n\n";
     }
     write(out);
     std::string sync;
