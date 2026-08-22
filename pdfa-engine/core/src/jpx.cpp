@@ -1,3 +1,4 @@
+#include <cmath>
 #include <openjpeg.h>
 
 #include <cstring>
@@ -250,7 +251,21 @@ RawImage decodeJpxDataAt(const std::string& data, std::string& alphaOut) {
     }
     if (!isAlpha) ++outC;
   }
+  OPJ_COLOR_SPACE space = image->color_space;
   opj_image_destroy(image);
+
+  if (colorComps == 3 && (space == OPJ_CLRSPC_SYCC || space == OPJ_CLRSPC_EYCC)) {
+    for (size_t p = 0; p + 2 < out.samples.size(); p += 3) {
+      double y = static_cast<unsigned char>(out.samples[p]);
+      double cb = static_cast<unsigned char>(out.samples[p + 1]) - 128.0;
+      double cr = static_cast<unsigned char>(out.samples[p + 2]) - 128.0;
+      double rgb[3] = {y + 1.402 * cr, y - 0.344136 * cb - 0.714136 * cr, y + 1.772 * cb};
+      for (int k = 0; k < 3; ++k) {
+        long v = std::lround(rgb[k]);
+        out.samples[p + k] = static_cast<char>(v < 0 ? 0 : (v > 255 ? 255 : v));
+      }
+    }
+  }
 
   out.width = width;
   out.height = height;
