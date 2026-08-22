@@ -41,6 +41,8 @@ struct PfCondition {
   std::vector<PfAtom> atoms;
 };
 
+int xmlSeverity(int raw) { return raw == 1 ? 2 : (raw == 2 ? 1 : 3); }
+
 struct PfRule {
   std::string id;
   std::string name;
@@ -307,7 +309,9 @@ bool parseKuraJson(const std::string& text, PfProfile& out) {
       PfBuiltin pb;
       pb.name = bn->str;
       const Json* sv = b.get("severity");
-      if (sv && sv->type == Json::kNum) pb.severity = static_cast<int>(sv->num);
+      if (sv && sv->type == Json::kNum) {
+        pb.severity = xmlSeverity(static_cast<int>(sv->num));
+      }
       const Json* pr = b.get("params");
       if (pr && pr->type == Json::kObj) {
         for (const auto& kv : pr->obj) {
@@ -510,7 +514,8 @@ bool parsePreflightXml(const std::string& text, PfProfile& out) {
           }
         }
         if (!varOff) {
-          rulesetDefs[sid].push_back({sev, text.substr(open + 1, close - open - 1)});
+          rulesetDefs[sid].push_back(
+              {xmlSeverity(sev), text.substr(open + 1, close - open - 1)});
         }
         p = close + 1;
       }
@@ -528,7 +533,9 @@ bool parsePreflightXml(const std::string& text, PfProfile& out) {
       PfBuiltin b;
       b.name = text.substr(cp + 13, nend - cp - 13);
       size_t sevp = text.find("check_severity=\"", cp);
-      if (sevp != std::string::npos && sevp < cp + 120) b.severity = text[sevp + 16] - '0';
+      if (sevp != std::string::npos && sevp < cp + 120) {
+        b.severity = xmlSeverity(text[sevp + 16] - '0');
+      }
       size_t cend = text.find("</check>", cp);
       size_t selfclose = text.find("/>", cp);
       size_t bodyEnd = cend != std::string::npos ? cend : text.size();
@@ -3757,8 +3764,8 @@ void passProfile(Ctx& ctx, const unsigned char* inputData, std::size_t inputSize
 
   {
     auto sevLabel = [](int sev) {
-      if (sev == 0 || sev >= 3) return "Error";
-      return sev == 1 ? "Warning" : "Info";
+      if (sev >= 3) return "Error";
+      return sev == 2 ? "Warning" : "Info";
     };
     auto emitB = [&](const PfBuiltin& b, long long n, const std::set<int>& pages,
                      const std::string& what) {
@@ -4571,6 +4578,93 @@ double unitPt(const std::string& u) {
   return 1.0;
 }
 
+class LayerFlattenFilter : public QPDFObjectHandle::TokenFilter {
+ public:
+  LayerFlattenFilter(const std::set<std::string>& hiddenNames, long long& dropped)
+      : hidden_(hiddenNames), dropped_(dropped) {}
+
+  void handleToken(QPDFTokenizer::Token const& tok) override {
+    using TT = QPDFTokenizer;
+    if (tok.getType() == TT::tt_inline_image) {
+      if (!suppress_) writeToken(tok);
+      pending_.clear();
+      return;
+    }
+    if (tok.getType() != TT::tt_word) {
+      pending_.push_back(tok);
+      if (pending_.size() > 64) {
+        if (!suppress_) flush();
+        else pending_.clear();
+      }
+      return;
+    }
+    const std::string op = tok.getValue();
+    if (op == "BDC" || op == "BMC") {
+      bool isOc = false;
+      std::string tag;
+      for (const QPDFTokenizer::Token& t : pending_) {
+        if (t.getType() == TT::tt_name) {
+          if (t.getValue() == "/OC") isOc = true;
+          else if (isOc) tag = t.getValue();
+        }
+      }
+      if (isOc) {
+        bool hide = suppress_ || (!tag.empty() && hidden_.count(tag) > 0);
+        marks_.push_back({true, hide && !suppress_});
+        if (!suppress_ && hide) {
+          suppress_ = true;
+          ++dropped_;
+        }
+        pending_.clear();
+        return;
+      }
+      marks_.push_back({false, false});
+      if (!suppress_) flush(), writeToken(tok);
+      else pending_.clear();
+      return;
+    }
+    if (op == "EMC") {
+      if (marks_.empty()) {
+        if (!suppress_) flush(), writeToken(tok);
+        else pending_.clear();
+        return;
+      }
+      Mark m = marks_.back();
+      marks_.pop_back();
+      if (m.startedSuppress) suppress_ = false;
+      pending_.clear();
+      if (!m.isOc && !suppress_) writeToken(tok);
+      return;
+    }
+    if (suppress_) {
+      pending_.clear();
+      return;
+    }
+    flush();
+    writeToken(tok);
+  }
+
+  void handleEOF() override {
+    suppress_ = false;
+    flush();
+  }
+
+ private:
+  struct Mark {
+    bool isOc;
+    bool startedSuppress;
+  };
+  void flush() {
+    for (const QPDFTokenizer::Token& t : pending_) writeToken(t);
+    pending_.clear();
+  }
+  const std::set<std::string>& hidden_;
+  long long& dropped_;
+  std::vector<QPDFTokenizer::Token> pending_;
+  std::vector<Mark> marks_;
+  bool suppress_ = false;
+};
+
 class OverprintFilter : public QPDFObjectHandle::TokenFilter {
  public:
   OverprintFilter(bool knockWhite, bool opBlack, bool textOnly, bool vectorOnly,
@@ -5241,8 +5335,117 @@ void passProfileFixups(Ctx& ctx) {
       QPDFObjectHandle root = ctx.pdf.getRoot();
       QPDFObjectHandle ocp = root.getKey("/OCProperties");
       if (ocp.isDictionary()) {
+        std::set<QPDFObjGen> hiddenOcgs;
+        QPDFObjectHandle dflt = ocp.getKey("/D");
+        if (dflt.isDictionary()) {
+          if (nameOf(dflt.getKey("/BaseState")) == "/OFF") {
+            QPDFObjectHandle all = ocp.getKey("/OCGs");
+            std::set<QPDFObjGen> on;
+            QPDFObjectHandle onArr = dflt.getKey("/ON");
+            if (onArr.isArray()) {
+              for (int i = 0; i < onArr.getArrayNItems(); ++i) {
+                if (onArr.getArrayItem(i).isIndirect()) on.insert(onArr.getArrayItem(i).getObjGen());
+              }
+            }
+            if (all.isArray()) {
+              for (int i = 0; i < all.getArrayNItems(); ++i) {
+                QPDFObjectHandle g = all.getArrayItem(i);
+                if (g.isIndirect() && !on.count(g.getObjGen())) hiddenOcgs.insert(g.getObjGen());
+              }
+            }
+          }
+          QPDFObjectHandle offArr = dflt.getKey("/OFF");
+          if (offArr.isArray()) {
+            for (int i = 0; i < offArr.getArrayNItems(); ++i) {
+              QPDFObjectHandle g = offArr.getArrayItem(i);
+              if (g.isIndirect()) hiddenOcgs.insert(g.getObjGen());
+            }
+          }
+        }
+        auto ocIsHidden = [&](QPDFObjectHandle oc) {
+          if (!oc.isDictionary()) return false;
+          if (oc.isIndirect() && hiddenOcgs.count(oc.getObjGen())) return true;
+          if (nameOf(oc.getKey("/Type")) != "/OCMD") return false;
+          QPDFObjectHandle gs = oc.getKey("/OCGs");
+          if (gs.isIndirect() && gs.isDictionary()) return hiddenOcgs.count(gs.getObjGen()) > 0;
+          if (!gs.isArray() || gs.getArrayNItems() == 0) return false;
+          std::string policy = nameOf(oc.getKey("/P"));
+          int hiddenCount = 0, total = 0;
+          for (int i = 0; i < gs.getArrayNItems(); ++i) {
+            QPDFObjectHandle g = gs.getArrayItem(i);
+            if (!g.isIndirect()) continue;
+            ++total;
+            if (hiddenOcgs.count(g.getObjGen())) ++hiddenCount;
+          }
+          if (total == 0) return false;
+          if (policy == "/AllOn") return hiddenCount > 0;
+          if (policy == "/AnyOff") return hiddenCount == 0;
+          if (policy == "/AllOff") return hiddenCount < total;
+          return hiddenCount == total;
+        };
+        long long droppedMarks = 0, droppedObjects = 0;
+        for (auto& ph : pages) {
+          QPDFObjectHandle pg = ph.getObjectHandle();
+          std::set<std::string> hiddenTags;
+          QPDFObjectHandle res = ph.getAttribute("/Resources", true);
+          if (res.isDictionary()) {
+            QPDFObjectHandle props = res.getKey("/Properties");
+            if (props.isDictionary()) {
+              for (const std::string& k : props.getKeys()) {
+                if (ocIsHidden(props.getKey(k))) hiddenTags.insert(k);
+              }
+            }
+            QPDFObjectHandle xod = res.getKey("/XObject");
+            if (xod.isDictionary()) {
+              for (const std::string& k : xod.getKeys()) {
+                QPDFObjectHandle xo = xod.getKey(k);
+                if (!xo.isStream()) continue;
+                QPDFObjectHandle oc = xo.getDict().getKey("/OC");
+                if (oc.isDictionary() && ocIsHidden(oc)) {
+                  xod.removeKey(k);
+                  ++droppedObjects;
+                } else if (!oc.isNull()) {
+                  xo.getDict().removeKey("/OC");
+                }
+              }
+            }
+          }
+          QPDFObjectHandle annots = pg.getKey("/Annots");
+          if (annots.isArray()) {
+            QPDFObjectHandle keptAnnots = QPDFObjectHandle::newArray();
+            for (int i = 0; i < annots.getArrayNItems(); ++i) {
+              QPDFObjectHandle a = annots.getArrayItem(i);
+              QPDFObjectHandle oc = a.isDictionary() ? a.getKey("/OC") : QPDFObjectHandle::newNull();
+              if (oc.isDictionary() && ocIsHidden(oc)) {
+                ++droppedObjects;
+                continue;
+              }
+              if (a.isDictionary() && !oc.isNull()) a.removeKey("/OC");
+              keptAnnots.appendItem(a);
+            }
+            pg.replaceKey("/Annots", keptAnnots);
+          }
+          QPDFObjectHandle contents = pg.getKey("/Contents");
+          if (!contents.isStream() && !contents.isArray()) continue;
+          try {
+            LayerFlattenFilter filter(hiddenTags, droppedMarks);
+            Pl_Buffer buf("layer flatten");
+            ph.filterContents(&filter, &buf);
+            auto out = buf.getBufferSharedPointer();
+            if (out) {
+              pg.replaceKey(
+                  "/Contents",
+                  QPDFObjectHandle::newStream(
+                      &ctx.pdf, std::string(reinterpret_cast<const char*>(out->getBuffer()),
+                                            out->getSize())));
+            }
+          } catch (const std::exception&) {
+          }
+        }
         root.removeKey("/OCProperties");
-        note("flattened layers (layer switching removed; visible content kept)");
+        note("flattened layers (removed " + std::to_string(droppedMarks) +
+             " hidden content region(s) and " + std::to_string(droppedObjects) +
+             " hidden object(s); layer switching removed)");
       }
     }
   }

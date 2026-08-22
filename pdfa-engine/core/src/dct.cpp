@@ -47,21 +47,24 @@ bool inflateData(const std::string& in, std::string& out) {
     }
     if (ret == Z_BUF_ERROR && zs.avail_in == 0) break;
   }
+  bool complete = ret == Z_STREAM_END;
   inflateEnd(&zs);
-  return !out.empty();
+  return complete && !out.empty();
 }
 
 RawImage decodeDctData(const std::string& data, bool& cmykInverted) {
   RawImage out;
   jpeg_decompress_struct cinfo;
   JpegError jerr;
+  JSAMPLE* rowPtr[1] = {nullptr};
   cinfo.err = jpeg_std_error(&jerr.mgr);
   jerr.mgr.error_exit = jpegErrorExit;
   if (setjmp(jerr.jump)) {
     jpeg_destroy_decompress(&cinfo);
-    out.error = "jpeg decode failed";
-    out.ok = false;
-    return out;
+    RawImage failed;
+    failed.error = "jpeg decode failed";
+    failed.ok = false;
+    return failed;
   }
   jpeg_create_decompress(&cinfo);
   jpeg_mem_src(&cinfo, reinterpret_cast<const unsigned char*>(data.data()),
@@ -83,11 +86,10 @@ RawImage decodeDctData(const std::string& data, bool& cmykInverted) {
   }
   cmykInverted = comps == 4 && cinfo.saw_Adobe_marker;
   out.samples.resize(static_cast<size_t>(width) * height * comps);
-  std::vector<JSAMPLE*> rows(1);
   while (cinfo.output_scanline < cinfo.output_height) {
-    rows[0] = reinterpret_cast<JSAMPLE*>(
+    rowPtr[0] = reinterpret_cast<JSAMPLE*>(
         &out.samples[static_cast<size_t>(cinfo.output_scanline) * width * comps]);
-    jpeg_read_scanlines(&cinfo, rows.data(), 1);
+    jpeg_read_scanlines(&cinfo, rowPtr, 1);
   }
   jpeg_finish_decompress(&cinfo);
   jpeg_destroy_decompress(&cinfo);
