@@ -448,6 +448,13 @@ void uaTagging(Ctx& ctx) {
   }
   vp.replaceKey("/DisplayDocTitle", QPDFObjectHandle::newBool(true));
 
+  for (QPDFObjectHandle obj : ctx.pdf.getAllObjects()) {
+    QPDFObjectHandle dict = obj.isStream() ? obj.getDict() : obj;
+    if (!dict.isDictionary()) continue;
+    if (dict.hasKey("/StructParent")) dict.removeKey("/StructParent");
+    if (dict.hasKey("/StructParents")) dict.removeKey("/StructParents");
+  }
+
   QPDFObjectHandle treeRoot = QPDFObjectHandle::newDictionary();
   treeRoot.replaceKey("/Type", QPDFObjectHandle::newName("/StructTreeRoot"));
   QPDFObjectHandle treeRef = ctx.pdf.makeIndirectObject(treeRoot);

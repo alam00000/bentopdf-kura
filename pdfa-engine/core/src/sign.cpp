@@ -6,6 +6,8 @@
 #include <cstdio>
 #include <cstring>
 
+#include "util.hh"
+
 namespace pdfa {
 namespace {
 const char* kPlaceholderMark = "/Contents <";
@@ -19,6 +21,23 @@ void addSignaturePlaceholder(Ctx& ctx) {
   if (pages.empty()) {
     ctx.fatal("SIGN_NO_PAGES", "cannot place a signature field in a document with no pages");
     return;
+  }
+
+  QPDFObjectHandle existingAcro = root.getKey("/AcroForm");
+  if (existingAcro.isDictionary()) {
+    QPDFObjectHandle existingFields = existingAcro.getKey("/Fields");
+    if (existingFields.isArray()) {
+      for (int i = 0; i < existingFields.getArrayNItems(); ++i) {
+        QPDFObjectHandle f = existingFields.getArrayItem(i);
+        if (f.isDictionary() && nameIs(f.getKey("/FT"), "/Sig") && !f.getKey("/V").isNull()) {
+          ctx.issue("SIGNATURE_INVALIDATED",
+                    "the document already carries a signature; rewriting the file for "
+                    "conformance breaks it, and only the new signature will verify",
+                    true);
+          break;
+        }
+      }
+    }
   }
 
   QPDFObjectHandle sig = QPDFObjectHandle::newDictionary();
@@ -92,15 +111,24 @@ void addSignaturePlaceholder(Ctx& ctx) {
 
 bool applySignature(const Options& opt, std::vector<unsigned char>& pdf, std::string& err) {
   std::string body(reinterpret_cast<const char*>(pdf.data()), pdf.size());
-  size_t c = body.find(kPlaceholderMark);
+  const size_t wantHex = static_cast<size_t>(opt.signReserveBytes) * 2;
+  size_t c = std::string::npos;
+  size_t hexStart = 0;
+  size_t hexEnd = 0;
+  for (size_t at = body.find(kPlaceholderMark); at != std::string::npos;
+       at = body.find(kPlaceholderMark, at + 1)) {
+    size_t start = at + std::strlen(kPlaceholderMark);
+    size_t end = body.find('>', start);
+    if (end == std::string::npos) break;
+    if (end - start != wantHex) continue;
+    if (body.find_first_not_of('0', start) < end) continue;
+    c = at;
+    hexStart = start;
+    hexEnd = end;
+    break;
+  }
   if (c == std::string::npos) {
     err = "signature placeholder not found in the written file";
-    return false;
-  }
-  size_t hexStart = c + std::strlen(kPlaceholderMark);
-  size_t hexEnd = body.find('>', hexStart);
-  if (hexEnd == std::string::npos) {
-    err = "signature placeholder is malformed";
     return false;
   }
 

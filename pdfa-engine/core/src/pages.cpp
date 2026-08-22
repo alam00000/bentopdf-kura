@@ -3,6 +3,7 @@
 #include <qpdf/QPDFPageDocumentHelper.hh>
 #include <qpdf/QPDFPageObjectHelper.hh>
 
+#include <algorithm>
 #include <cmath>
 #include <functional>
 #include <set>
@@ -478,6 +479,38 @@ struct TransBBox : QPDFObjectHandle::ParserCallbacks {
 };
 }
 
+int pageRotation(QPDFPageObjectHelper& ph) {
+  QPDFObjectHandle r = ph.getAttribute("/Rotate", false);
+  if (!r.isInteger()) return 0;
+  long long v = r.getIntValue() % 360;
+  if (v < 0) v += 360;
+  if (v != 90 && v != 180 && v != 270) return 0;
+  return static_cast<int>(v);
+}
+
+void rotatePageBoxes(QPDFObjectHandle page, int rot, double pw, double phh) {
+  if (rot == 0) return;
+  static const char* kBoxes[] = {"/MediaBox", "/CropBox", "/TrimBox", "/BleedBox", "/ArtBox"};
+  for (const char* key : kBoxes) {
+    QPDFObjectHandle b = page.getKey(key);
+    if (!b.isArray() || b.getArrayNItems() != 4) continue;
+    double x1 = numOf(b.getArrayItem(0), 0), y1 = numOf(b.getArrayItem(1), 0);
+    double x2 = numOf(b.getArrayItem(2), 0), y2 = numOf(b.getArrayItem(3), 0);
+    double n[4];
+    if (rot == 90) {
+      n[0] = y1; n[1] = pw - x2; n[2] = y2; n[3] = pw - x1;
+    } else if (rot == 180) {
+      n[0] = pw - x2; n[1] = phh - y2; n[2] = pw - x1; n[3] = phh - y1;
+    } else {
+      n[0] = phh - y2; n[1] = x1; n[2] = phh - y1; n[3] = x2;
+    }
+    QPDFObjectHandle out = QPDFObjectHandle::newArray();
+    for (int i = 0; i < 4; ++i) out.appendItem(QPDFObjectHandle::newReal(n[i], 4));
+    page.replaceKey(key, out);
+  }
+  page.removeKey("/Rotate");
+}
+
 bool rasterFlattenPage(Ctx& ctx, QPDFPageObjectHelper& ph, int pageIndex, bool preserveText) {
   int w = 0, h = 0;
   std::string rgb;
@@ -493,6 +526,21 @@ bool rasterFlattenPage(Ctx& ctx, QPDFPageObjectHelper& ph, int pageIndex, bool p
     my2 = numOf(media.getArrayItem(3), 792);
   }
   double pw = mx2 - mx1, phh = my2 - my1;
+  int rot = pageRotation(ph);
+  if (rot) {
+    rotatePageBoxes(page, rot, pw, phh);
+    if (rot == 90 || rot == 270) {
+      std::swap(pw, phh);
+      std::swap(mx1, my1);
+    }
+    QPDFObjectHandle nm = page.getKey("/MediaBox");
+    if (nm.isArray() && nm.getArrayNItems() == 4) {
+      mx1 = numOf(nm.getArrayItem(0), 0);
+      my1 = numOf(nm.getArrayItem(1), 0);
+      pw = numOf(nm.getArrayItem(2), 612) - mx1;
+      phh = numOf(nm.getArrayItem(3), 792) - my1;
+    }
+  }
   QPDFObjectHandle img = QPDFObjectHandle::newStream(&ctx.pdf, rgb);
   QPDFObjectHandle id = img.getDict();
   id.replaceKey("/Type", QPDFObjectHandle::newName("/XObject"));
@@ -552,6 +600,7 @@ bool regionFlattenPage(Ctx& ctx, QPDFPageObjectHelper& ph, int pageIndex) {
   double tx1 = std::min(mx2, scan.x1 + margin), ty1 = std::min(my2, scan.y1 + margin);
   double regionArea = (tx1 - tx0) * (ty1 - ty0);
   if (regionArea >= pw * phh * 0.55) return false;
+  if (pageRotation(ph) != 0) return false;
 
   int w = 0, h = 0;
   std::string rgb;
@@ -559,33 +608,54 @@ bool regionFlattenPage(Ctx& ctx, QPDFPageObjectHelper& ph, int pageIndex) {
   if (w <= 0 || h <= 0 || rgb.size() < static_cast<size_t>(w) * h * 3) return false;
 
   std::set<QPDFObjGen> seenG;
+  auto privatise = [&ctx](QPDFObjectHandle owner, const std::string& key) {
+    QPDFObjectHandle child = owner.getKey(key);
+    if (!child.isIndirect()) return child;
+    QPDFObjectHandle copy = ctx.pdf.makeIndirectObject(child.shallowCopy());
+    owner.replaceKey(key, copy);
+    return copy;
+  };
   std::function<void(QPDFObjectHandle, int)> neutralize = [&](QPDFObjectHandle r, int depth) {
     if (depth > 12 || !r.isDictionary()) return;
-    QPDFObjectHandle egs = r.getKey("/ExtGState");
-    if (egs.isDictionary()) {
+    if (r.getKey("/ExtGState").isDictionary()) {
+      QPDFObjectHandle egs = privatise(r, "/ExtGState");
       for (const std::string& k : egs.getKeys()) {
-        QPDFObjectHandle g = egs.getKey(k);
-        if (!g.isDictionary()) continue;
+        if (!egs.getKey(k).isDictionary()) continue;
+        QPDFObjectHandle g = privatise(egs, k);
         g.replaceKey("/ca", QPDFObjectHandle::newReal(1.0, 3));
         g.replaceKey("/CA", QPDFObjectHandle::newReal(1.0, 3));
         g.replaceKey("/BM", QPDFObjectHandle::newName("/Normal"));
         if (!g.getKey("/SMask").isNull()) g.replaceKey("/SMask", QPDFObjectHandle::newName("/None"));
       }
     }
-    QPDFObjectHandle xod = r.getKey("/XObject");
-    if (xod.isDictionary()) {
+    if (r.getKey("/XObject").isDictionary()) {
+      QPDFObjectHandle xod = privatise(r, "/XObject");
       for (const std::string& k : xod.getKeys()) {
-        QPDFObjectHandle xo = xod.getKey(k);
-        if (!xo.isStream() || (xo.isIndirect() && !seenG.insert(xo.getObjGen()).second)) continue;
+        QPDFObjectHandle orig = xod.getKey(k);
+        if (!orig.isStream()) continue;
+        if (orig.isIndirect() && !seenG.insert(orig.getObjGen()).second) continue;
+        bool needsCopy = orig.getDict().getKey("/SMask").isStream() ||
+                         nameIs(orig.getDict().getKey("/Subtype"), "/Form");
+        if (!needsCopy) continue;
+        QPDFObjectHandle xo = orig.isIndirect() ? orig.copyStream() : orig;
+        if (orig.isIndirect()) xod.replaceKey(k, ctx.pdf.makeIndirectObject(xo));
         QPDFObjectHandle d = xo.getDict();
         if (d.getKey("/SMask").isStream()) d.removeKey("/SMask");
         if (nameIs(d.getKey("/Subtype"), "/Form")) {
-          neutralize(d.getKey("/Resources"), depth + 1);
+          if (d.getKey("/Resources").isDictionary()) neutralize(privatise(d, "/Resources"), depth + 1);
         }
       }
     }
   };
-  neutralize(res, 0);
+  QPDFObjectHandle privRes = res;
+  if (res.isIndirect()) {
+    privRes = ctx.pdf.makeIndirectObject(res.shallowCopy());
+    page.replaceKey("/Resources", privRes);
+  } else {
+    page.replaceKey("/Resources", res);
+    privRes = page.getKey("/Resources");
+  }
+  neutralize(privRes, 0);
 
   QPDFObjectHandle img = QPDFObjectHandle::newStream(&ctx.pdf, rgb);
   QPDFObjectHandle id = img.getDict();
