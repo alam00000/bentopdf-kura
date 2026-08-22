@@ -130,7 +130,7 @@ int mergeAdjacentHeadings(Ctx& ctx, const std::vector<QPDFObjectHandle>& elems) 
   return merged;
 }
 
-int ensureNoteIds(Ctx& ctx, const std::vector<QPDFObjectHandle>& elems) {
+int ensureNoteIds(Ctx&, const std::vector<QPDFObjectHandle>& elems) {
   std::set<std::string> existing;
   for (QPDFObjectHandle e : elems) {
     if (e.getKey("/ID").isString()) existing.insert(e.getKey("/ID").getStringValue());
@@ -238,7 +238,7 @@ bool listNumberingPresent(QPDFObjectHandle attr, Visited& seen, int depth = 0) {
   return false;
 }
 
-int setListNumbering(Ctx& ctx, const std::vector<QPDFObjectHandle>& elems) {
+int setListNumbering(Ctx&, const std::vector<QPDFObjectHandle>& elems) {
   int fixed = 0;
   for (QPDFObjectHandle e : elems) {
     if (nameOf(e.getKey("/S")) != "/L") continue;

@@ -1,7 +1,7 @@
 {
   "name": "pdfa-engine-wasm",
-  "version": "0.1.0",
+  "version": "1.1.0",
   "type": "module",
-  "main": "pdfa.js",
-  "files": ["pdfa.js", "pdfa.wasm", "example.mjs"]
+  "main": "kura.js",
+  "files": ["kura.js", "kura.wasm", "example.mjs"]
 }

@@ -645,7 +645,7 @@ bool normalizeTree(Ctx& ctx, QPDFObjectHandle holder, const std::string& key,
   return true;
 }
 
-void normalizeNameTrees(Ctx& ctx) {
+[[maybe_unused]] void normalizeNameTrees(Ctx& ctx) {
   QPDFObjectHandle root = ctx.pdf.getRoot();
   int fixed = 0;
   QPDFObjectHandle names = root.getKey("/Names");

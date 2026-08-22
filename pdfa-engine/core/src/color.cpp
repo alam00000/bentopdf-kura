@@ -238,9 +238,9 @@ void scanResources(Ctx& ctx, QPDFObjectHandle res, Visited& visited, ColorUsage&
       QPDFObjectHandle pd = p.isStream() ? p.getDict() : p;
       if (pd.isDictionary() && pd.getKey("/Shading").isInitialized()) {
         QPDFObjectHandle sh = pd.getKey("/Shading");
-        QPDFObjectHandle shd = sh.isStream() ? sh.getDict() : sh;
-        if (shd.isDictionary()) {
-          classifySpace(ctx, shd.getKey("/ColorSpace"), res, usage, 0);
+        QPDFObjectHandle shDict = sh.isStream() ? sh.getDict() : sh;
+        if (shDict.isDictionary()) {
+          classifySpace(ctx, shDict.getKey("/ColorSpace"), res, usage, 0);
         }
       }
       if (p.isStream() && visited.enter(p)) {
@@ -827,7 +827,7 @@ void fixIccIdenticalToGroups(Ctx& ctx) {
   }
 }
 
-bool injectDefaultSpace(Ctx& ctx, std::vector<QPDFObjectHandle>& scopes, const char* key,
+bool injectDefaultSpace(Ctx&, std::vector<QPDFObjectHandle>& scopes, const char* key,
                         QPDFObjectHandle defRef) {
   bool changed = false;
   for (QPDFObjectHandle res : scopes) {

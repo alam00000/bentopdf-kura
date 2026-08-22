@@ -2,7 +2,13 @@
 #include <filesystem>
 #include <cctype>
 #include <system_error>
+#ifdef _WIN32
+#include <process.h>
+#define kura_getpid _getpid
+#else
 #include <unistd.h>
+#define kura_getpid getpid
+#endif
 #include <chrono>
 #include <cmath>
 #include <cstdio>
@@ -129,7 +135,7 @@ bool loadFontFromFolder(const std::string& folder, const std::string& wanted,
 bool runTesseract(const std::string& exe, int, double, int w, int h, const std::string& rgb,
                   std::vector<pdfa::Options::OcrWord>& words) {
   std::filesystem::path tmp =
-      std::filesystem::temp_directory_path() / ("kura-ocr-" + std::to_string(::getpid()));
+      std::filesystem::temp_directory_path() / ("kura-ocr-" + std::to_string(kura_getpid()));
   std::filesystem::path ppm = tmp;
   ppm += ".ppm";
   {

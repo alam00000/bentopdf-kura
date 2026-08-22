@@ -83,7 +83,7 @@ void scanResources(QPDFObjectHandle res, Visited& visited, TransparencyReport& r
   }
 }
 
-TransparencyReport scanTransparency(Ctx& ctx, std::vector<QPDFPageObjectHelper>& pages) {
+TransparencyReport scanTransparency(Ctx&, std::vector<QPDFPageObjectHelper>& pages) {
   TransparencyReport rep;
   for (auto& page : pages) {
     Visited visited;

@@ -171,7 +171,6 @@ FontGlyphInfo analyzeFontGlyphs(FtLib& lib, QPDFObjectHandle font) {
     }
     QPDFObjectHandle df = font.getKey("/DescendantFonts");
     if (!df.isArray() || df.getArrayNItems() != 1) return info;
-    bool cidType2 = nameIs(df.getArrayItem(0).getKey("/Subtype"), "/CIDFontType2");
     QPDFObjectHandle fd = df.getArrayItem(0).getKey("/FontDescriptor");
     QPDFObjectHandle program = fontFileStream(fd);
     if (!program.isStream()) return info;

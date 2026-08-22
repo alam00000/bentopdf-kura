@@ -373,7 +373,7 @@
     });
   }
   convertInWorker(new Uint8Array([0]).buffer, '2b', {}).then(r => {
-    $('ver').textContent = 'engine ' + (r.engine || '1.0.0') + ' · wasm';
+    $('ver').textContent = 'engine ' + (r.engine || '1.1.0') + ' · wasm';
   });
 
   function addFiles(list) {
