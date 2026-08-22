@@ -333,7 +333,7 @@ bool spaceIsRgbLike(QPDFObjectHandle cs, int depth) {
   return false;
 }
 
-void convertImage(Ctx& ctx, ConvertState& st, QPDFObjectHandle image) {
+void convertImage(Ctx&, ConvertState& st, QPDFObjectHandle image) {
   if (!st.imagesDone.enter(image)) return;
   QPDFObjectHandle d = image.getDict();
   QPDFObjectHandle cs = d.getKey("/ColorSpace");
@@ -408,7 +408,7 @@ void convertImage(Ctx& ctx, ConvertState& st, QPDFObjectHandle image) {
   ++st.images;
 }
 
-void convertIndexedLookup(Ctx& ctx, ConvertState& st, QPDFObjectHandle cs) {
+void convertIndexedLookup(Ctx&, ConvertState& st, QPDFObjectHandle cs) {
   QPDFObjectHandle base = cs.getArrayItem(1);
   QPDFObjectHandle hival = cs.getArrayItem(2);
   QPDFObjectHandle lookup = cs.getArrayItem(3);

@@ -52,7 +52,7 @@ Box clampTo(const Box& inner, const Box& outer) {
   return r;
 }
 
-void fixPageBoxes(Ctx& ctx, QPDFPageObjectHelper& ph, bool& boxAdded, bool& boxFixed) {
+void fixPageBoxes(Ctx&, QPDFPageObjectHelper& ph, bool& boxAdded, bool& boxFixed) {
   QPDFObjectHandle page = ph.getObjectHandle();
   Box media = readBox(ph.getAttribute("/MediaBox", true));
   if (!media.ok) {

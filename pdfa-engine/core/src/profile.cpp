@@ -2831,10 +2831,10 @@ void passProfile(Ctx& ctx, const unsigned char* inputData, std::size_t inputSize
       }
     }
     if (oi.isArray() && oi.getArrayNItems() > 0 && oi.getArrayItem(0).isDictionary()) {
-      QPDFObjectHandle prof = oi.getArrayItem(0).getKey("/DestOutputProfile");
-      if (prof.isStream()) {
+      QPDFObjectHandle oiProf = oi.getArrayItem(0).getKey("/DestOutputProfile");
+      if (oiProf.isStream()) {
         try {
-          auto buf = prof.getStreamData(qpdf_dl_all);
+          auto buf = oiProf.getStreamData(qpdf_dl_all);
           const unsigned char* d = buf->getBuffer();
           size_t n = buf->getSize();
           if (n >= 100) {
@@ -4727,8 +4727,10 @@ void passProfileFixups(Ctx& ctx) {
   bool knockWhite = false, opBlack = false, textOnly = false, vectorOnly = false;
   double minWidth = 0;
   int forceTr = -1;
-  for (const auto& [op, params] : ctx.opt.profileFixOps) {
-    auto p = [&](size_t i) { return i < params.size() ? params[i] : std::string(); };
+  for (const auto& fixOp : ctx.opt.profileFixOps) {
+    const std::string& op = fixOp.first;
+    const std::vector<std::string>& params = fixOp.second;
+    auto p = [&params](size_t i) { return i < params.size() ? params[i] : std::string(); };
     if (op == "rotatepages") {
       int ang = std::atoi(p(0).c_str());
       if (ang % 90 == 0 && ang % 360 != 0) {

@@ -374,8 +374,8 @@ void syncSimpleFontWidths(Ctx& ctx, FtLib& lib, QPDFObjectHandle font) {
     FT_UInt gid = resolveSimpleGid(face, code, enc, symbolic);
     double progW = programAdvance(face, hmtx, gid, upem);
     if (progW < 0 && cff.ok) {
-      double w = cff.widthForGid(gid);
-      if (w > 0) progW = w * 1000.0 / upem;
+      double cffW = cff.widthForGid(gid);
+      if (cffW > 0) progW = cffW * 1000.0 / upem;
     }
     if (inRange && w.isNumber()) full[code] = w;
     if (gid == 0 && inRange && w.isNumber() && dictW != 0) continue;
@@ -1640,7 +1640,7 @@ std::shared_ptr<FtFace> assetFace(FtLib& lib, EmbedCache& cache, const FontAsset
   return face;
 }
 
-QPDFObjectHandle buildDescriptor(Ctx& ctx, const SubstituteChoice& c, FT_Face face,
+QPDFObjectHandle buildDescriptor(Ctx&, const SubstituteChoice& c, FT_Face face,
                                  const std::string& psName) {
   double upem = face->units_per_EM ? face->units_per_EM : 1000.0;
   double scale = 1000.0 / upem;
@@ -1669,7 +1669,7 @@ QPDFObjectHandle buildDescriptor(Ctx& ctx, const SubstituteChoice& c, FT_Face fa
   return fd;
 }
 
-void buildSymbolDifferences(Ctx& ctx, QPDFObjectHandle font, uint16_t (*table)(int)) {
+void buildSymbolDifferences(Ctx&, QPDFObjectHandle font, uint16_t (*table)(int)) {
   bool zapf = table == zapfDingbatsToUnicode;
   QPDFObjectHandle diffs = QPDFObjectHandle::newArray();
   int last = -2;
@@ -1694,7 +1694,7 @@ void buildSymbolDifferences(Ctx& ctx, QPDFObjectHandle font, uint16_t (*table)(i
   font.replaceKey("/Encoding", enc);
 }
 
-void rebuildSimpleWidths(Ctx& ctx, QPDFObjectHandle font, const FtFace& sub) {
+void rebuildSimpleWidths(Ctx&, QPDFObjectHandle font, const FtFace& sub) {
   FT_Face face = sub.face;
   HmtxTable hmtx = parseHmtx(sub.data);
   double upem = face->units_per_EM ? face->units_per_EM : 1000.0;
@@ -1881,7 +1881,7 @@ std::string hexSafeName(const std::string& raw) {
   return out;
 }
 
-int renameIfInvalid(Ctx& ctx, QPDFObjectHandle dict, const char* key) {
+int renameIfInvalid(Ctx&, QPDFObjectHandle dict, const char* key) {
   if (!dict.isDictionary()) return 0;
   QPDFObjectHandle v = dict.getKey(key);
   if (!v.isName()) return 0;

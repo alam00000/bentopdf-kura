@@ -10,7 +10,6 @@ namespace pdfa {
 namespace {
 const char* kPlaceholderMark = "/Contents <";
 
-std::string zeros(std::size_t n) { return std::string(n * 2, '0'); }
 }
 
 void addSignaturePlaceholder(Ctx& ctx) {

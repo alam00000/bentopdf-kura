@@ -45,6 +45,7 @@ jobs:
         working-directory: pdfa-engine
         run: |
           cmake -B build-asan -G Ninja \
+            -DPDFA_WERROR=ON \
             -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ \
             -DPDFA_BUILD_FUZZ=ON -DPDFA_WITH_PDFIUM=OFF \
             -DCMAKE_PREFIX_PATH="$HOME/qpdf-install" \

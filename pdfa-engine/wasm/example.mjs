@@ -1,5 +1,5 @@
 import { readFileSync, writeFileSync } from 'fs';
-import createPdfaModule from './pdfa.js';
+import createKuraModule from './kura.js';
 
 const [, , inputPath, outputPath, level = '2b', password = ''] = process.argv;
 if (!inputPath || !outputPath) {
@@ -7,9 +7,9 @@ if (!inputPath || !outputPath) {
   process.exit(1);
 }
 
-const mod = await createPdfaModule();
+const mod = await createKuraModule();
 const input = new Uint8Array(readFileSync(inputPath));
-const res = mod.convert(input, level, false, password);
+const res = mod.convert(input, level, { password: password });
 
 if (!res.ok) {
   console.error(`conversion failed: ${res.errorCode}: ${res.error}`);

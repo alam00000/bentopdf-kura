@@ -607,7 +607,7 @@ void passImageResolution(Ctx& ctx) {
   }
 
   int shrunk = 0;
-  long long saved = 0;
+  [[maybe_unused]] long long saved = 0;
   for (auto& kv : uses) {
     ImageUse& u = kv.second;
     if (u.wpt <= 0.01 || u.hpt <= 0.01) continue;
