@@ -18,6 +18,10 @@ add_library(pdfa_core STATIC
   src/analyze.cpp
   src/outline.cpp
   src/profile.cpp
+  src/profile_parse.cpp
+  src/profile_fixups.cpp
+  src/profile_scan.cpp
+  src/profile_eval.cpp
   src/semantics.cpp
   src/einvoice.cpp
   src/einvoice_read.cpp

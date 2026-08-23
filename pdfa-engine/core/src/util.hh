@@ -109,6 +109,13 @@ inline std::vector<QPDFObjectHandle> normalAppearanceStreams(QPDFObjectHandle an
   return streams;
 }
 
+inline std::string lowerAscii(std::string s) {
+  for (char& c : s) {
+    if (c >= 'A' && c <= 'Z') c = static_cast<char>(c - 'A' + 'a');
+  }
+  return s;
+}
+
 inline uint32_t fnv1a32(const std::string& s) {
   uint32_t hash = 2166136261u;
   for (unsigned char c : s) hash = (hash ^ c) * 16777619u;
