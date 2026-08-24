@@ -15,3 +15,12 @@ pdfa-engine/third_party/
 dist/
 cert/mustang.jar
 __pycache__/
+
+tests/
+corpus-synth/
+CHANGELOG.md
+CONTRIBUTING.md
+LICENSING.md
+SECURITY.md
+THIRD_PARTY.md
+TODO.md

@@ -69,10 +69,10 @@ jobs:
         run: |
           set -e
           ./build-asan/fuzz/fuzz_replay_convert build-asan/seeds/*.pdf
-          ./build-asan/fuzz/fuzz_replay_profile build-asan/seeds/*.xml build-asan/seeds/*.json
-          ./build-asan/fuzz/fuzz_replay_invoice build-asan/seeds/*.xml
-          ./build-asan/fuzz/fuzz_replay_icc build-asan/seeds/*.icc
-          ./build-asan/fuzz/fuzz_replay_password build-asan/seeds/*.bin
+          ./build-asan/fuzz/fuzz_replay_profile build-asan/seeds/profile_*
+          ./build-asan/fuzz/fuzz_replay_invoice build-asan/seeds/invoice_*
+          ./build-asan/fuzz/fuzz_replay_icc build-asan/seeds/icc_*
+          ./build-asan/fuzz/fuzz_replay_password build-asan/seeds/pw_*
       - name: CLI handles deep-nested sentinels without a sanitizer abort
         working-directory: pdfa-engine
         env:

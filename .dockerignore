@@ -1,0 +1,17 @@
+.git
+.github
+out
+suite
+cert
+corpus
+calpoly
+preflight-parity
+dist
+**/build
+**/build-*
+**/__pycache__
+**/*.o
+**/*.a
+**/node_modules
+pdfa-engine/third_party
+site/*.wasm
