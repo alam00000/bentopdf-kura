@@ -72,7 +72,12 @@ jobs:
             -DCMAKE_TOOLCHAIN_FILE=C:/vcpkg/scripts/buildsystems/vcpkg.cmake \
             -DVCPKG_TARGET_TRIPLET="$VCPKG_TRIPLET" \
             -DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreaded
-          cmake --build build --config Release --target kura kura_sdk
+          cmake --build build --config Release --target kura kura_sdk || {
+            echo "link inputs of kura.exe:"
+            grep -o '<AdditionalDependencies>[^<]*' build/cli/kura.vcxproj | tr ';' '\n'
+            grep -o '<AdditionalLibraryDirectories>[^<]*' build/cli/kura.vcxproj | tr ';' '\n'
+            exit 1
+          }
 
       - name: Assert the binary is self-contained
         working-directory: pdfa-engine
