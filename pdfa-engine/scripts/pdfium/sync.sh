@@ -16,7 +16,10 @@ fi
 git -C depot_tools checkout -q "$DEPOT_TOOLS_REV" 2>/dev/null || true
 
 export PATH="$ROOT/depot_tools:$PATH"
-export DEPOT_TOOLS_UPDATE=0
+case "$(uname -s)" in
+  MINGW*|MSYS*|CYGWIN*) export DEPOT_TOOLS_UPDATE=1 ;;
+  *) export DEPOT_TOOLS_UPDATE=0 ;;
+esac
 
 if [[ ! -d pdfium-src/.git ]]; then
   git clone --depth 1 -b "$PDFIUM_BRANCH" \
