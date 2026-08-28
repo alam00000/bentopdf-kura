@@ -74,7 +74,7 @@ jobs:
           echo "$report" | grep -q '"ok":true'
 
       - name: Upload artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: kura-macos-arm64
           path: |

@@ -162,7 +162,7 @@ jobs:
 
       - name: Upload the crashing binary for local debugging
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: kura-linux-x64-crash
           path: |
@@ -172,7 +172,7 @@ jobs:
           if-no-files-found: ignore
 
       - name: Upload artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: kura-linux-x64
           path: |
