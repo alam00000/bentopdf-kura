@@ -21,12 +21,25 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Cache vcpkg packages
+        uses: actions/cache@v4
+        with:
+          path: |
+            C:/vcpkg/installed
+            C:/vcpkg/packages
+          key: vcpkg-${{ env.VCPKG_TRIPLET }}-qpdf-freetype-lcms-openjpeg
+
+      - name: Install engine dependencies
+        run: |
+          vcpkg install --triplet "$VCPKG_TRIPLET" \
+            qpdf freetype libjpeg-turbo openjpeg lcms zlib libpng openssl
+
       - name: Cache built PDFium
         id: pdfium-cache
         uses: actions/cache@v4
         with:
           path: pdfa-engine/third_party/pdfium-build/dist
-          key: pdfium-win-x64-${{ env.PDFIUM_BRANCH }}-${{ hashFiles('pdfa-engine/scripts/pdfium/*') }}
+          key: pdfium-win-x64-${{ env.PDFIUM_BRANCH }}-${{ hashFiles('pdfa-engine/scripts/pdfium/*') }}-vcpkg-1
 
       - name: Install the Windows SDK the PDFium toolchain expects
         shell: bash
@@ -47,19 +60,6 @@ jobs:
           ./scripts/pdfium/build.sh win-x64
           rm -rf third_party/pdfium-build/pdfium-src third_party/pdfium-build/depot_tools
 
-      - name: Cache vcpkg packages
-        uses: actions/cache@v4
-        with:
-          path: |
-            C:/vcpkg/installed
-            C:/vcpkg/packages
-          key: vcpkg-${{ env.VCPKG_TRIPLET }}-qpdf-freetype-lcms-openjpeg
-
-      - name: Install engine dependencies
-        run: |
-          vcpkg install --triplet "$VCPKG_TRIPLET" \
-            qpdf freetype libjpeg-turbo openjpeg lcms zlib libpng openssl
-
       - name: Configure and build
         working-directory: pdfa-engine
         run: |
@@ -76,7 +76,9 @@ jobs:
           set -e
           exe=$(find build -name kura.exe | head -1)
           echo "binary: $exe"
-          deps=$(dumpbin //DEPENDENTS "$exe" | grep -iE '^\s+\S+\.dll' | tr -d ' \r')
+          DUMPBIN=$(find "/c/Program Files/Microsoft Visual Studio" -name dumpbin.exe -path '*Hostx64/x64*' 2>/dev/null | head -1)
+          echo "dumpbin: $DUMPBIN"
+          deps=$("$DUMPBIN" //DEPENDENTS "$exe" | grep -iE '^\s+\S+\.dll' | tr -d ' \r')
           echo "$deps"
           leaked=$(echo "$deps" | grep -viE '^(kernel32|user32|advapi32|gdi32|shell32|ole32|oleaut32|ws2_32|crypt32|bcrypt|ucrtbase|api-ms-win|vcruntime|msvcp|comdlg32|winspool|shlwapi)\.dll$' | grep -c '\.dll' || true)
           echo "non-OS DLLs: $leaked"
