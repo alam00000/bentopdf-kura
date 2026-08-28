@@ -139,6 +139,17 @@ jobs:
           echo "$report"
           echo "$report" | grep -q '"ok":true'
 
+      - name: Upload the crashing binary for local debugging
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: kura-linux-x64-crash
+          path: |
+            pdfa-engine/build/cli/kura
+            pdfa-engine/third_party/pdfium-build/dist/linux-x64/libpdfium.a
+            pdfa-engine/third_party/pdfium-build/dist/linux-x64/libpdfium.a.rename
+          if-no-files-found: ignore
+
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
