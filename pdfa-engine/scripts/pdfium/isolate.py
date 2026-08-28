@@ -59,6 +59,19 @@ def defined_symbols(path, nm):
             syms.add(name)
     return syms
 
+def undefined_symbols(path, nm):
+    r = subprocess.run([nm, "-u", path], capture_output=True, text=True)
+    syms = set()
+    for line in r.stdout.splitlines():
+        parts = line.split()
+        if len(parts) >= 2 and parts[-2] in ("U", "w", "v"):
+            name = parts[-1]
+            if name.startswith(("__Z", "_ZN", "?", "$", "__imp_", ".")):
+                continue
+            syms.add(name)
+    return syms
+
+
 def entry_points(path, nm, pfx):
     r = subprocess.run([nm, "--defined-only", path],
                        capture_output=True, text=True)
@@ -97,6 +110,14 @@ def main():
     pdfium_syms = defined_symbols(archive, nm)
     colliding = {s for s in (pdfium_syms & engine_syms)
                  if not s.startswith(pfx + "FPDF")}
+    crossing = {s for s in (undefined_symbols(archive, nm) & engine_syms)
+                if s not in pdfium_syms}
+    if crossing:
+        print(f"{len(crossing)} symbol(s) PDFium references but only the engine defines; "
+              f"renaming them too so the link reports them instead of binding across libraries:")
+        for s_ in sorted(crossing)[:40]:
+            print(f"  {s_}")
+    colliding |= crossing
 
     print(f"engine {len(engine_syms)} syms across {len(libs)} libs, "
           f"pdfium {len(pdfium_syms)}")
