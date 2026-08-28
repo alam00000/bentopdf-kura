@@ -56,10 +56,11 @@ if [ ! -f "$TP/build-lcms2-wasm/src/liblcms2.a" ]; then
     mv "$TP/Little-CMS-lcms${LCMS2_VERSION}" "$TP/lcms2"
   fi
   echo "==> building lcms2 for wasm"
-  mkdir -p "$TP/build-lcms2-wasm"
-  (cd "$TP/build-lcms2-wasm" && emconfigure "$TP/lcms2/configure" --host=wasm32-unknown-emscripten \
-      --disable-shared --enable-static --without-jpeg --without-tiff --without-zlib >/dev/null \
-    && emmake make -j"$JOBS" -C src >/dev/null)
+  mkdir -p "$TP/build-lcms2-wasm/src"
+  for src in "$TP"/lcms2/src/*.c; do
+    emcc -O2 -I"$TP/lcms2/include" -c "$src" -o "$TP/build-lcms2-wasm/src/$(basename "${src%.c}").o"
+  done
+  emar rcs "$TP/build-lcms2-wasm/src/liblcms2.a" "$TP"/build-lcms2-wasm/src/*.o
 fi
 
 echo "==> building the engine"
