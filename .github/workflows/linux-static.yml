@@ -68,13 +68,34 @@ jobs:
           cmake --install /tmp/qpdf-build --component dev
           cmake --install /tmp/qpdf-build --component lib
 
+      - name: Cache Little CMS and OpenJPEG
+        id: deps-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/deps-install
+          key: static-deps-lcms2-2.16-openjpeg-2.5.4-${{ runner.os }}
+
+      - name: Build Little CMS and OpenJPEG from source (static)
+        if: steps.deps-cache.outputs.cache-hit != 'true'
+        run: |
+          curl -sSL -o /tmp/lcms2.tar.gz https://github.com/mm2/Little-CMS/releases/download/lcms2.16/lcms2-2.16.tar.gz
+          tar -xzf /tmp/lcms2.tar.gz -C /tmp
+          (cd /tmp/lcms2-2.16 && ./configure --prefix="$HOME/deps-install" --disable-shared --enable-static --without-jpeg --without-tiff && make -j"$(nproc)" && make install)
+          curl -sSL -o /tmp/openjpeg.tar.gz https://github.com/uclouvain/openjpeg/archive/refs/tags/v2.5.4.tar.gz
+          tar -xzf /tmp/openjpeg.tar.gz -C /tmp
+          cmake -S /tmp/openjpeg-2.5.4 -B /tmp/openjpeg-build -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=OFF -DBUILD_STATIC_LIBS=ON \
+            -DBUILD_CODEC=OFF -DBUILD_TESTING=OFF -DCMAKE_INSTALL_PREFIX="$HOME/deps-install"
+          cmake --build /tmp/openjpeg-build
+          cmake --install /tmp/openjpeg-build
+
       - name: Configure and build
         working-directory: pdfa-engine
         run: |
           cmake -B build -G Ninja \
             -DCMAKE_BUILD_TYPE=Release \
             -DPDFA_STATIC_DEPS=ON \
-            -DCMAKE_PREFIX_PATH="$HOME/qpdf-install"
+            -DCMAKE_PREFIX_PATH="$HOME/qpdf-install;$HOME/deps-install"
           cmake --build build --target kura kura_sdk
 
       - name: Assert the binary is self-contained
