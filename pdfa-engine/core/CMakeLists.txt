@@ -11,9 +11,6 @@ if(NOT EMSCRIPTEN)
   if(NOT LCMS2_LIBRARY OR NOT LCMS2_INCLUDE_DIR)
     message(FATAL_ERROR "lcms2 not found (brew install little-cms2)")
   endif()
-  if(DEFINED VCPKG_INSTALLED_DIR AND DEFINED VCPKG_TARGET_TRIPLET)
-    link_directories("${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/lib")
-  endif()
 endif()
 
 add_library(pdfa_core STATIC
@@ -54,6 +51,11 @@ target_include_directories(pdfa_core
   PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include
   PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}
 )
+
+if(WIN32)
+  get_filename_component(PDFA_WIN_LIBDIR "${LCMS2_LIBRARY}" DIRECTORY)
+  target_link_directories(pdfa_core PUBLIC "${PDFA_WIN_LIBDIR}")
+endif()
 
 if(EMSCRIPTEN)
   add_library(qpdf_wasm STATIC IMPORTED)

@@ -23,7 +23,7 @@ jobs:
 
       - name: Cache built PDFium
         id: pdfium-cache
-        uses: actions/cache@v4
+        uses: actions/cache/restore@v4
         with:
           path: pdfa-engine/third_party/pdfium-build/dist
           key: pdfium-mac-arm64-${{ env.PDFIUM_BRANCH }}-${{ hashFiles('pdfa-engine/scripts/pdfium/*') }}
@@ -35,6 +35,15 @@ jobs:
           ./scripts/pdfium/sync.sh
           ./scripts/pdfium/build.sh mac-arm64
           rm -rf third_party/pdfium-build/pdfium-src third_party/pdfium-build/depot_tools
+
+      - name: Save built PDFium
+        if: steps.pdfium-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: pdfa-engine/third_party/pdfium-build/dist
+          key: pdfium-mac-arm64-${{ env.PDFIUM_BRANCH }}-${{ hashFiles('pdfa-engine/scripts/pdfium/*') }}
+
+          key: ${{ steps.pdfium-cache.outputs.cache-primary-key }}
 
       - name: Install engine dependencies
         run: brew install cmake ninja qpdf freetype openjpeg jpeg-turbo libpng little-cms2 openssl@3

@@ -26,7 +26,8 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Cache vcpkg packages
-        uses: actions/cache@v4
+        id: vcpkg-cache
+        uses: actions/cache/restore@v4
         with:
           path: |
             C:/vcpkg/installed
@@ -38,9 +39,20 @@ jobs:
           vcpkg install --triplet "$VCPKG_TRIPLET" \
             qpdf freetype libjpeg-turbo openjpeg lcms zlib libpng openssl
 
+      - name: Save vcpkg packages
+        if: steps.vcpkg-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            C:/vcpkg/installed
+            C:/vcpkg/packages
+          key: vcpkg-${{ env.VCPKG_TRIPLET }}-qpdf-freetype-lcms-openjpeg
+
+          key: ${{ steps.vcpkg-cache.outputs.cache-primary-key }}
+
       - name: Cache built PDFium
         id: pdfium-cache
-        uses: actions/cache@v4
+        uses: actions/cache/restore@v4
         with:
           path: pdfa-engine/third_party/pdfium-build/dist
           key: pdfium-win-x64-${{ env.PDFIUM_BRANCH }}-${{ hashFiles('pdfa-engine/scripts/pdfium/*') }}-vcpkg-1
@@ -63,6 +75,15 @@ jobs:
           ./scripts/pdfium/sync.sh
           ./scripts/pdfium/build.sh win-x64
           rm -rf third_party/pdfium-build/pdfium-src third_party/pdfium-build/depot_tools
+
+      - name: Save built PDFium
+        if: steps.pdfium-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: pdfa-engine/third_party/pdfium-build/dist
+          key: pdfium-win-x64-${{ env.PDFIUM_BRANCH }}-${{ hashFiles('pdfa-engine/scripts/pdfium/*') }}-vcpkg-1
+
+          key: ${{ steps.pdfium-cache.outputs.cache-primary-key }}
 
       - name: Configure and build
         working-directory: pdfa-engine

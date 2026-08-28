@@ -37,7 +37,7 @@ jobs:
 
       - name: Cache qpdf
         id: qpdf-cache
-        uses: actions/cache@v4
+        uses: actions/cache/restore@v4
         with:
           path: ~/qpdf-install
           key: qpdf-static-${{ env.QPDF_VERSION }}-${{ runner.os }}
@@ -57,9 +57,18 @@ jobs:
           cmake --install /tmp/qpdf-build --component dev
           cmake --install /tmp/qpdf-build --component lib
 
+      - name: Save qpdf
+        if: steps.qpdf-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: ~/qpdf-install
+          key: qpdf-static-${{ env.QPDF_VERSION }}-${{ runner.os }}
+
+          key: ${{ steps.qpdf-cache.outputs.cache-primary-key }}
+
       - name: Cache FreeType, Little CMS and OpenJPEG
         id: deps-cache
-        uses: actions/cache@v4
+        uses: actions/cache/restore@v4
         with:
           path: ~/deps-install
           key: static-deps-lcms2-2.16-openjpeg-2.5.4-freetype-2.13.2-${{ runner.os }}
@@ -86,9 +95,18 @@ jobs:
           cmake --build /tmp/freetype-build
           cmake --install /tmp/freetype-build
 
+      - name: Save FreeType, Little CMS and OpenJPEG
+        if: steps.deps-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: ~/deps-install
+          key: static-deps-lcms2-2.16-openjpeg-2.5.4-freetype-2.13.2-${{ runner.os }}
+
+          key: ${{ steps.deps-cache.outputs.cache-primary-key }}
+
       - name: Cache built PDFium
         id: pdfium-cache
-        uses: actions/cache@v4
+        uses: actions/cache/restore@v4
         with:
           path: pdfa-engine/third_party/pdfium-build/dist
           key: pdfium-linux-x64-${{ env.PDFIUM_BRANCH }}-${{ hashFiles('pdfa-engine/scripts/pdfium/*') }}-qpdf${{ env.QPDF_VERSION }}-deps-2.13.2-2.16-2.5.4
@@ -100,6 +118,15 @@ jobs:
           ./scripts/pdfium/sync.sh
           ./scripts/pdfium/build.sh linux-x64
           rm -rf third_party/pdfium-build/pdfium-src third_party/pdfium-build/depot_tools
+
+      - name: Save built PDFium
+        if: steps.pdfium-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: pdfa-engine/third_party/pdfium-build/dist
+          key: pdfium-linux-x64-${{ env.PDFIUM_BRANCH }}-${{ hashFiles('pdfa-engine/scripts/pdfium/*') }}-qpdf${{ env.QPDF_VERSION }}-deps-2.13.2-2.16-2.5.4
+
+          key: ${{ steps.pdfium-cache.outputs.cache-primary-key }}
 
       - name: Configure and build
         working-directory: pdfa-engine
