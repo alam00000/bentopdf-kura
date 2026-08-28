@@ -19,6 +19,9 @@ target_link_libraries(kura PRIVATE pdfa_core)
 
 if(KURA_WITH_SIGNING)
   target_link_libraries(kura PRIVATE OpenSSL::Crypto)
+  if(WIN32)
+    target_link_libraries(kura PRIVATE crypt32 ws2_32)
+  endif()
   target_compile_definitions(kura PRIVATE KURA_WITH_SIGNING=1)
 endif()
 
