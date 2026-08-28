@@ -1,0 +1,13 @@
+{
+  "kura-profile": 1,
+  "name": "Remove undercolour removal",
+  "description": "Removes undercolour-removal functions.",
+  "checks": [],
+  "builtins": [],
+  "fixes": [
+    {
+      "op": "removeucr",
+      "params": []
+    }
+  ]
+}

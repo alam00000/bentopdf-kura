@@ -1,0 +1,25 @@
+{
+  "kura-profile": 1,
+  "name": "Trapped key not set",
+  "description": "Reports files that do not say whether they are trapped, which PDF/X requires.",
+  "checks": [
+    {
+      "name": "Trapped key missing",
+      "severity": "warning",
+      "all": [
+        {
+          "prop": "docinfo.trapped",
+          "op": "!=",
+          "value": "True"
+        },
+        {
+          "prop": "docinfo.trapped",
+          "op": "!=",
+          "value": "False"
+        }
+      ]
+    }
+  ],
+  "builtins": [],
+  "fixes": []
+}

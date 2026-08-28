@@ -1,0 +1,25 @@
+{
+  "kura-profile": 1,
+  "name": "Thin strokes in more than one ink",
+  "description": "Reports strokes below 0.25 pt built from several inks, which misregister.",
+  "checks": [
+    {
+      "name": "Thin stroke in more than one ink",
+      "severity": "error",
+      "all": [
+        {
+          "prop": "stroke.width",
+          "op": "<=",
+          "value": 0.25
+        },
+        {
+          "prop": "paint.inkCount",
+          "op": ">",
+          "value": 1
+        }
+      ]
+    }
+  ],
+  "builtins": [],
+  "fixes": []
+}

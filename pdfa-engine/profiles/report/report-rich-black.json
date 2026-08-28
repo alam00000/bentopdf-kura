@@ -1,0 +1,41 @@
+{
+  "kura-profile": 1,
+  "name": "Report rich black",
+  "description": "Finds black objects that also carry cyan, magenta or yellow.",
+  "checks": [
+    {
+      "name": "Rich black object",
+      "severity": "info",
+      "all": [
+        {
+          "prop": "paint.richBlackCmyPercent",
+          "op": ">",
+          "value": 0
+        }
+      ]
+    },
+    {
+      "name": "Rich black text below 12 pt",
+      "severity": "warning",
+      "all": [
+        {
+          "prop": "content.isText",
+          "op": "==",
+          "value": true
+        },
+        {
+          "prop": "text.size",
+          "op": "<",
+          "value": 12
+        },
+        {
+          "prop": "paint.richBlackCmyPercent",
+          "op": ">",
+          "value": 0
+        }
+      ]
+    }
+  ],
+  "builtins": [],
+  "fixes": []
+}

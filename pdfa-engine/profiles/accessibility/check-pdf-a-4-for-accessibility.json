@@ -1,0 +1,14 @@
+{
+  "kura-profile": 1,
+  "name": "Check PDF/A-4 for accessibility",
+  "description": "Reports every deviation from PDF/A-4; run the CLI with --check --level 4 --ua for the PDF/UA-2 check on top.",
+  "checks": [],
+  "builtins": [
+    {
+      "name": "conformsTo",
+      "severity": "error",
+      "level": "4"
+    }
+  ],
+  "fixes": []
+}

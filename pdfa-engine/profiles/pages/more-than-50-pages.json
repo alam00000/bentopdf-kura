@@ -1,0 +1,20 @@
+{
+  "kura-profile": 1,
+  "name": "More than 50 pages",
+  "description": "Reports documents with more than 50 pages.",
+  "checks": [
+    {
+      "name": "More than 50 pages",
+      "severity": "info",
+      "all": [
+        {
+          "prop": "doc.pages",
+          "op": ">",
+          "value": 50
+        }
+      ]
+    }
+  ],
+  "builtins": [],
+  "fixes": []
+}

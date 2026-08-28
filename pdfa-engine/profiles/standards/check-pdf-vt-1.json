@@ -1,0 +1,14 @@
+{
+  "kura-profile": 1,
+  "name": "Check PDF/VT-1",
+  "description": "Reports every deviation from PDF/VT-1; convert with --level vt1 to fix them.",
+  "checks": [],
+  "builtins": [
+    {
+      "name": "conformsTo",
+      "severity": "error",
+      "level": "vt1"
+    }
+  ],
+  "fixes": []
+}

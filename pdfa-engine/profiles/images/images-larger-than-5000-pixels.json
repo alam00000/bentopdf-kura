@@ -1,0 +1,31 @@
+{
+  "kura-profile": 1,
+  "name": "Images larger than 5000 pixels",
+  "description": "Reports images wider or taller than 5000 pixels.",
+  "checks": [
+    {
+      "name": "Image wider than 5000 px",
+      "severity": "info",
+      "all": [
+        {
+          "prop": "image.width",
+          "op": ">",
+          "value": 5000
+        }
+      ]
+    },
+    {
+      "name": "Image taller than 5000 px",
+      "severity": "info",
+      "all": [
+        {
+          "prop": "image.height",
+          "op": ">",
+          "value": 5000
+        }
+      ]
+    }
+  ],
+  "builtins": [],
+  "fixes": []
+}

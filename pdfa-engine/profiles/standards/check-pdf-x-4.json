@@ -1,0 +1,14 @@
+{
+  "kura-profile": 1,
+  "name": "Check PDF/X-4",
+  "description": "Reports every deviation from PDF/X-4; convert with --level x4 to fix them.",
+  "checks": [],
+  "builtins": [
+    {
+      "name": "conformsTo",
+      "severity": "error",
+      "level": "x4"
+    }
+  ],
+  "fixes": []
+}

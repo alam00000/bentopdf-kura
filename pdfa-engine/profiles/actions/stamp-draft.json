@@ -1,0 +1,17 @@
+{
+  "kura-profile": 1,
+  "name": "Stamp DRAFT",
+  "description": "Places the word DRAFT on every page.",
+  "checks": [],
+  "builtins": [],
+  "fixes": [
+    {
+      "op": "placetext",
+      "params": [
+        "DRAFT",
+        "",
+        "36"
+      ]
+    }
+  ]
+}

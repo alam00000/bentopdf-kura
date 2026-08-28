@@ -1,0 +1,28 @@
+{
+  "kura-profile": 1,
+  "name": "Report spot colours",
+  "description": "Reports every spot colour object and pages with more than two spot inks.",
+  "checks": [
+    {
+      "name": "Spot object",
+      "severity": "info",
+      "all": [
+        {
+          "prop": "paint.isSpot",
+          "op": "==",
+          "value": true
+        }
+      ]
+    }
+  ],
+  "builtins": [
+    {
+      "name": "spotColoursMoreThan",
+      "severity": "warning",
+      "params": {
+        "count": 2
+      }
+    }
+  ],
+  "fixes": []
+}

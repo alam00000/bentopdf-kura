@@ -1,0 +1,16 @@
+{
+  "kura-profile": 1,
+  "name": "Set title when missing",
+  "description": "Sets the document title from the file name if none is set.",
+  "checks": [],
+  "builtins": [],
+  "fixes": [
+    {
+      "op": "settitle",
+      "params": [
+        "IfEmpty",
+        "Untitled"
+      ]
+    }
+  ]
+}

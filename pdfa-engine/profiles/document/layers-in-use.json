@@ -1,0 +1,20 @@
+{
+  "kura-profile": 1,
+  "name": "Layers in use",
+  "description": "Reports content placed on optional content layers.",
+  "checks": [
+    {
+      "name": "Content on a layer",
+      "severity": "info",
+      "all": [
+        {
+          "prop": "layers.onLayer",
+          "op": "==",
+          "value": true
+        }
+      ]
+    }
+  ],
+  "builtins": [],
+  "fixes": []
+}

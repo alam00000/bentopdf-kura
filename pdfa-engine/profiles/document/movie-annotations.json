@@ -1,0 +1,20 @@
+{
+  "kura-profile": 1,
+  "name": "Movie annotations",
+  "description": "Reports annotations of type Movie.",
+  "checks": [
+    {
+      "name": "Movie annotation",
+      "severity": "info",
+      "all": [
+        {
+          "prop": "annot.type",
+          "op": "==",
+          "value": "Movie"
+        }
+      ]
+    }
+  ],
+  "builtins": [],
+  "fixes": []
+}

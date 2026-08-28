@@ -1,0 +1,20 @@
+{
+  "kura-profile": 1,
+  "name": "Annotations outside the trim area",
+  "description": "Reports annotations lying outside the bleed and trim boxes.",
+  "checks": [
+    {
+      "name": "Annotation outside bleed and trim",
+      "severity": "info",
+      "all": [
+        {
+          "prop": "annot.insideBleedOrTrim",
+          "op": "==",
+          "value": false
+        }
+      ]
+    }
+  ],
+  "builtins": [],
+  "fixes": []
+}

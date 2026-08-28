@@ -1,0 +1,13 @@
+{
+  "kura-profile": 1,
+  "name": "PostScript fragments",
+  "description": "Reports PostScript XObjects, which most renderers ignore.",
+  "checks": [],
+  "builtins": [
+    {
+      "name": "postscript",
+      "severity": "warning"
+    }
+  ],
+  "fixes": []
+}

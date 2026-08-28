@@ -1,0 +1,31 @@
+{
+  "kura-profile": 1,
+  "name": "Constant alpha below 100%",
+  "description": "Reports fills and strokes with opacity below 100%.",
+  "checks": [
+    {
+      "name": "Fill alpha below 100%",
+      "severity": "info",
+      "all": [
+        {
+          "prop": "fill.alpha",
+          "op": "<",
+          "value": 1.0
+        }
+      ]
+    },
+    {
+      "name": "Stroke alpha below 100%",
+      "severity": "info",
+      "all": [
+        {
+          "prop": "stroke.alpha",
+          "op": "<",
+          "value": 1.0
+        }
+      ]
+    }
+  ],
+  "builtins": [],
+  "fixes": []
+}

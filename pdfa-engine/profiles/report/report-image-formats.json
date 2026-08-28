@@ -1,0 +1,75 @@
+{
+  "kura-profile": 1,
+  "name": "Report image formats",
+  "description": "Reports the compression filters and bit depths in use.",
+  "checks": [
+    {
+      "name": "JPEG-compressed image",
+      "severity": "info",
+      "all": [
+        {
+          "prop": "image.filter",
+          "op": "contains",
+          "value": "DCT"
+        }
+      ]
+    },
+    {
+      "name": "JPEG 2000-compressed image",
+      "severity": "info",
+      "all": [
+        {
+          "prop": "image.filter",
+          "op": "contains",
+          "value": "JPX"
+        }
+      ]
+    },
+    {
+      "name": "CCITT fax-compressed image",
+      "severity": "info",
+      "all": [
+        {
+          "prop": "image.filter",
+          "op": "contains",
+          "value": "CCITT"
+        }
+      ]
+    },
+    {
+      "name": "JBIG2-compressed image",
+      "severity": "info",
+      "all": [
+        {
+          "prop": "image.filter",
+          "op": "contains",
+          "value": "JBIG2"
+        }
+      ]
+    },
+    {
+      "name": "16-bit image",
+      "severity": "info",
+      "all": [
+        {
+          "prop": "image.bitsPerComponent",
+          "op": "==",
+          "value": 16
+        }
+      ]
+    },
+    {
+      "name": "1-bit image",
+      "severity": "info",
+      "all": [
+        {
+          "prop": "image.bitsPerComponent",
+          "op": "==",
+          "value": 1
+        }
+      ]
+    }
+  ],
+  "builtins": [],
+  "fixes": []
+}

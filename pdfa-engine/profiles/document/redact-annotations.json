@@ -1,0 +1,20 @@
+{
+  "kura-profile": 1,
+  "name": "Redact annotations",
+  "description": "Reports annotations of type Redact.",
+  "checks": [
+    {
+      "name": "Redact annotation",
+      "severity": "info",
+      "all": [
+        {
+          "prop": "annot.type",
+          "op": "==",
+          "value": "Redact"
+        }
+      ]
+    }
+  ],
+  "builtins": [],
+  "fixes": []
+}

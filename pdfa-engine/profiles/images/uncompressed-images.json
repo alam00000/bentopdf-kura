@@ -1,0 +1,13 @@
+{
+  "kura-profile": 1,
+  "name": "Uncompressed images",
+  "description": "Reports images stored without any compression.",
+  "checks": [],
+  "builtins": [
+    {
+      "name": "uncompressedImages",
+      "severity": "warning"
+    }
+  ],
+  "fixes": []
+}

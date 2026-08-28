@@ -1,0 +1,20 @@
+{
+  "kura-profile": 1,
+  "name": "run-length-compressed images",
+  "description": "Reports images stored with run-length compression.",
+  "checks": [
+    {
+      "name": "run-length-compressed image",
+      "severity": "info",
+      "all": [
+        {
+          "prop": "image.filter",
+          "op": "contains",
+          "value": "RunLength"
+        }
+      ]
+    }
+  ],
+  "builtins": [],
+  "fixes": []
+}

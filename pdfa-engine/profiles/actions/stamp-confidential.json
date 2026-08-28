@@ -1,0 +1,17 @@
+{
+  "kura-profile": 1,
+  "name": "Stamp CONFIDENTIAL",
+  "description": "Places the word CONFIDENTIAL on every page.",
+  "checks": [],
+  "builtins": [],
+  "fixes": [
+    {
+      "op": "placetext",
+      "params": [
+        "CONFIDENTIAL",
+        "",
+        "24"
+      ]
+    }
+  ]
+}

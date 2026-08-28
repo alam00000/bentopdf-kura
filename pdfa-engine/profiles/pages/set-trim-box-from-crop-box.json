@@ -1,0 +1,21 @@
+{
+  "kura-profile": 1,
+  "name": "Set trim box from crop box",
+  "description": "Adds a trim box equal to the crop box on pages that lack one.",
+  "checks": [],
+  "builtins": [],
+  "fixes": [
+    {
+      "op": "setpagebox",
+      "params": [
+        "TrimBox",
+        "RelativeToCropBox",
+        "0",
+        "0",
+        "0",
+        "0",
+        "pt"
+      ]
+    }
+  ]
+}

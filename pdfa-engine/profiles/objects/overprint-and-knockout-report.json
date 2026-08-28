@@ -1,0 +1,68 @@
+{
+  "kura-profile": 1,
+  "name": "Overprint and knockout: report",
+  "description": "Reports overprinting fills and strokes plus white objects set to overprint.",
+  "checks": [
+    {
+      "name": "White object set to overprint",
+      "severity": "error",
+      "all": [
+        {
+          "prop": "paint.isWhite",
+          "op": "==",
+          "value": true
+        },
+        {
+          "prop": "fill.overprint",
+          "op": "==",
+          "value": true
+        }
+      ]
+    },
+    {
+      "name": "Black text not set to overprint",
+      "severity": "warning",
+      "all": [
+        {
+          "prop": "content.isText",
+          "op": "==",
+          "value": true
+        },
+        {
+          "prop": "paint.is100Black",
+          "op": "==",
+          "value": true
+        },
+        {
+          "prop": "fill.overprint",
+          "op": "==",
+          "value": false
+        }
+      ]
+    },
+    {
+      "name": "Fill set to overprint",
+      "severity": "info",
+      "all": [
+        {
+          "prop": "fill.overprint",
+          "op": "==",
+          "value": true
+        }
+      ]
+    },
+    {
+      "name": "Stroke set to overprint",
+      "severity": "info",
+      "all": [
+        {
+          "prop": "stroke.overprint",
+          "op": "==",
+          "value": true
+        }
+      ]
+    }
+  ],
+  "builtins": [],
+  "fixes": []
+}

@@ -1,0 +1,20 @@
+{
+  "kura-profile": 1,
+  "name": "Fonts not subset",
+  "description": "Reports fonts not subset.",
+  "checks": [
+    {
+      "name": "Fonts not subset",
+      "severity": "info",
+      "all": [
+        {
+          "prop": "font.notSubset",
+          "op": "==",
+          "value": true
+        }
+      ]
+    }
+  ],
+  "builtins": [],
+  "fixes": []
+}

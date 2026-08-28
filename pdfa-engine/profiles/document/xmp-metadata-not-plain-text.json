@@ -1,0 +1,20 @@
+{
+  "kura-profile": 1,
+  "name": "XMP metadata not plain text",
+  "description": "Reports XMP packets that are compressed or encoded, which PDF/A forbids.",
+  "checks": [
+    {
+      "name": "XMP not plain text",
+      "severity": "warning",
+      "all": [
+        {
+          "prop": "doc.xmpIsPlainText",
+          "op": "==",
+          "value": false
+        }
+      ]
+    }
+  ],
+  "builtins": [],
+  "fixes": []
+}

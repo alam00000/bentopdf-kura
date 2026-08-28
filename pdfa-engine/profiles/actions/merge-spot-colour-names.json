@@ -1,0 +1,13 @@
+{
+  "kura-profile": 1,
+  "name": "Merge spot colour names",
+  "description": "Merges spot colours whose names differ only in case, spacing or suffix.",
+  "checks": [],
+  "builtins": [],
+  "fixes": [
+    {
+      "op": "mergespotcolornames",
+      "params": []
+    }
+  ]
+}

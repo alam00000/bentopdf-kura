@@ -1,0 +1,15 @@
+{
+  "kura-profile": 1,
+  "name": "Clip content to the media box",
+  "description": "Removes anything drawn outside the media box.",
+  "checks": [],
+  "builtins": [],
+  "fixes": [
+    {
+      "op": "removeobjectsoutofbox",
+      "params": [
+        "MediaBox"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,20 @@
+{
+  "kura-profile": 1,
+  "name": "Hairlines below 0.5 pt",
+  "description": "Reports strokes thinner than 0.5 pt.",
+  "checks": [
+    {
+      "name": "Stroke thinner than 0.5 pt",
+      "severity": "error",
+      "all": [
+        {
+          "prop": "stroke.width",
+          "op": "<=",
+          "value": 0.5
+        }
+      ]
+    }
+  ],
+  "builtins": [],
+  "fixes": []
+}

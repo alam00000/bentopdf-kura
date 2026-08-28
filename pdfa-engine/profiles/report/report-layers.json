@@ -1,0 +1,47 @@
+{
+  "kura-profile": 1,
+  "name": "Report layers",
+  "description": "Reports content on layers, hidden layers and layer configurations.",
+  "checks": [
+    {
+      "name": "Content on a layer",
+      "severity": "info",
+      "all": [
+        {
+          "prop": "layers.onLayer",
+          "op": "==",
+          "value": true
+        }
+      ]
+    },
+    {
+      "name": "Content on a hidden layer",
+      "severity": "info",
+      "all": [
+        {
+          "prop": "layers.onLayer",
+          "op": "==",
+          "value": true
+        },
+        {
+          "prop": "layers.visible",
+          "op": "==",
+          "value": false
+        }
+      ]
+    },
+    {
+      "name": "Layer configurations present",
+      "severity": "info",
+      "all": [
+        {
+          "prop": "layers.hasConfigs",
+          "op": "==",
+          "value": true
+        }
+      ]
+    }
+  ],
+  "builtins": [],
+  "fixes": []
+}

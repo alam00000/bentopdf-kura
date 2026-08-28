@@ -1,0 +1,20 @@
+{
+  "kura-profile": 1,
+  "name": "Spot colours in use",
+  "description": "Reports every object painted with spot colours in use.",
+  "checks": [
+    {
+      "name": "Spot colours in use",
+      "severity": "info",
+      "all": [
+        {
+          "prop": "paint.isSpot",
+          "op": "==",
+          "value": true
+        }
+      ]
+    }
+  ],
+  "builtins": [],
+  "fixes": []
+}

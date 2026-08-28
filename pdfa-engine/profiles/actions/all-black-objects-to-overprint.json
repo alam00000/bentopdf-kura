@@ -1,0 +1,15 @@
+{
+  "kura-profile": 1,
+  "name": "All black objects to overprint",
+  "description": "Sets every 100% black object to overprint.",
+  "checks": [],
+  "builtins": [],
+  "fixes": [
+    {
+      "op": "overprintblack",
+      "params": [
+        ""
+      ]
+    }
+  ]
+}

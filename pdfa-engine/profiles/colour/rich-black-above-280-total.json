@@ -1,0 +1,25 @@
+{
+  "kura-profile": 1,
+  "name": "Rich black above 280% total",
+  "description": "Reports black objects whose added CMY brings total ink above 280%.",
+  "checks": [
+    {
+      "name": "Rich black above 280% total",
+      "severity": "warning",
+      "all": [
+        {
+          "prop": "paint.richBlackCmyPercent",
+          "op": ">",
+          "value": 0
+        },
+        {
+          "prop": "fill.totalInk",
+          "op": ">",
+          "value": 280
+        }
+      ]
+    }
+  ],
+  "builtins": [],
+  "fixes": []
+}

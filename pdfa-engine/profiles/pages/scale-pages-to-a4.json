@@ -1,0 +1,17 @@
+{
+  "kura-profile": 1,
+  "name": "Scale pages to A4",
+  "description": "Scales every page proportionally to fit A4 (210 x 297 mm).",
+  "checks": [],
+  "builtins": [],
+  "fixes": [
+    {
+      "op": "scalepagesex",
+      "params": [
+        "210",
+        "297",
+        "mm"
+      ]
+    }
+  ]
+}

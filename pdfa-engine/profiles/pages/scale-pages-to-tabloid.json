@@ -1,0 +1,17 @@
+{
+  "kura-profile": 1,
+  "name": "Scale pages to Tabloid",
+  "description": "Scales every page proportionally to fit Tabloid (11 x 17 inch).",
+  "checks": [],
+  "builtins": [],
+  "fixes": [
+    {
+      "op": "scalepagesex",
+      "params": [
+        "11",
+        "17",
+        "inch"
+      ]
+    }
+  ]
+}

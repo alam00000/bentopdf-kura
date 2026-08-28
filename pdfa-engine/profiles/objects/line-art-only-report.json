@@ -1,0 +1,20 @@
+{
+  "kura-profile": 1,
+  "name": "Line art only: report",
+  "description": "Reports strokes that carry no fill.",
+  "checks": [
+    {
+      "name": "Stroked, not filled",
+      "severity": "info",
+      "all": [
+        {
+          "prop": "content.isStrokedOnly",
+          "op": "==",
+          "value": true
+        }
+      ]
+    }
+  ],
+  "builtins": [],
+  "fixes": []
+}

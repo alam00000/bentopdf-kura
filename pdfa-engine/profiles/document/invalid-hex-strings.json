@@ -1,0 +1,20 @@
+{
+  "kura-profile": 1,
+  "name": "Invalid hex strings",
+  "description": "Reports hexadecimal strings with characters outside 0-9 and A-F.",
+  "checks": [
+    {
+      "name": "Invalid hex string",
+      "severity": "warning",
+      "all": [
+        {
+          "prop": "doc.hexStringInvalid",
+          "op": "==",
+          "value": true
+        }
+      ]
+    }
+  ],
+  "builtins": [],
+  "fixes": []
+}

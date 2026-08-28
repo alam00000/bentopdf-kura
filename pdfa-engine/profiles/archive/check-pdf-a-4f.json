@@ -1,0 +1,14 @@
+{
+  "kura-profile": 1,
+  "name": "Check PDF/A-4f",
+  "description": "Reports every deviation from PDF/A-4f; convert with --level 4f to fix them.",
+  "checks": [],
+  "builtins": [
+    {
+      "name": "conformsTo",
+      "severity": "error",
+      "level": "4f"
+    }
+  ],
+  "fixes": []
+}

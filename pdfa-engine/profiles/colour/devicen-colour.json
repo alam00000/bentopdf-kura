@@ -1,0 +1,20 @@
+{
+  "kura-profile": 1,
+  "name": "DeviceN colour",
+  "description": "Reports every object painted with devicen colour.",
+  "checks": [
+    {
+      "name": "DeviceN colour",
+      "severity": "info",
+      "all": [
+        {
+          "prop": "paint.deviceNColorants",
+          "op": ">",
+          "value": 0
+        }
+      ]
+    }
+  ],
+  "builtins": [],
+  "fixes": []
+}

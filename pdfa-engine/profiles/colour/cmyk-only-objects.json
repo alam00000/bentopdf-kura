@@ -1,0 +1,20 @@
+{
+  "kura-profile": 1,
+  "name": "CMYK-only objects",
+  "description": "Reports objects painted in process colours without spots.",
+  "checks": [
+    {
+      "name": "CMYK-only object",
+      "severity": "info",
+      "all": [
+        {
+          "prop": "paint.cmykOnly",
+          "op": "==",
+          "value": true
+        }
+      ]
+    }
+  ],
+  "builtins": [],
+  "fixes": []
+}

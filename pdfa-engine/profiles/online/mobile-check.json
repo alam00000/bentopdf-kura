@@ -1,0 +1,111 @@
+{
+  "kura-profile": 1,
+  "name": "Mobile: check",
+  "description": "The online check with a 2 MB size limit and 100 pages, for files opened on phones.",
+  "checks": [
+    {
+      "name": "Spot colour in use",
+      "severity": "warning",
+      "all": [
+        {
+          "prop": "paint.isSpot",
+          "op": "==",
+          "value": true
+        }
+      ]
+    },
+    {
+      "name": "Registration colour used for content",
+      "severity": "error",
+      "all": [
+        {
+          "prop": "paint.isRegistration",
+          "op": "==",
+          "value": true
+        }
+      ]
+    },
+    {
+      "name": "Text smaller than 6 pt",
+      "severity": "info",
+      "all": [
+        {
+          "prop": "text.size",
+          "op": "<",
+          "value": 6
+        },
+        {
+          "prop": "text.size",
+          "op": ">",
+          "value": 0.01
+        }
+      ]
+    },
+    {
+      "name": "File larger than 2 MB",
+      "severity": "warning",
+      "all": [
+        {
+          "prop": "doc.fileSizeBytes",
+          "op": ">",
+          "value": 2097152
+        }
+      ]
+    },
+    {
+      "name": "More than 100 pages",
+      "severity": "info",
+      "all": [
+        {
+          "prop": "doc.pages",
+          "op": ">",
+          "value": 100
+        }
+      ]
+    }
+  ],
+  "builtins": [
+    {
+      "name": "imageResolutionAbove",
+      "severity": "warning",
+      "params": {
+        "ppi": 150
+      }
+    },
+    {
+      "name": "bitmapResolutionAbove",
+      "severity": "info",
+      "params": {
+        "ppi": 600
+      }
+    },
+    {
+      "name": "imageResolutionBelow",
+      "severity": "info",
+      "params": {
+        "ppi": 72
+      }
+    },
+    {
+      "name": "fontsNotEmbedded",
+      "severity": "error"
+    },
+    {
+      "name": "encrypted",
+      "severity": "warning"
+    },
+    {
+      "name": "damaged",
+      "severity": "error"
+    },
+    {
+      "name": "syntaxProblems",
+      "severity": "error"
+    },
+    {
+      "name": "uncompressedImages",
+      "severity": "warning"
+    }
+  ],
+  "fixes": []
+}

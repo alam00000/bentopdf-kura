@@ -1,0 +1,20 @@
+{
+  "kura-profile": 1,
+  "name": "Annotations of unknown type",
+  "description": "Reports annotation types the PDF specification does not define.",
+  "checks": [
+    {
+      "name": "Unknown annotation type",
+      "severity": "warning",
+      "all": [
+        {
+          "prop": "annot.unknownType",
+          "op": "==",
+          "value": true
+        }
+      ]
+    }
+  ],
+  "builtins": [],
+  "fixes": []
+}

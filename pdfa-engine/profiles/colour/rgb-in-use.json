@@ -1,0 +1,13 @@
+{
+  "kura-profile": 1,
+  "name": "RGB in use",
+  "description": "Reports every object painted in RGB.",
+  "checks": [],
+  "builtins": [
+    {
+      "name": "rgbUsed",
+      "severity": "warning"
+    }
+  ],
+  "fixes": []
+}

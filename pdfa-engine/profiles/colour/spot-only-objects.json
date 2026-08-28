@@ -1,0 +1,20 @@
+{
+  "kura-profile": 1,
+  "name": "Spot-only objects",
+  "description": "Reports objects painted in spot colours without process inks.",
+  "checks": [
+    {
+      "name": "Spot-only object",
+      "severity": "info",
+      "all": [
+        {
+          "prop": "paint.spotOnly",
+          "op": "==",
+          "value": true
+        }
+      ]
+    }
+  ],
+  "builtins": [],
+  "fixes": []
+}

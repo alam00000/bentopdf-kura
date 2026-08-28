@@ -1,0 +1,23 @@
+{
+  "kura-profile": 1,
+  "name": "Report high resolution images",
+  "description": "Reports images above 450 ppi and bitmaps above 2400 ppi, candidates for downsampling.",
+  "checks": [],
+  "builtins": [
+    {
+      "name": "imageResolutionAbove",
+      "severity": "info",
+      "params": {
+        "ppi": 450
+      }
+    },
+    {
+      "name": "bitmapResolutionAbove",
+      "severity": "info",
+      "params": {
+        "ppi": 2400
+      }
+    }
+  ],
+  "fixes": []
+}

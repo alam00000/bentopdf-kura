@@ -1,0 +1,20 @@
+{
+  "kura-profile": 1,
+  "name": "Calibrated colour spaces",
+  "description": "Reports every object painted with calibrated colour spaces.",
+  "checks": [
+    {
+      "name": "Calibrated colour spaces",
+      "severity": "info",
+      "all": [
+        {
+          "prop": "paint.isCalibrated",
+          "op": "==",
+          "value": true
+        }
+      ]
+    }
+  ],
+  "builtins": [],
+  "fixes": []
+}

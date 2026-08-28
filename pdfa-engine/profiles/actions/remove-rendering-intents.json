@@ -1,0 +1,13 @@
+{
+  "kura-profile": 1,
+  "name": "Remove rendering intents",
+  "description": "Removes rendering intents so the output device decides.",
+  "checks": [],
+  "builtins": [],
+  "fixes": [
+    {
+      "op": "removerenderingintents",
+      "params": []
+    }
+  ]
+}

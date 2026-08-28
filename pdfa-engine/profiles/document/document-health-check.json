@@ -1,0 +1,44 @@
+{
+  "kura-profile": 1,
+  "name": "Document health: check",
+  "description": "Encryption, damage, syntax, data after the end marker and hex strings, in one run.",
+  "checks": [
+    {
+      "name": "Data after end of file",
+      "severity": "info",
+      "all": [
+        {
+          "prop": "doc.dataAfterEof",
+          "op": "==",
+          "value": true
+        }
+      ]
+    },
+    {
+      "name": "Invalid hex string",
+      "severity": "warning",
+      "all": [
+        {
+          "prop": "doc.hexStringInvalid",
+          "op": "==",
+          "value": true
+        }
+      ]
+    }
+  ],
+  "builtins": [
+    {
+      "name": "encrypted",
+      "severity": "warning"
+    },
+    {
+      "name": "damaged",
+      "severity": "error"
+    },
+    {
+      "name": "syntaxProblems",
+      "severity": "error"
+    }
+  ],
+  "fixes": []
+}

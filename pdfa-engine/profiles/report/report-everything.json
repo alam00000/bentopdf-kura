@@ -1,0 +1,325 @@
+{
+  "kura-profile": 1,
+  "name": "Report everything",
+  "description": "Every report in one run: images, colour, ink, hairlines, text, transparency, fonts, pages, annotations, layers and document health.",
+  "checks": [
+    {
+      "name": "Stroke thinner than 0.125 pt",
+      "severity": "error",
+      "all": [
+        {
+          "prop": "stroke.width",
+          "op": "<=",
+          "value": 0.125
+        }
+      ]
+    },
+    {
+      "name": "Stroke between 0.125 and 0.25 pt",
+      "severity": "warning",
+      "all": [
+        {
+          "prop": "stroke.width",
+          "op": "<=",
+          "value": 0.25
+        },
+        {
+          "prop": "stroke.width",
+          "op": ">",
+          "value": 0.125
+        }
+      ]
+    },
+    {
+      "name": "Thin stroke below 0.25 pt in more than one ink",
+      "severity": "error",
+      "all": [
+        {
+          "prop": "stroke.width",
+          "op": "<=",
+          "value": 0.25
+        },
+        {
+          "prop": "paint.inkCount",
+          "op": ">",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "name": "Text smaller than 5 pt",
+      "severity": "warning",
+      "all": [
+        {
+          "prop": "text.size",
+          "op": "<",
+          "value": 5
+        },
+        {
+          "prop": "text.size",
+          "op": ">",
+          "value": 0.01
+        }
+      ]
+    },
+    {
+      "name": "Text smaller than 8 pt in more than one ink",
+      "severity": "warning",
+      "all": [
+        {
+          "prop": "text.size",
+          "op": "<",
+          "value": 8
+        },
+        {
+          "prop": "text.size",
+          "op": ">",
+          "value": 0.01
+        },
+        {
+          "prop": "paint.inkCount",
+          "op": ">",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "name": "White text smaller than 8 pt",
+      "severity": "warning",
+      "all": [
+        {
+          "prop": "text.size",
+          "op": "<",
+          "value": 8
+        },
+        {
+          "prop": "text.size",
+          "op": ">",
+          "value": 0.01
+        },
+        {
+          "prop": "paint.isWhite",
+          "op": "==",
+          "value": true
+        }
+      ]
+    },
+    {
+      "name": "Total ink above 300% in fills",
+      "severity": "error",
+      "all": [
+        {
+          "prop": "fill.totalInk",
+          "op": ">",
+          "value": 300
+        }
+      ]
+    },
+    {
+      "name": "Total ink above 300% in strokes",
+      "severity": "error",
+      "all": [
+        {
+          "prop": "stroke.totalInk",
+          "op": ">",
+          "value": 300
+        }
+      ]
+    },
+    {
+      "name": "Rich black on text smaller than 12 pt",
+      "severity": "warning",
+      "all": [
+        {
+          "prop": "content.isText",
+          "op": "==",
+          "value": true
+        },
+        {
+          "prop": "text.size",
+          "op": "<",
+          "value": 12
+        },
+        {
+          "prop": "paint.richBlackCmyPercent",
+          "op": ">",
+          "value": 0
+        }
+      ]
+    },
+    {
+      "name": "White object set to overprint",
+      "severity": "error",
+      "all": [
+        {
+          "prop": "paint.isWhite",
+          "op": "==",
+          "value": true
+        },
+        {
+          "prop": "fill.overprint",
+          "op": "==",
+          "value": true
+        }
+      ]
+    },
+    {
+      "name": "Black text not set to overprint",
+      "severity": "warning",
+      "all": [
+        {
+          "prop": "content.isText",
+          "op": "==",
+          "value": true
+        },
+        {
+          "prop": "paint.is100Black",
+          "op": "==",
+          "value": true
+        },
+        {
+          "prop": "fill.overprint",
+          "op": "==",
+          "value": false
+        }
+      ]
+    },
+    {
+      "name": "Transparency in use",
+      "severity": "info",
+      "all": [
+        {
+          "prop": "gstate.transparency",
+          "op": "==",
+          "value": true
+        }
+      ]
+    },
+    {
+      "name": "Blend mode other than Normal",
+      "severity": "info",
+      "all": [
+        {
+          "prop": "gstate.blendMode",
+          "op": "!=",
+          "value": "Normal"
+        },
+        {
+          "prop": "gstate.blendMode",
+          "op": "!=",
+          "value": "Compatible"
+        }
+      ]
+    },
+    {
+      "name": "RGB object",
+      "severity": "info",
+      "all": [
+        {
+          "prop": "paint.isRgb",
+          "op": "==",
+          "value": true
+        }
+      ]
+    },
+    {
+      "name": "Spot object",
+      "severity": "info",
+      "all": [
+        {
+          "prop": "paint.isSpot",
+          "op": "==",
+          "value": true
+        }
+      ]
+    },
+    {
+      "name": "Invisible text",
+      "severity": "info",
+      "all": [
+        {
+          "prop": "text.isInvisible",
+          "op": "==",
+          "value": true
+        }
+      ]
+    },
+    {
+      "name": "Content on a layer",
+      "severity": "info",
+      "all": [
+        {
+          "prop": "layers.onLayer",
+          "op": "==",
+          "value": true
+        }
+      ]
+    },
+    {
+      "name": "Annotation that prints",
+      "severity": "info",
+      "all": [
+        {
+          "prop": "annot.prints",
+          "op": "==",
+          "value": true
+        }
+      ]
+    },
+    {
+      "name": "Rotated page",
+      "severity": "info",
+      "all": [
+        {
+          "prop": "page.isRotated",
+          "op": "==",
+          "value": true
+        }
+      ]
+    }
+  ],
+  "builtins": [
+    {
+      "name": "imageResolutionBelow",
+      "severity": "warning",
+      "params": {
+        "ppi": 300
+      }
+    },
+    {
+      "name": "imageResolutionAbove",
+      "severity": "info",
+      "params": {
+        "ppi": 450
+      }
+    },
+    {
+      "name": "fontsNotEmbedded",
+      "severity": "error"
+    },
+    {
+      "name": "spotColoursMoreThan",
+      "severity": "info",
+      "params": {
+        "count": 2
+      }
+    },
+    {
+      "name": "pagesDifferInSize",
+      "severity": "info"
+    },
+    {
+      "name": "emptyPage",
+      "severity": "info"
+    },
+    {
+      "name": "encrypted",
+      "severity": "info"
+    },
+    {
+      "name": "damaged",
+      "severity": "warning"
+    }
+  ],
+  "fixes": []
+}

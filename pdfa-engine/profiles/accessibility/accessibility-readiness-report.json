@@ -1,0 +1,51 @@
+{
+  "kura-profile": 1,
+  "name": "Accessibility readiness: report",
+  "description": "What an accessible document needs before tagging: text with Unicode, no invisible text, no text as clipping paths, fonts embedded.",
+  "checks": [
+    {
+      "name": "Text without a Unicode mapping",
+      "severity": "error",
+      "all": [
+        {
+          "prop": "text.hasUnicode",
+          "op": "==",
+          "value": false
+        }
+      ]
+    },
+    {
+      "name": "Invisible text",
+      "severity": "warning",
+      "all": [
+        {
+          "prop": "text.isInvisible",
+          "op": "==",
+          "value": true
+        }
+      ]
+    },
+    {
+      "name": "Text used as a clipping path",
+      "severity": "warning",
+      "all": [
+        {
+          "prop": "text.isClippingPath",
+          "op": "==",
+          "value": true
+        }
+      ]
+    }
+  ],
+  "builtins": [
+    {
+      "name": "fontsNotEmbedded",
+      "severity": "error"
+    },
+    {
+      "name": "pagesDifferInSize",
+      "severity": "info"
+    }
+  ],
+  "fixes": []
+}

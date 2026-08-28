@@ -1,0 +1,69 @@
+{
+  "kura-profile": 1,
+  "name": "Transparency: report",
+  "description": "Blend modes, soft masks, constant alpha and transparency groups, each reported separately.",
+  "checks": [
+    {
+      "name": "Blend mode other than Normal",
+      "severity": "info",
+      "all": [
+        {
+          "prop": "gstate.blendMode",
+          "op": "!=",
+          "value": "Normal"
+        },
+        {
+          "prop": "gstate.blendMode",
+          "op": "!=",
+          "value": "Compatible"
+        }
+      ]
+    },
+    {
+      "name": "Soft mask in use",
+      "severity": "info",
+      "all": [
+        {
+          "prop": "gstate.hasSoftMask",
+          "op": "==",
+          "value": true
+        }
+      ]
+    },
+    {
+      "name": "Fill alpha below 100%",
+      "severity": "info",
+      "all": [
+        {
+          "prop": "fill.alpha",
+          "op": "<",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "name": "Stroke alpha below 100%",
+      "severity": "info",
+      "all": [
+        {
+          "prop": "stroke.alpha",
+          "op": "<",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "name": "Object inside a transparency group",
+      "severity": "info",
+      "all": [
+        {
+          "prop": "gstate.inTransparencyGroup",
+          "op": "==",
+          "value": true
+        }
+      ]
+    }
+  ],
+  "builtins": [],
+  "fixes": []
+}

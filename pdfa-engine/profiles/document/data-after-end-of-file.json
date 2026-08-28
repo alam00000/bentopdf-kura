@@ -1,0 +1,20 @@
+{
+  "kura-profile": 1,
+  "name": "Data after end of file",
+  "description": "Reports bytes after the final %%EOF marker.",
+  "checks": [
+    {
+      "name": "Data after end of file",
+      "severity": "info",
+      "all": [
+        {
+          "prop": "doc.dataAfterEof",
+          "op": "==",
+          "value": true
+        }
+      ]
+    }
+  ],
+  "builtins": [],
+  "fixes": []
+}

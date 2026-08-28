@@ -1,0 +1,20 @@
+{
+  "kura-profile": 1,
+  "name": "Highlight annotations",
+  "description": "Reports annotations of type Highlight.",
+  "checks": [
+    {
+      "name": "Highlight annotation",
+      "severity": "info",
+      "all": [
+        {
+          "prop": "annot.type",
+          "op": "==",
+          "value": "Highlight"
+        }
+      ]
+    }
+  ],
+  "builtins": [],
+  "fixes": []
+}

@@ -1,0 +1,108 @@
+{
+  "kura-profile": 1,
+  "name": "Fonts: report",
+  "description": "Embedding, subsetting, type, validity and Unicode coverage of every font.",
+  "checks": [
+    {
+      "name": "Font not embedded",
+      "severity": "error",
+      "all": [
+        {
+          "prop": "font.notEmbedded",
+          "op": "==",
+          "value": true
+        }
+      ]
+    },
+    {
+      "name": "Type 3 font",
+      "severity": "info",
+      "all": [
+        {
+          "prop": "font.isType3",
+          "op": "==",
+          "value": true
+        }
+      ]
+    },
+    {
+      "name": "TrueType font",
+      "severity": "info",
+      "all": [
+        {
+          "prop": "font.isTrueType",
+          "op": "==",
+          "value": true
+        }
+      ]
+    },
+    {
+      "name": "CID font",
+      "severity": "info",
+      "all": [
+        {
+          "prop": "font.isCid",
+          "op": "==",
+          "value": true
+        }
+      ]
+    },
+    {
+      "name": "Font not subset",
+      "severity": "info",
+      "all": [
+        {
+          "prop": "font.notSubset",
+          "op": "==",
+          "value": true
+        }
+      ]
+    },
+    {
+      "name": "Subset missing glyphs in use",
+      "severity": "error",
+      "all": [
+        {
+          "prop": "font.subsetComplete",
+          "op": "==",
+          "value": false
+        }
+      ]
+    },
+    {
+      "name": "Text without Unicode",
+      "severity": "warning",
+      "all": [
+        {
+          "prop": "font.unicodeComplete",
+          "op": "==",
+          "value": false
+        }
+      ]
+    },
+    {
+      "name": "Invalid font program",
+      "severity": "error",
+      "all": [
+        {
+          "prop": "font.invalid",
+          "op": "==",
+          "value": true
+        }
+      ]
+    },
+    {
+      "name": "Glyph falls back to .notdef",
+      "severity": "error",
+      "all": [
+        {
+          "prop": "font.notdefUsed",
+          "op": "==",
+          "value": true
+        }
+      ]
+    }
+  ],
+  "builtins": [],
+  "fixes": []
+}

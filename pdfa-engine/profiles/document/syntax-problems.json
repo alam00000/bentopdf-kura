@@ -1,0 +1,13 @@
+{
+  "kura-profile": 1,
+  "name": "Syntax problems",
+  "description": "Reports structural problems found while parsing.",
+  "checks": [],
+  "builtins": [
+    {
+      "name": "syntaxProblems",
+      "severity": "error"
+    }
+  ],
+  "fixes": []
+}

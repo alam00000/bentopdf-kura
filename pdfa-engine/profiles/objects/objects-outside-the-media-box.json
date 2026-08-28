@@ -1,0 +1,20 @@
+{
+  "kura-profile": 1,
+  "name": "Objects outside the media box",
+  "description": "Reports content entirely outside the page.",
+  "checks": [
+    {
+      "name": "Object outside the media box",
+      "severity": "warning",
+      "all": [
+        {
+          "prop": "content.outsideMediaBox",
+          "op": "==",
+          "value": true
+        }
+      ]
+    }
+  ],
+  "builtins": [],
+  "fixes": []
+}

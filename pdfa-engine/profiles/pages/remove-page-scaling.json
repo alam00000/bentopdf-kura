@@ -1,0 +1,13 @@
+{
+  "kura-profile": 1,
+  "name": "Remove page scaling",
+  "description": "Removes the user unit so pages output at their nominal size.",
+  "checks": [],
+  "builtins": [],
+  "fixes": [
+    {
+      "op": "removepagescaling",
+      "params": []
+    }
+  ]
+}

@@ -1,0 +1,14 @@
+{
+  "kura-profile": 1,
+  "name": "Check PDF/E-1",
+  "description": "Reports every deviation from PDF/E-1; convert with --level e1 to fix them.",
+  "checks": [],
+  "builtins": [
+    {
+      "name": "conformsTo",
+      "severity": "error",
+      "level": "e1"
+    }
+  ],
+  "fixes": []
+}

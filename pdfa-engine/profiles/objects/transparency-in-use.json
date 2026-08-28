@@ -1,0 +1,36 @@
+{
+  "kura-profile": 1,
+  "name": "Transparency in use",
+  "description": "Reports every object drawn with transparency.",
+  "checks": [
+    {
+      "name": "Transparency in use",
+      "severity": "info",
+      "all": [
+        {
+          "prop": "gstate.transparency",
+          "op": "==",
+          "value": true
+        }
+      ]
+    },
+    {
+      "name": "Blend mode other than Normal",
+      "severity": "info",
+      "all": [
+        {
+          "prop": "gstate.blendMode",
+          "op": "!=",
+          "value": "Normal"
+        },
+        {
+          "prop": "gstate.blendMode",
+          "op": "!=",
+          "value": "Compatible"
+        }
+      ]
+    }
+  ],
+  "builtins": [],
+  "fixes": []
+}

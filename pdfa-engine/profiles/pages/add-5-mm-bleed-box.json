@@ -1,0 +1,17 @@
+{
+  "kura-profile": 1,
+  "name": "Add 5 mm bleed box",
+  "description": "Sets a bleed box 5 mm outside the trim box, limited by the media box.",
+  "checks": [],
+  "builtins": [],
+  "fixes": [
+    {
+      "op": "generatebleed",
+      "params": [
+        "Amount",
+        "5",
+        "mm"
+      ]
+    }
+  ]
+}

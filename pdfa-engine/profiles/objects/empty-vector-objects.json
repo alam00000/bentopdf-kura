@@ -1,0 +1,20 @@
+{
+  "kura-profile": 1,
+  "name": "Empty vector objects",
+  "description": "Reports paths that neither fill nor stroke.",
+  "checks": [
+    {
+      "name": "Empty vector object",
+      "severity": "info",
+      "all": [
+        {
+          "prop": "content.emptyVector",
+          "op": "==",
+          "value": true
+        }
+      ]
+    }
+  ],
+  "builtins": [],
+  "fixes": []
+}

@@ -1,0 +1,14 @@
+{
+  "kura-profile": 1,
+  "name": "Check PDF/VT-2",
+  "description": "Reports every deviation from PDF/VT-2; validated only; it references an external press profile.",
+  "checks": [],
+  "builtins": [
+    {
+      "name": "conformsTo",
+      "severity": "error",
+      "level": "vt2"
+    }
+  ],
+  "fixes": []
+}

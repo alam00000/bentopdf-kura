@@ -1,0 +1,20 @@
+{
+  "kura-profile": 1,
+  "name": "PDF 2.0 required",
+  "description": "Reports files whose requirements say they need a PDF 2.0 reader.",
+  "checks": [
+    {
+      "name": "Requires PDF 2.0",
+      "severity": "info",
+      "all": [
+        {
+          "prop": "doc.requiresPdf20",
+          "op": "==",
+          "value": true
+        }
+      ]
+    }
+  ],
+  "builtins": [],
+  "fixes": []
+}

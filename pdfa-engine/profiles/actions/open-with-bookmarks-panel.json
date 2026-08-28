@@ -1,0 +1,16 @@
+{
+  "kura-profile": 1,
+  "name": "Open with bookmarks panel",
+  "description": "Sets the initial view to show the bookmarks panel.",
+  "checks": [],
+  "builtins": [],
+  "fixes": [
+    {
+      "op": "setinitialviewdocumentoptions",
+      "params": [
+        "UseOutlines",
+        "SinglePage"
+      ]
+    }
+  ]
+}

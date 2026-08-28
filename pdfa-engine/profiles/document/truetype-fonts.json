@@ -1,0 +1,20 @@
+{
+  "kura-profile": 1,
+  "name": "TrueType fonts",
+  "description": "Reports truetype fonts.",
+  "checks": [
+    {
+      "name": "TrueType fonts",
+      "severity": "info",
+      "all": [
+        {
+          "prop": "font.isTrueType",
+          "op": "==",
+          "value": true
+        }
+      ]
+    }
+  ],
+  "builtins": [],
+  "fixes": []
+}

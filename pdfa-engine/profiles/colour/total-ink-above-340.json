@@ -1,0 +1,31 @@
+{
+  "kura-profile": 1,
+  "name": "Total ink above 340%",
+  "description": "Reports fills and strokes whose total area coverage exceeds 340%.",
+  "checks": [
+    {
+      "name": "Total ink above 340% in fills",
+      "severity": "error",
+      "all": [
+        {
+          "prop": "fill.totalInk",
+          "op": ">",
+          "value": 340
+        }
+      ]
+    },
+    {
+      "name": "Total ink above 340% in strokes",
+      "severity": "error",
+      "all": [
+        {
+          "prop": "stroke.totalInk",
+          "op": ">",
+          "value": 340
+        }
+      ]
+    }
+  ],
+  "builtins": [],
+  "fixes": []
+}

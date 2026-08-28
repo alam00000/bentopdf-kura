@@ -1,0 +1,15 @@
+{
+  "kura-profile": 1,
+  "name": "All white objects to knockout",
+  "description": "Switches overprint off for every white object.",
+  "checks": [],
+  "builtins": [],
+  "fixes": [
+    {
+      "op": "knockoutwhite",
+      "params": [
+        ""
+      ]
+    }
+  ]
+}

@@ -1,0 +1,20 @@
+{
+  "kura-profile": 1,
+  "name": "File larger than 5 MB",
+  "description": "Reports files above 5 MB.",
+  "checks": [
+    {
+      "name": "File larger than 5 MB",
+      "severity": "warning",
+      "all": [
+        {
+          "prop": "doc.fileSizeBytes",
+          "op": ">",
+          "value": 5242880
+        }
+      ]
+    }
+  ],
+  "builtins": [],
+  "fixes": []
+}

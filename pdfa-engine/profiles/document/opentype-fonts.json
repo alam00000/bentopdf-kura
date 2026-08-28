@@ -1,0 +1,13 @@
+{
+  "kura-profile": 1,
+  "name": "OpenType fonts",
+  "description": "Reports opentype fonts in use.",
+  "checks": [],
+  "builtins": [
+    {
+      "name": "openTypeFonts",
+      "severity": "info"
+    }
+  ],
+  "fixes": []
+}

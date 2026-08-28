@@ -1,0 +1,15 @@
+{
+  "kura-profile": 1,
+  "name": "Set trapped flag to true",
+  "description": "Declares the file trapped.",
+  "checks": [],
+  "builtins": [],
+  "fixes": [
+    {
+      "op": "trappedkey",
+      "params": [
+        "true"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,20 @@
+{
+  "kura-profile": 1,
+  "name": "Sound annotations",
+  "description": "Reports annotations of type Sound.",
+  "checks": [
+    {
+      "name": "Sound annotation",
+      "severity": "info",
+      "all": [
+        {
+          "prop": "annot.type",
+          "op": "==",
+          "value": "Sound"
+        }
+      ]
+    }
+  ],
+  "builtins": [],
+  "fixes": []
+}

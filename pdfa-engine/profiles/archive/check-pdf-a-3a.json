@@ -1,0 +1,14 @@
+{
+  "kura-profile": 1,
+  "name": "Check PDF/A-3a",
+  "description": "Reports every deviation from PDF/A-3a; convert with --level 3a to fix them.",
+  "checks": [],
+  "builtins": [
+    {
+      "name": "conformsTo",
+      "severity": "error",
+      "level": "3a"
+    }
+  ],
+  "fixes": []
+}

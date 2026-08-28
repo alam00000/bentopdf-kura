@@ -1,0 +1,57 @@
+{
+  "kura-profile": 1,
+  "name": "Report white objects",
+  "description": "Finds white fills and strokes, which either knock out or vanish when overprinting.",
+  "checks": [
+    {
+      "name": "White fill",
+      "severity": "info",
+      "all": [
+        {
+          "prop": "paint.isWhite",
+          "op": "==",
+          "value": true
+        },
+        {
+          "prop": "content.isFilled",
+          "op": "==",
+          "value": true
+        }
+      ]
+    },
+    {
+      "name": "White stroke",
+      "severity": "info",
+      "all": [
+        {
+          "prop": "paint.isWhite",
+          "op": "==",
+          "value": true
+        },
+        {
+          "prop": "content.isStroked",
+          "op": "==",
+          "value": true
+        }
+      ]
+    },
+    {
+      "name": "White object set to overprint",
+      "severity": "error",
+      "all": [
+        {
+          "prop": "paint.isWhite",
+          "op": "==",
+          "value": true
+        },
+        {
+          "prop": "fill.overprint",
+          "op": "==",
+          "value": true
+        }
+      ]
+    }
+  ],
+  "builtins": [],
+  "fixes": []
+}

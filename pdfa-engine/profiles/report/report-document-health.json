@@ -1,0 +1,40 @@
+{
+  "kura-profile": 1,
+  "name": "Report document health",
+  "description": "Reports encryption, damage, syntax problems, data after the end marker and the PDF version.",
+  "checks": [
+    {
+      "name": "Data after end of file",
+      "severity": "info",
+      "all": [
+        {
+          "prop": "doc.dataAfterEof",
+          "op": "==",
+          "value": true
+        }
+      ]
+    }
+  ],
+  "builtins": [
+    {
+      "name": "encrypted",
+      "severity": "info"
+    },
+    {
+      "name": "damaged",
+      "severity": "warning"
+    },
+    {
+      "name": "syntaxProblems",
+      "severity": "warning"
+    },
+    {
+      "name": "pdfVersionBelow",
+      "severity": "info",
+      "params": {
+        "version": 1.7
+      }
+    }
+  ],
+  "fixes": []
+}

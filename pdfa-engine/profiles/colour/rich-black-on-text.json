@@ -1,0 +1,25 @@
+{
+  "kura-profile": 1,
+  "name": "Rich black on text",
+  "description": "Reports text painted in rich black, a registration risk at small sizes.",
+  "checks": [
+    {
+      "name": "Rich black text",
+      "severity": "warning",
+      "all": [
+        {
+          "prop": "content.isText",
+          "op": "==",
+          "value": true
+        },
+        {
+          "prop": "paint.richBlackCmyPercent",
+          "op": ">",
+          "value": 0
+        }
+      ]
+    }
+  ],
+  "builtins": [],
+  "fixes": []
+}

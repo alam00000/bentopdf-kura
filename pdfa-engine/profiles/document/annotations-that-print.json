@@ -1,0 +1,20 @@
+{
+  "kura-profile": 1,
+  "name": "Annotations that print",
+  "description": "Reports annotations flagged to appear in print.",
+  "checks": [
+    {
+      "name": "Annotation that prints",
+      "severity": "warning",
+      "all": [
+        {
+          "prop": "annot.prints",
+          "op": "==",
+          "value": true
+        }
+      ]
+    }
+  ],
+  "builtins": [],
+  "fixes": []
+}

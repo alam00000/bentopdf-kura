@@ -1,0 +1,15 @@
+{
+  "kura-profile": 1,
+  "name": "Blend transparency in CMYK",
+  "description": "Sets a CMYK press profile as the page blending colour space.",
+  "checks": [],
+  "builtins": [],
+  "fixes": [
+    {
+      "op": "settransparencyblendcs",
+      "params": [
+        "CMYK"
+      ]
+    }
+  ]
+}

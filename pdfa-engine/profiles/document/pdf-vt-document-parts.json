@@ -1,0 +1,20 @@
+{
+  "kura-profile": 1,
+  "name": "PDF/VT document parts",
+  "description": "Reports the document-part hierarchy PDF/VT builds.",
+  "checks": [
+    {
+      "name": "Document parts present",
+      "severity": "info",
+      "all": [
+        {
+          "prop": "vt.hasDocumentParts",
+          "op": "==",
+          "value": true
+        }
+      ]
+    }
+  ],
+  "builtins": [],
+  "fixes": []
+}

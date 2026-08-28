@@ -1,0 +1,15 @@
+{
+  "kura-profile": 1,
+  "name": "Rotate pages 90 degrees",
+  "description": "Rotates every page by 90 degrees clockwise.",
+  "checks": [],
+  "builtins": [],
+  "fixes": [
+    {
+      "op": "rotatepages",
+      "params": [
+        "90"
+      ]
+    }
+  ]
+}

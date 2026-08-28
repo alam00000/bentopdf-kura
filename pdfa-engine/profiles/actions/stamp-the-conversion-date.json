@@ -1,0 +1,17 @@
+{
+  "kura-profile": 1,
+  "name": "Stamp the conversion date",
+  "description": "Places the conversion date on every page.",
+  "checks": [],
+  "builtins": [],
+  "fixes": [
+    {
+      "op": "placetext",
+      "params": [
+        "Date",
+        "",
+        "9"
+      ]
+    }
+  ]
+}

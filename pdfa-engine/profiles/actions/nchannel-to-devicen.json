@@ -1,0 +1,13 @@
+{
+  "kura-profile": 1,
+  "name": "NChannel to DeviceN",
+  "description": "Converts NChannel colour spaces to plain DeviceN.",
+  "checks": [],
+  "builtins": [],
+  "fixes": [
+    {
+      "op": "convertnchtodevn",
+      "params": []
+    }
+  ]
+}

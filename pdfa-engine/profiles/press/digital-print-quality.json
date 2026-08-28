@@ -1,0 +1,127 @@
+{
+  "kura-profile": 1,
+  "name": "Digital print quality",
+  "description": "The checks a short-run digital job usually fails: soft images, weak lines, heavy black.",
+  "checks": [
+    {
+      "name": "Stroke thinner than 0.125 pt",
+      "severity": "error",
+      "all": [
+        {
+          "prop": "stroke.width",
+          "op": "<=",
+          "value": 0.125
+        }
+      ]
+    },
+    {
+      "name": "Stroke between 0.125 and 0.25 pt",
+      "severity": "warning",
+      "all": [
+        {
+          "prop": "stroke.width",
+          "op": "<=",
+          "value": 0.25
+        },
+        {
+          "prop": "stroke.width",
+          "op": ">",
+          "value": 0.125
+        }
+      ]
+    },
+    {
+      "name": "Thin stroke below 0.25 pt in more than one ink",
+      "severity": "error",
+      "all": [
+        {
+          "prop": "stroke.width",
+          "op": "<=",
+          "value": 0.25
+        },
+        {
+          "prop": "paint.inkCount",
+          "op": ">",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "name": "Total ink above 320% in fills",
+      "severity": "error",
+      "all": [
+        {
+          "prop": "fill.totalInk",
+          "op": ">",
+          "value": 320
+        }
+      ]
+    },
+    {
+      "name": "Total ink above 320% in strokes",
+      "severity": "error",
+      "all": [
+        {
+          "prop": "stroke.totalInk",
+          "op": ">",
+          "value": 320
+        }
+      ]
+    },
+    {
+      "name": "Rich black on text smaller than 12 pt",
+      "severity": "warning",
+      "all": [
+        {
+          "prop": "content.isText",
+          "op": "==",
+          "value": true
+        },
+        {
+          "prop": "text.size",
+          "op": "<",
+          "value": 12
+        },
+        {
+          "prop": "paint.richBlackCmyPercent",
+          "op": ">",
+          "value": 0
+        }
+      ]
+    },
+    {
+      "name": "Image below 200 ppi",
+      "severity": "error",
+      "all": [
+        {
+          "prop": "image.ppi",
+          "op": "<",
+          "value": 200
+        },
+        {
+          "prop": "image.ppi",
+          "op": ">",
+          "value": 0
+        }
+      ]
+    },
+    {
+      "name": "Image between 200 and 300 ppi",
+      "severity": "warning",
+      "all": [
+        {
+          "prop": "image.ppi",
+          "op": "<",
+          "value": 300
+        },
+        {
+          "prop": "image.ppi",
+          "op": ">=",
+          "value": 200
+        }
+      ]
+    }
+  ],
+  "builtins": [],
+  "fixes": []
+}

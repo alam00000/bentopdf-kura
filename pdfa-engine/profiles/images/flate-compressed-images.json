@@ -1,0 +1,20 @@
+{
+  "kura-profile": 1,
+  "name": "Flate-compressed images",
+  "description": "Reports images stored with Flate compression.",
+  "checks": [
+    {
+      "name": "Flate-compressed image",
+      "severity": "info",
+      "all": [
+        {
+          "prop": "image.filter",
+          "op": "contains",
+          "value": "Flate"
+        }
+      ]
+    }
+  ],
+  "builtins": [],
+  "fixes": []
+}

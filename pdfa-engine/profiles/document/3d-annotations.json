@@ -1,0 +1,20 @@
+{
+  "kura-profile": 1,
+  "name": "3D annotations",
+  "description": "Reports annotations of type 3D.",
+  "checks": [
+    {
+      "name": "3D annotation",
+      "severity": "info",
+      "all": [
+        {
+          "prop": "annot.type",
+          "op": "==",
+          "value": "3D"
+        }
+      ]
+    }
+  ],
+  "builtins": [],
+  "fixes": []
+}

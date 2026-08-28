@@ -1,0 +1,20 @@
+{
+  "kura-profile": 1,
+  "name": "Objects outside the bleed box",
+  "description": "Reports content beyond the bleed box.",
+  "checks": [
+    {
+      "name": "Object outside the bleed box",
+      "severity": "info",
+      "all": [
+        {
+          "prop": "content.outsideBleedBox",
+          "op": "==",
+          "value": true
+        }
+      ]
+    }
+  ],
+  "builtins": [],
+  "fixes": []
+}

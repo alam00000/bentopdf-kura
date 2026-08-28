@@ -1,0 +1,20 @@
+{
+  "kura-profile": 1,
+  "name": "Signature fields present",
+  "description": "Reports documents that carry signature fields.",
+  "checks": [
+    {
+      "name": "Signature field",
+      "severity": "info",
+      "all": [
+        {
+          "prop": "signature.hasFields",
+          "op": "==",
+          "value": true
+        }
+      ]
+    }
+  ],
+  "builtins": [],
+  "fixes": []
+}

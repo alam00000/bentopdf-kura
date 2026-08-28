@@ -1,0 +1,25 @@
+{
+  "kura-profile": 1,
+  "name": "Output intent without a profile",
+  "description": "Reports output intents that name a condition but embed no ICC profile.",
+  "checks": [
+    {
+      "name": "Output intent without profile",
+      "severity": "warning",
+      "all": [
+        {
+          "prop": "outputIntent.hasProfile",
+          "op": "==",
+          "value": false
+        },
+        {
+          "prop": "outputIntent.count",
+          "op": ">",
+          "value": 0
+        }
+      ]
+    }
+  ],
+  "builtins": [],
+  "fixes": []
+}

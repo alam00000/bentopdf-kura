@@ -1,0 +1,15 @@
+{
+  "kura-profile": 1,
+  "name": "Black overprint and white knockout",
+  "description": "The two standard overprint repairs in one step.",
+  "checks": [],
+  "builtins": [],
+  "fixes": [
+    {
+      "op": "setoverprintandknockout",
+      "params": [
+        ""
+      ]
+    }
+  ]
+}

@@ -1,0 +1,25 @@
+{
+  "kura-profile": 1,
+  "name": "Text below 9 pt",
+  "description": "Reports text smaller than 9 pt.",
+  "checks": [
+    {
+      "name": "Text smaller than 9 pt",
+      "severity": "warning",
+      "all": [
+        {
+          "prop": "text.size",
+          "op": "<",
+          "value": 9
+        },
+        {
+          "prop": "text.size",
+          "op": ">",
+          "value": 0.01
+        }
+      ]
+    }
+  ],
+  "builtins": [],
+  "fixes": []
+}
