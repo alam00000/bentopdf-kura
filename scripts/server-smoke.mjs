@@ -10,9 +10,16 @@ const PORT = 18000 + Math.floor(Math.random() * 1000);
 const BASE = `http://127.0.0.1:${PORT}`;
 
 let failures = 0;
+let current = null;
 function assert(cond, label) {
   console.log(`${cond ? 'ok  ' : 'FAIL'} ${label}`);
-  if (!cond) failures++;
+  if (!cond) {
+    failures++;
+    if (current) {
+      const lines = current.log().trim().split('\n').slice(-12);
+      if (lines.length && lines[0]) console.log(lines.map((l) => `      server: ${l}`).join('\n'));
+    }
+  }
 }
 
 function minimalPdf(text) {
@@ -70,6 +77,7 @@ const profile = JSON.stringify({
 await writeFile(path.join(dir, 'profile.json'), profile);
 
 let s = startServer({});
+current = s;
 try {
   const health = await waitReady();
   assert(health.ok === true && /\d+\.\d+\.\d+/.test(health.version || ''), `healthz -> ${health.version}`);
@@ -83,8 +91,8 @@ try {
   fd.append('file', new Blob([input]), 'in.pdf');
   r = await fetch(`${BASE}/api/convert?level=2b&report=json&ua=true&lang=en-US`, { method: 'POST', body: fd });
   let j = await r.json();
-  assert(r.status === 200 && j.ok === true && typeof j.pdf === 'string' && j.issues.some((i) => i.code === 'OUTPUT_INTENT_ADDED'), 'convert multipart with JSON report');
-  assert(Buffer.from(j.pdf, 'base64').subarray(0, 4).toString() === '%PDF', 'JSON report carries the PDF');
+  assert(r.status === 200 && j.ok === true && typeof j.pdf === 'string' && (j.issues || []).some((i) => i.code === 'OUTPUT_INTENT_ADDED'), 'convert multipart with JSON report');
+  assert(typeof j.pdf === 'string' && Buffer.from(j.pdf, 'base64').subarray(0, 4).toString() === '%PDF', 'JSON report carries the PDF');
 
   r = await fetch(`${BASE}/api/check?level=2b`, { method: 'POST', body: input });
   j = await r.json();
@@ -145,6 +153,7 @@ try {
 }
 
 s = startServer({ KURA_API_TOKEN: 'secret', KURA_MAX_UPLOAD_MB: '1' });
+current = s;
 try {
   await waitReady();
   let r = await fetch(`${BASE}/api/convert?level=2b`, { method: 'POST', body: input });

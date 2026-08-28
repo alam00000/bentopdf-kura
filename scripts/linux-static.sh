@@ -78,8 +78,8 @@ engine() {
 verify() {
   cd "$ENGINE"
   ldd build/cli/kura || true
-  leaked=$(ldd build/cli/kura | grep '=>' \
-    | grep -viE 'libc\.so|libm\.so|libdl\.so|libpthread\.so|librt\.so|libgcc_s\.so|libstdc\+\+\.so|ld-linux|linux-vdso' \
+  leaked=$({ ldd build/cli/kura | grep '=>' || true; } \
+    | { grep -viE 'libc\.so|libm\.so|libdl\.so|libpthread\.so|librt\.so|libgcc_s\.so|libstdc\+\+\.so|ld-linux|linux-vdso' || true; } \
     | wc -l)
   echo "non-OS shared libraries: $leaked"
   test "$leaked" -eq 0

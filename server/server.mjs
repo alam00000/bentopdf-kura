@@ -25,8 +25,8 @@ const CONCURRENCY = intEnv('KURA_CONCURRENCY', 2, 1, 1024);
 const QUEUE_LIMIT = intEnv('KURA_QUEUE', 8, 0, 100000);
 const TIMEOUT_MS = intEnv('KURA_TIMEOUT_MS', 600000, 1000, 24 * 3600000);
 const API_TOKEN = process.env.KURA_API_TOKEN ?? '';
-const KURA_BIN = process.env.KURA_BIN ?? '/usr/local/bin/kura';
-const PROFILES = process.env.KURA_PROFILES ?? path.join(ROOT, 'pdfa-engine', 'profiles');
+const KURA_BIN = path.resolve(process.env.KURA_BIN ?? '/usr/local/bin/kura');
+const PROFILES = path.resolve(process.env.KURA_PROFILES ?? path.join(ROOT, 'pdfa-engine', 'profiles'));
 
 const LEVELS = ['1b', '1a', '2b', '2u', '2a', '3b', '3u', '3a', '4', '4f', '4e', 'x1a', 'x3', 'x4', 'x6', 'e1', 'vt1', 'vt3'];
 const CHECK_ONLY = ['x4p', 'x5g', 'x5n', 'x5pg', 'x6n', 'x6p', 'vt2'];
