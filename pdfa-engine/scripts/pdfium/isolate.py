@@ -43,7 +43,7 @@ def nm_bin(target, objcopy):
     return local if os.path.exists(local) else "llvm-nm"
 
 def sym_prefix(target):
-    return "" if platform_of(target) == "wasm" else "_"
+    return "_" if platform_of(target) == "mac" else ""
 
 def defined_symbols(path, nm):
     r = subprocess.run([nm, "-g", "--defined-only", path],
