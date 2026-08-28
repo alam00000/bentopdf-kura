@@ -48,8 +48,6 @@ jobs:
             C:/vcpkg/packages
           key: vcpkg-${{ env.VCPKG_TRIPLET }}-qpdf-freetype-lcms-openjpeg
 
-          key: ${{ steps.vcpkg-cache.outputs.cache-primary-key }}
-
       - name: Cache built PDFium
         id: pdfium-cache
         uses: actions/cache/restore@v4
@@ -82,8 +80,6 @@ jobs:
         with:
           path: pdfa-engine/third_party/pdfium-build/dist
           key: pdfium-win-x64-${{ env.PDFIUM_BRANCH }}-${{ hashFiles('pdfa-engine/scripts/pdfium/*') }}-vcpkg-1
-
-          key: ${{ steps.pdfium-cache.outputs.cache-primary-key }}
 
       - name: Configure and build
         working-directory: pdfa-engine
