@@ -57,7 +57,7 @@ if [ ! -f "$TP/build-lcms2-wasm/src/liblcms2.a" ]; then
   fi
   echo "==> building lcms2 for wasm"
   mkdir -p "$TP/build-lcms2-wasm"
-  (cd "$TP/build-lcms2-wasm" && emconfigure "$TP/lcms2/configure" \
+  (cd "$TP/build-lcms2-wasm" && emconfigure "$TP/lcms2/configure" --host=wasm32-unknown-emscripten \
       --disable-shared --enable-static --without-jpeg --without-tiff --without-zlib >/dev/null \
     && emmake make -j"$JOBS" -C src >/dev/null)
 fi
