@@ -41,7 +41,7 @@ jobs:
       - name: Install engine dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y --no-install-recommends libglib2.0-dev \
+          sudo apt-get install -y --no-install-recommends libglib2.0-dev clang lld \
             cmake ninja-build pkg-config zlib1g-dev libjpeg-dev \
             libfreetype-dev libpng-dev libopenjp2-7-dev liblcms2-dev \
             libssl-dev qpdf
@@ -68,14 +68,14 @@ jobs:
           cmake --install /tmp/qpdf-build --component dev
           cmake --install /tmp/qpdf-build --component lib
 
-      - name: Cache Little CMS and OpenJPEG
+      - name: Cache FreeType, Little CMS and OpenJPEG
         id: deps-cache
         uses: actions/cache@v4
         with:
           path: ~/deps-install
-          key: static-deps-lcms2-2.16-openjpeg-2.5.4-${{ runner.os }}
+          key: static-deps-lcms2-2.16-openjpeg-2.5.4-freetype-2.13.2-${{ runner.os }}
 
-      - name: Build Little CMS and OpenJPEG from source (static)
+      - name: Build FreeType, Little CMS and OpenJPEG from source (static)
         if: steps.deps-cache.outputs.cache-hit != 'true'
         run: |
           curl -sSL -o /tmp/lcms2.tar.gz https://github.com/mm2/Little-CMS/releases/download/lcms2.16/lcms2-2.16.tar.gz
@@ -88,14 +88,24 @@ jobs:
             -DBUILD_CODEC=OFF -DBUILD_TESTING=OFF -DCMAKE_INSTALL_PREFIX="$HOME/deps-install"
           cmake --build /tmp/openjpeg-build
           cmake --install /tmp/openjpeg-build
+          curl -sSL -o /tmp/freetype.tar.gz https://gitlab.freedesktop.org/freetype/freetype/-/archive/VER-2-13-2/freetype-VER-2-13-2.tar.gz
+          tar -xzf /tmp/freetype.tar.gz -C /tmp
+          cmake -S /tmp/freetype-VER-2-13-2 -B /tmp/freetype-build -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=OFF \
+            -DFT_DISABLE_HARFBUZZ=ON -DFT_DISABLE_BROTLI=ON -DFT_DISABLE_BZIP2=ON \
+            -DFT_REQUIRE_ZLIB=ON -DFT_REQUIRE_PNG=ON -DCMAKE_INSTALL_PREFIX="$HOME/deps-install"
+          cmake --build /tmp/freetype-build
+          cmake --install /tmp/freetype-build
 
       - name: Configure and build
         working-directory: pdfa-engine
         run: |
           cmake -B build -G Ninja \
             -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ \
+            -DCMAKE_EXE_LINKER_FLAGS=-fuse-ld=lld \
             -DPDFA_STATIC_DEPS=ON \
-            -DCMAKE_PREFIX_PATH="$HOME/qpdf-install;$HOME/deps-install"
+            -DCMAKE_PREFIX_PATH="$HOME/deps-install;$HOME/qpdf-install"
           cmake --build build --target kura kura_sdk
 
       - name: Assert the binary is self-contained
