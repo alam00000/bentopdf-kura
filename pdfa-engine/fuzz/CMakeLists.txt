@@ -3,7 +3,7 @@ option(PDFA_FUZZ_LIBFUZZER
   OFF)
 
 set(PDFA_FUZZ_ENGINE "$ENV{LIB_FUZZING_ENGINE}" CACHE STRING
-  "Fuzzing engine to link; defaults to LIB_FUZZING_ENGINE from the environment (OSS-Fuzz)")
+  "Fuzzing engine to link; defaults to LIB_FUZZING_ENGINE from the environment (ClusterFuzzLite)")
 
 set(PDFA_FUZZ_TARGETS convert profile invoice icc password)
 
