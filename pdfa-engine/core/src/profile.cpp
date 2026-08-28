@@ -1691,19 +1691,7 @@ void reportRuleHits(Ctx& ctx, const PfProfile& prof, const Events& ev) {
                                                    ? rule.severity : 1]) +
                            ": " + displayName(rule, conds) + " (" + std::to_string(hits) +
                            " hit(s)";
-      if (!pages.empty()) {
-        detail += ", page";
-        detail += pages.size() > 1 ? "s " : " ";
-        int shown = 0;
-        for (int p : pages) {
-          if (shown == 8) {
-            detail += ", …";
-            break;
-          }
-          detail += (shown ? ", " : "") + std::to_string(p);
-          ++shown;
-        }
-      }
+      if (!pages.empty()) detail += ", " + pageRangeList(pages);
       detail += ")";
       ctx.res.analysis.push_back({"PROFILE_HIT", detail, false});
     }

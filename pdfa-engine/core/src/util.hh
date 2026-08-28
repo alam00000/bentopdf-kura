@@ -4,6 +4,7 @@
 #include <qpdf/QPDFObjectHandle.hh>
 #include <cmath>
 #include <cstdint>
+#include <iterator>
 #include <set>
 #include <string>
 #include <vector>
@@ -107,6 +108,26 @@ inline std::vector<QPDFObjectHandle> normalAppearanceStreams(QPDFObjectHandle an
     }
   }
   return streams;
+}
+
+inline std::string pageRangeList(const std::set<int>& pages) {
+  std::string out;
+  auto it = pages.begin();
+  while (it != pages.end()) {
+    int start = *it;
+    int end = start;
+    auto next = std::next(it);
+    while (next != pages.end() && *next == end + 1) {
+      end = *next;
+      ++next;
+    }
+    if (!out.empty()) out += ", ";
+    if (end - start >= 2) out += std::to_string(start) + "-" + std::to_string(end);
+    else if (end == start + 1) out += std::to_string(start) + ", " + std::to_string(end);
+    else out += std::to_string(start);
+    it = next;
+  }
+  return (pages.size() == 1 ? "page " : "pages ") + out;
 }
 
 inline std::string lowerAscii(std::string s) {
