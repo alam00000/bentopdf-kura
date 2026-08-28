@@ -87,6 +87,8 @@ struct Result {
 
 Result convert(const unsigned char* data, std::size_t size, const Options& options);
 
+bool verifyPassword(const unsigned char* data, std::size_t size, const std::string& password);
+
 bool issueIsNormalization(const std::string& code);
 
 bool levelFromString(const std::string& s, Level& out);

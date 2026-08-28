@@ -125,10 +125,16 @@ emscripten::val convertJs(emscripten::val data, const std::string& level,
   return result;
 }
 
-std::string versionJs() { return std::string("pdfa-engine ") + pdfa::kEngineVersion; }
+bool verifyPasswordJs(emscripten::val data, const std::string& password) {
+  std::vector<uint8_t> input = emscripten::convertJSArrayToNumberVector<uint8_t>(data);
+  return pdfa::verifyPassword(input.data(), input.size(), password);
+}
+
+std::string versionJs() { return std::string(pdfa::kEngineName) + " " + pdfa::kEngineVersion; }
 }
 
 EMSCRIPTEN_BINDINGS(pdfa) {
   emscripten::function("convert", &convertJs);
+  emscripten::function("verifyPassword", &verifyPasswordJs);
   emscripten::function("version", &versionJs);
 }
