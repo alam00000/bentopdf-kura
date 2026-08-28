@@ -1,0 +1,54 @@
+{
+  "name": "kura-pdf",
+  "version": "1.1.0",
+  "description": "Kura, the open source PDF standards and preflight engine by BentoPDF, compiled to WebAssembly: convert any PDF to PDF/A, PDF/UA, PDF/X, PDF/E or PDF/VT, check it, run print preflight, and build e-invoices.",
+  "license": "AGPL-3.0-only",
+  "type": "module",
+  "main": "index.js",
+  "types": "index.d.ts",
+  "bin": {
+    "kura": "bin/kura.js"
+  },
+  "exports": {
+    ".": {
+      "types": "./index.d.ts",
+      "import": "./index.js"
+    },
+    "./engine/kura.js": "./engine/kura.js",
+    "./engine/kura.wasm": "./engine/kura.wasm",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "index.js",
+    "index.d.ts",
+    "bin",
+    "engine",
+    "NOTICE.md"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/alam00000/bentopdf-kura.git"
+  },
+  "homepage": "https://kura.bentopdf.com",
+  "bugs": {
+    "url": "https://github.com/alam00000/bentopdf-kura/issues"
+  },
+  "keywords": [
+    "pdf",
+    "pdfa",
+    "pdf/a",
+    "pdfua",
+    "pdfx",
+    "archival",
+    "accessibility",
+    "preflight",
+    "factur-x",
+    "zugferd",
+    "xrechnung",
+    "wasm",
+    "webassembly"
+  ]
+}

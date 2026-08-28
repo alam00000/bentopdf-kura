@@ -1,0 +1,33 @@
+{
+  "name": "bentopdf-kura",
+  "version": "1.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Kura, the open source PDF standards engine by BentoPDF",
+  "license": "AGPL-3.0-only",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/alam00000/bentopdf-kura.git"
+  },
+  "homepage": "https://kura.bentopdf.com",
+  "bugs": {
+    "url": "https://github.com/alam00000/bentopdf-kura/issues"
+  },
+  "scripts": {
+    "lint": "eslint packages/npm/kura-pdf/index.js packages/npm/kura-pdf/bin scripts site/worker.js site/serve.mjs",
+    "smoke": "node scripts/smoke.mjs",
+    "site": "node site/serve.mjs",
+    "docs:dev": "vitepress dev docs",
+    "docs:build": "vitepress build docs",
+    "docs:preview": "vitepress preview docs"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.20.0",
+    "eslint": "^9.20.0",
+    "globals": "^15.14.0",
+    "vitepress": "^1.6.3"
+  }
+}
