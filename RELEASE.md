@@ -33,8 +33,8 @@ CI does the rest, in order:
    that every package version matches the tag, fills the platform packages
    from the release archives, assembles `kura-pdf-wasm` from the wasm tarball,
    runs both smoke tests (the native one against the released Linux binary),
-   and publishes with provenance in dependency order: `kura-pdf-linux-x64`,
-   `kura-pdf-darwin-arm64`, `kura-pdf-win32-x64`, then `kura-pdf-wasm`, then
+   and publishes with provenance in dependency order: `@bentopdf/kura-pdf-linux-x64`,
+   `@bentopdf/kura-pdf-darwin-arm64`, `@bentopdf/kura-pdf-win32-x64`, then `kura-pdf-wasm`, then
    `kura-pdf`, waiting after each until the registry serves it. A platform
    whose archive is missing is skipped with a log line and ships in the next
    release; a package already on the registry at that version is skipped, so

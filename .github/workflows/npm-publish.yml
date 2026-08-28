@@ -75,20 +75,21 @@ jobs:
           set -e
           VERSION="${TAG#v}"
           publish() {
-            local pkg=$1
-            if [ "$FORCE" != "true" ] && [ "$(npm view "$pkg@$VERSION" version 2>/dev/null)" = "$VERSION" ]; then
-              echo "$pkg $VERSION is already on the registry; skipping"
+            local dir=$1 name
+            name=$(node -p "require('./packages/npm/$dir/package.json').name")
+            if [ "$FORCE" != "true" ] && [ "$(npm view "$name@$VERSION" version 2>/dev/null)" = "$VERSION" ]; then
+              echo "$name $VERSION is already on the registry; skipping"
               return 0
             fi
-            (cd "packages/npm/$pkg" && npm publish --provenance --access public --ignore-scripts)
+            (cd "packages/npm/$dir" && npm publish --provenance --access public --ignore-scripts)
             for i in $(seq 1 30); do
-              if [ "$(npm view "$pkg@$VERSION" version 2>/dev/null)" = "$VERSION" ]; then
-                echo "$pkg $VERSION is live"
+              if [ "$(npm view "$name@$VERSION" version 2>/dev/null)" = "$VERSION" ]; then
+                echo "$name $VERSION is live"
                 return 0
               fi
               sleep 10
             done
-            echo "$pkg $VERSION did not appear on the registry"
+            echo "$name $VERSION did not appear on the registry"
             return 1
           }
           missing=""

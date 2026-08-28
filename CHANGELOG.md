@@ -9,7 +9,7 @@ All notable changes to this project are documented here. The format follows
 ### Added
 
 - `kura-pdf` on npm is now the native engine for Node.js: the binary arrives
-  through `kura-pdf-linux-x64`, `kura-pdf-darwin-arm64` or `kura-pdf-win32-x64`,
+  through `@bentopdf/kura-pdf-linux-x64`, `@bentopdf/kura-pdf-darwin-arm64` or `@bentopdf/kura-pdf-win32-x64`,
   runs in a subprocess per call, and the `kura` command is the native CLI with
   every flag, signing and OCR included. The API adds `sign`, `ocr`,
   `ocrEngine`, `fontFolder`, `timeoutMs` and `binaryPath()`.

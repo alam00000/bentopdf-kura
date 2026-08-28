@@ -8,7 +8,7 @@ Two packages carry the engine, with the same API:
 
 | Package | What it is | Use it when |
 |---|---|---|
-| `kura-pdf` | the native engine, installed through a platform package (`kura-pdf-linux-x64`, `kura-pdf-darwin-arm64`, `kura-pdf-win32-x64`) and run in a subprocess | you are on Linux x64, macOS arm64 or Windows x64 and want speed, raster flattening, signing and OCR |
+| `kura-pdf` | the native engine, installed through a platform package (`@bentopdf/kura-pdf-linux-x64`, `@bentopdf/kura-pdf-darwin-arm64`, `@bentopdf/kura-pdf-win32-x64`) and run in a subprocess | you are on Linux x64, macOS arm64 or Windows x64 and want speed, raster flattening, signing and OCR |
 | `kura-pdf-wasm` | the engine compiled to WebAssembly, no native binaries, no postinstall downloads | any other platform, browsers, or environments that cannot ship native binaries |
 
 Both need Node 22 or newer and are ESM only. `kura-pdf` installs the `kura` command, the native CLI itself; `kura-pdf-wasm` installs `kura-wasm`. On a platform without a native package, `kura-pdf` throws `ENGINE_MISSING`; set `KURA_BIN` to a binary you built to use it anyway.
