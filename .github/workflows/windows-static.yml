@@ -27,7 +27,7 @@ jobs:
 
       - name: Cache vcpkg packages
         id: vcpkg-cache
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@v6
         with:
           path: |
             C:/vcpkg/installed
@@ -41,7 +41,7 @@ jobs:
 
       - name: Save vcpkg packages
         if: steps.vcpkg-cache.outputs.cache-hit != 'true'
-        uses: actions/cache/save@v4
+        uses: actions/cache/save@v6
         with:
           path: |
             C:/vcpkg/installed
@@ -50,7 +50,7 @@ jobs:
 
       - name: Cache built PDFium
         id: pdfium-cache
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@v6
         with:
           path: pdfa-engine/third_party/pdfium-build/dist
           key: pdfium-win-x64-${{ env.PDFIUM_BRANCH }}-${{ hashFiles('pdfa-engine/scripts/pdfium/*') }}-vcpkg-1
@@ -76,7 +76,7 @@ jobs:
 
       - name: Save built PDFium
         if: steps.pdfium-cache.outputs.cache-hit != 'true'
-        uses: actions/cache/save@v4
+        uses: actions/cache/save@v6
         with:
           path: pdfa-engine/third_party/pdfium-build/dist
           key: pdfium-win-x64-${{ env.PDFIUM_BRANCH }}-${{ hashFiles('pdfa-engine/scripts/pdfium/*') }}-vcpkg-1

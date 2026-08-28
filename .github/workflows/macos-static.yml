@@ -23,7 +23,7 @@ jobs:
 
       - name: Cache built PDFium
         id: pdfium-cache
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@v6
         with:
           path: pdfa-engine/third_party/pdfium-build/dist
           key: pdfium-mac-arm64-${{ env.PDFIUM_BRANCH }}-${{ hashFiles('pdfa-engine/scripts/pdfium/*') }}
@@ -38,7 +38,7 @@ jobs:
 
       - name: Save built PDFium
         if: steps.pdfium-cache.outputs.cache-hit != 'true'
-        uses: actions/cache/save@v4
+        uses: actions/cache/save@v6
         with:
           path: pdfa-engine/third_party/pdfium-build/dist
           key: pdfium-mac-arm64-${{ env.PDFIUM_BRANCH }}-${{ hashFiles('pdfa-engine/scripts/pdfium/*') }}

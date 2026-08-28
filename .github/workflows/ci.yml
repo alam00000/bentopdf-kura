@@ -39,7 +39,7 @@ jobs:
             libfreetype-dev libopenjp2-7-dev liblcms2-dev libgnutls28-dev
       - name: Cache qpdf
         id: qpdf-cache
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: ~/qpdf-install
           key: qpdf-${{ env.QPDF_VERSION }}-${{ runner.os }}
@@ -115,7 +115,7 @@ jobs:
             libfreetype-dev libopenjp2-7-dev liblcms2-dev libgnutls28-dev
       - name: Cache qpdf
         id: qpdf-cache
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: ~/qpdf-install
           key: qpdf-${{ env.QPDF_VERSION }}-${{ runner.os }}
