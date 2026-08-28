@@ -42,6 +42,14 @@ case "$(uname -s)" in
 esac
 NINJA="$SRC/third_party/ninja/ninja$EXE"
 OBJCOPY="$SRC/third_party/llvm-build/Release+Asserts/bin/llvm-objcopy$EXE"
+if [[ ! -x "$OBJCOPY" ]]; then
+  for candidate in "$(command -v llvm-objcopy 2>/dev/null || true)" "/c/Program Files/LLVM/bin/llvm-objcopy.exe" "/usr/bin/llvm-objcopy" "/opt/homebrew/opt/llvm/bin/llvm-objcopy"; do
+    if [[ -n "$candidate" && -x "$candidate" ]]; then
+      OBJCOPY="$candidate"
+      break
+    fi
+  done
+fi
 
 for tool in "$GN" "$NINJA" "$OBJCOPY"; do
   [[ -x "$tool" ]] || { echo "missing $tool (run sync.sh first)" >&2; exit 5; }
