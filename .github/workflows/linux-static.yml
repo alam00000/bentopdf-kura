@@ -42,7 +42,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends libglib2.0-dev \
-            cmake ninja-build pkg-config zlib1g-dev libjpeg62-turbo-dev \
+            cmake ninja-build pkg-config zlib1g-dev libjpeg-dev \
             libfreetype-dev libpng-dev libopenjp2-7-dev liblcms2-dev \
             libssl-dev qpdf
 

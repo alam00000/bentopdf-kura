@@ -35,6 +35,8 @@ jobs:
           path: pdfa-engine/third_party/pdfium-build/dist
           key: pdfium-wasm-${{ env.PDFIUM_BRANCH }}-${{ hashFiles('pdfa-engine/scripts/pdfium/*') }}
 
+      - name: Install the packages the PDFium build configuration probes
+        run: sudo apt-get install -y --no-install-recommends libglib2.0-dev
       - name: Build PDFium from source
         if: steps.pdfium-cache.outputs.cache-hit != 'true'
         working-directory: pdfa-engine

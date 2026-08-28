@@ -64,7 +64,7 @@ case "$TARGET" in
              || command -v emcc)")")/libexec}"
     [[ -x "$EMROOT/emcc" ]] || EMROOT="$(dirname "$(command -v emcc)")"
     EXTRA=$'target_os="emscripten"\ntarget_cpu="wasm"\nemscripten_path="'"$EMROOT"$'/"'
-    ARGS="$ARGS is_clang=true"
+    ARGS="$ARGS is_clang=true use_glib=false"
     ;;
   *) echo "unknown target: $TARGET" >&2; exit 2 ;;
 esac
