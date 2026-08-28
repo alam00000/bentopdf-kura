@@ -81,6 +81,35 @@ jobs:
           path: pdfa-engine/third_party/pdfium-build/dist
           key: pdfium-win-x64-${{ env.PDFIUM_BRANCH }}-${{ hashFiles('pdfa-engine/scripts/pdfium/*') }}-vcpkg-1
 
+      - name: Rebuild the PDFium archive index with the Microsoft librarian
+        working-directory: pdfa-engine
+        run: |
+          set -e
+          LIB=$(find "/c/Program Files/Microsoft Visual Studio" -name lib.exe -path '*Hostx64/x64*' 2>/dev/null | head -1)
+          DUMPBIN=$(find "/c/Program Files/Microsoft Visual Studio" -name dumpbin.exe -path '*Hostx64/x64*' 2>/dev/null | head -1)
+          A=third_party/pdfium-build/dist/win-x64/pdfium.lib
+          ls -la "$A"
+          "$DUMPBIN" //LINKERMEMBER:2 "$A" > index-before.txt || true
+          echo "index before: $(grep -c ' pdfium_jconst_' index-before.txt || true) renamed jconst, $(grep -c ' jconst_' index-before.txt || true) original jconst, $(grep -c ' pdfium_FT_' index-before.txt || true) renamed FT_"
+          "$DUMPBIN" //SYMBOLS "$A" | grep -m4 -E 'jconst_rgb_ycc_convert_avx2' || true
+          cp "$A" "$A.objcopy"
+          "$LIB" //NOLOGO //OUT:"$A.new" "$A"
+          mv -f "$A.new" "$A"
+          "$DUMPBIN" //LINKERMEMBER:2 "$A" > index-after.txt || true
+          echo "index after: $(grep -c ' pdfium_jconst_' index-after.txt || true) renamed jconst, $(grep -c ' jconst_' index-after.txt || true) original jconst, $(grep -c ' pdfium_FT_' index-after.txt || true) renamed FT_"
+
+      - name: Keep the renamed archive for local analysis
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pdfium-win-x64-renamed
+          path: |
+            pdfa-engine/third_party/pdfium-build/dist/win-x64/pdfium.lib.objcopy
+            pdfa-engine/index-before.txt
+            pdfa-engine/index-after.txt
+          retention-days: 3
+          if-no-files-found: ignore
+
       - name: Configure and build
         working-directory: pdfa-engine
         run: |
