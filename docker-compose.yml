@@ -1,0 +1,12 @@
+services:
+  kura:
+    image: ghcr.io/alam00000/bentopdf-kura:latest
+    container_name: kura
+    restart: unless-stopped
+    ports:
+      - '8080:8080'
+    environment:
+      - KURA_MAX_UPLOAD_MB=500
+      - KURA_CONCURRENCY=2
+    tmpfs:
+      - /tmp

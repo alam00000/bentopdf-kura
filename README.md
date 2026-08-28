@@ -31,7 +31,7 @@ Try the converter and preflight at [kura.bentopdf.com](https://kura.bentopdf.com
   * [CLI](#cli)
   * [npm package](#npm-package)
   * [Browser (WebAssembly)](#browser-webassembly)
-  * [Docker](#docker)
+  * [Self-hosted service](#self-hosted-service)
   * [C API](#c-api)
 * [The standards](#the-standards)
 * [Preflight](#preflight)
@@ -108,7 +108,7 @@ npm install -g kura-pdf          # the engine as WebAssembly, plus the kura comm
 ```
 
 ```bash
-docker run --rm -v "$PWD:/work" ghcr.io/alam00000/bentopdf-kura:latest --level 2b in.pdf out.pdf
+docker run -d -p 8080:8080 ghcr.io/alam00000/bentopdf-kura:latest   # web interface + HTTP API on your own server
 ```
 
 To build the engine yourself, see [BUILDING.md](https://github.com/alam00000/bentopdf-kura/blob/main/BUILDING.md).
@@ -172,13 +172,24 @@ const result = kura.convert(new Uint8Array(pdfBytes), '2b', { ua: true });
 if (result.ok) save(result.pdf);
 ```
 
-### Docker
+### Self-hosted service
+
+The Docker image includes the web interface (converter and preflight) at `http://localhost:8080` and an HTTP API, both backed by the native engine.
+
+Your files are processed on your own server.
 
 ```bash
-docker run --rm -v "$PWD:/work" ghcr.io/alam00000/bentopdf-kura:latest --check --level 2b in.pdf
+docker run -d -p 8080:8080 ghcr.io/alam00000/bentopdf-kura:latest
+curl -o out.pdf --data-binary @in.pdf 'http://localhost:8080/api/convert?level=2b'
 ```
 
-The image runs as an unprivileged user and processes files on your own machine.
+The same image doubles as the CLI: pass arguments and it converts instead of serving.
+
+```bash
+docker run --rm --user "$(id -u):$(id -g)" -v "$PWD:/work" ghcr.io/alam00000/bentopdf-kura:latest --check --level 2b in.pdf
+```
+
+See [SELF-HOSTING.md](https://github.com/alam00000/bentopdf-kura/blob/main/SELF-HOSTING.md) for the complete API, configuration options, and deployment notes.
 
 ### C API
 

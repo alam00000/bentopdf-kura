@@ -80,8 +80,9 @@ rasterizes; otherwise the module builds without it.
 ## Docker
 
 ```bash
-docker build -t kura pdfa-engine
-docker run --rm -v "$PWD:/work" kura --level 2b in.pdf out.pdf
+docker build -f docker/Dockerfile -t kura .
+docker run -d -p 8080:8080 kura
+docker run --rm --user "$(id -u):$(id -g)" -v "$PWD:/work" kura --level 2b in.pdf out.pdf
 ```
 
 The image builds qpdf 12 from a checksum-pinned tarball and runs as an

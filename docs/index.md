@@ -29,7 +29,7 @@ features:
   - title: Content preserving
     details: Text stays searchable, attachments stay attached, colour is converted through real ICC profiles, and a page is rasterized only when a rule leaves no other way.
   - title: Runs everywhere
-    details: The same engine powers the CLI, the C library, the npm package, the Docker image and the browser build, which runs entirely on your machine.
+    details: The same engine powers the CLI, the C library, the npm package, the self-hosted service and the browser build, which runs entirely on your machine.
 ---
 
 ## What is Kura
@@ -47,7 +47,8 @@ It validates against every public conformance suite: the veraPDF corpus, Isartor
 | Run print preflight on a PDF, in the browser | [kura.bentopdf.com/preflight.html](https://kura.bentopdf.com/preflight.html) |
 | Convert PDFs from the terminal | the [CLI](/cli) |
 | Convert PDFs from Node.js, or in your own web app | the [npm package](/npm) |
-| Run conversions in a container | the [Docker image](/getting-started#in-a-container) |
+| Run it as a service on your own server, web interface included | [Self-hosting](/self-hosting) |
+| Call it over HTTP from any language | the [HTTP API](/http-api) |
 | Embed the engine in another language | the [C API](/c-api) |
 | Build or validate a Factur-X, ZUGFeRD or XRechnung invoice | [E-invoices](/e-invoices) |
 | Run print or archival checks with your own rules | [Preflight profiles](/preflight) |
