@@ -44,6 +44,7 @@ gclient sync --no-history --shallow --force
 
 if [[ -f "$ROOT/pdfium-src/tools/clang/scripts/update.py" ]]; then
   python3 "$ROOT/pdfium-src/tools/clang/scripts/update.py"
+  python3 "$ROOT/pdfium-src/tools/clang/scripts/update.py" --package=objdump || true
 fi
 
 echo "pdfium $PDFIUM_BRANCH @ $(git -C pdfium-src rev-parse HEAD)"
