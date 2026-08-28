@@ -7,6 +7,7 @@
 #include <qpdf/QPDFTokenizer.hh>
 
 #include <cctype>
+#include <map>
 #include <set>
 #include <memory>
 #include <string>
