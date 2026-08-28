@@ -18,6 +18,8 @@ ENGINE_LIBS = {
         "/opt/homebrew/opt/openssl@3/lib/libcrypto.a",
     ],
     "linux": [
+        "~/qpdf-install/lib/libqpdf.a", "~/deps-install/lib/libfreetype.a",
+        "~/deps-install/lib/liblcms2.a", "~/deps-install/lib/libopenjp2.a",
         "/usr/lib/*/libqpdf.a", "/usr/lib/*/libfreetype.a",
         "/usr/lib/*/libpng*.a", "/usr/lib/*/libopenjp2.a",
         "/usr/lib/*/libjpeg.a", "/usr/lib/*/liblcms2.a",
@@ -64,6 +66,7 @@ def entry_points(path, nm, pfx):
 def resolve(patterns, base):
     out = []
     for p in patterns:
+        p = os.path.expanduser(p)
         p = p if os.path.isabs(p) else os.path.join(base, p)
         hits = glob.glob(p)
         out.extend(h for h in hits if os.path.exists(h))
