@@ -28,6 +28,15 @@ jobs:
           path: pdfa-engine/third_party/pdfium-build/dist
           key: pdfium-win-x64-${{ env.PDFIUM_BRANCH }}-${{ hashFiles('pdfa-engine/scripts/pdfium/*') }}
 
+      - name: Install the Windows SDK the PDFium toolchain expects
+        shell: bash
+        run: |
+          SDK_DIR="/c/Program Files (x86)/Windows Kits/10/bin/10.0.28000.0"
+          if [ ! -d "$SDK_DIR/x64" ]; then
+            curl -sL -o "$TEMP/winsdksetup.exe" 'https://go.microsoft.com/fwlink/?linkid=2370315'
+            MSYS2_ARG_CONV_EXCL="*" "$TEMP/winsdksetup.exe" /features OptionId.DesktopCPPx64 /ceip off /quiet /norestart
+          fi
+          echo "$SDK_DIR/x64" >> "$GITHUB_PATH"
       - name: Build PDFium from source
         if: steps.pdfium-cache.outputs.cache-hit != 'true'
         working-directory: pdfa-engine
