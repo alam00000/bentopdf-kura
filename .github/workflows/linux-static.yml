@@ -30,7 +30,7 @@ jobs:
       - name: Install engine dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y --no-install-recommends libglib2.0-dev clang lld \
+          sudo apt-get install -y --no-install-recommends libglib2.0-dev clang lld gdb \
             cmake ninja-build pkg-config zlib1g-dev libjpeg-dev \
             libfreetype-dev libpng-dev libopenjp2-7-dev liblcms2-dev \
             libssl-dev libbz2-dev qpdf
@@ -131,7 +131,11 @@ jobs:
           set -e
           test -z "$(find build third_party -name 'libpdfium.so*' 2>/dev/null)"
           printf '%%PDF-1.7\n1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << >> >>\nendobj\ntrailer\n<< /Size 4 /Root 1 0 R >>\n%%%%EOF\n' > /tmp/in.pdf
-          report=$(./build/cli/kura --level 2b /tmp/in.pdf /tmp/out.pdf)
+          if ! report=$(./build/cli/kura --level 2b /tmp/in.pdf /tmp/out.pdf); then
+            echo "conversion failed with status $?; backtrace:"
+            gdb -batch -ex run -ex bt -ex 'info registers rip' --args ./build/cli/kura --level 2b /tmp/in.pdf /tmp/out.pdf 2>&1 | tail -60
+            exit 1
+          fi
           echo "$report"
           echo "$report" | grep -q '"ok":true'
 
