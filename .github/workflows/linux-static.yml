@@ -29,7 +29,7 @@ jobs:
           sudo apt-get install -y --no-install-recommends libglib2.0-dev clang lld \
             cmake ninja-build pkg-config zlib1g-dev libjpeg-dev \
             libfreetype-dev libpng-dev libopenjp2-7-dev liblcms2-dev \
-            libssl-dev qpdf
+            libssl-dev libbz2-dev qpdf
 
       - name: Cache qpdf
         id: qpdf-cache
