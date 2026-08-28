@@ -14,6 +14,15 @@ BUILDCONFIG_TO = '''} else if (target_os == "emscripten") {
   _default_toolchain = "//build/toolchain/wasm:wasm"
 }'''
 
+RENDERDEVICE_WIN_FROM = '''#if BUILDFLAG(IS_WIN)
+class CFX_PSFontTracker;
+#endif'''
+
+RENDERDEVICE_WIN_TO = '''#if BUILDFLAG(IS_WIN)
+#include <windows.h>
+class CFX_PSFontTracker;
+#endif'''
+
 FXGE_FROM = "if (is_linux || is_chromeos) {"
 FXGE_TO = "if (is_linux || is_chromeos || is_wasm) {"
 
@@ -158,6 +167,9 @@ def main():
     src = pathlib.Path(sys.argv[1])
     target = sys.argv[2]
     patch_generator(src)
+    if target.startswith("win"):
+        patch(src / "core" / "fxge" / "cfx_renderdevice.h",
+              RENDERDEVICE_WIN_FROM, RENDERDEVICE_WIN_TO, "renderdevice: windows.h for HDC")
     if not target.startswith("wasm"):
         print("no wasm patches needed for", target)
         return 0
