@@ -1,6 +1,6 @@
 # CLI
 
-The `kura` command comes two ways with identical flags and identical output: the native binary attached to every [release](https://github.com/alam00000/bentopdf-kura/releases), and the WebAssembly build installed by `npm install -g kura-pdf`. A handful of flags need the host operating system and exist only on the native binary; they are marked below.
+The `kura` command is the native binary: attached to every [release](https://github.com/alam00000/bentopdf-kura/releases), inside the Docker image, and installed by `npm install -g kura-pdf`. `npm install -g kura-pdf-wasm` gives `kura-wasm`, the WebAssembly build with identical flags and identical output for platforms without a native package. A handful of flags need the host operating system and exist only on the native binary; they are marked below.
 
 ## Your first conversion
 

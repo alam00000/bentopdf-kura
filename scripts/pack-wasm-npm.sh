@@ -2,7 +2,7 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-PKG="$ROOT/packages/npm/kura-pdf"
+PKG="$ROOT/packages/npm/kura-pdf-wasm"
 SRC="${1:-$ROOT/pdfa-engine/build-wasm/wasm}"
 
 for f in kura.js kura.wasm; do

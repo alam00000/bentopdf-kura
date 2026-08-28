@@ -6,14 +6,6 @@ export type CheckOnlyLevel = 'x4p' | 'x5g' | 'x5n' | 'x5pg' | 'x6n' | 'x6p' | 'v
 
 export type Bytes = Uint8Array | ArrayBuffer;
 
-export interface SignOptions {
-  p12: Bytes | string;
-  password?: string;
-  name?: string;
-  reason?: string;
-  location?: string;
-}
-
 export interface KuraOptions {
   ua?: boolean;
   lang?: string;
@@ -22,12 +14,12 @@ export interface KuraOptions {
   rasterizePages?: boolean;
   rasterDpi?: number;
   outlineFonts?: boolean;
-  imageMaxPpi?: number;
-  attachXml?: Bytes | string;
+  attachXml?: Bytes;
   attachXmlName?: string;
   facturxProfile?: string;
-  embedSource?: boolean;
+  embedSource?: Bytes;
   embedSourceName?: string;
+  embedSourceMime?: string;
   outputCondition?: string;
   outputConditionInfo?: string;
   registry?: string;
@@ -38,11 +30,7 @@ export interface KuraOptions {
   vtRecords?: string;
   profile?: string;
   analyze?: boolean;
-  sign?: SignOptions;
-  ocr?: boolean;
-  ocrEngine?: string;
-  fontFolder?: string;
-  timeoutMs?: number;
+  now?: string;
 }
 
 export interface Issue {
@@ -84,7 +72,6 @@ export declare class KuraError extends Error {
 export declare const LEVELS: readonly Level[];
 export declare const CHECK_ONLY_LEVELS: readonly CheckOnlyLevel[];
 
-export declare function binaryPath(): string | null;
 export declare function convert(input: Bytes, level?: Level, options?: KuraOptions): Promise<KuraResult>;
 export declare function check(input: Bytes, level?: Level | CheckOnlyLevel, options?: KuraOptions): Promise<KuraCheckResult>;
 export declare function verifyPassword(input: Bytes, password?: string): Promise<boolean>;

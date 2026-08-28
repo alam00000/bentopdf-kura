@@ -44,7 +44,7 @@ export default defineConfig({
         text: 'Reference',
         items: [
           { text: 'CLI', link: '/cli' },
-          { text: 'npm package', link: '/npm' },
+          { text: 'npm packages', link: '/npm' },
           { text: 'HTTP API', link: '/http-api' },
           { text: 'C API', link: '/c-api' },
           { text: 'Rejection codes', link: '/rejections' },

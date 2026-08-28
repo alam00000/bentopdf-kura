@@ -17,23 +17,12 @@ The engine runs as WebAssembly inside your browser. Your file is never uploaded 
 
 ### With npm
 
-Node.js 22 or newer:
-
 ```bash
 npm install -g kura-pdf
 kura --level 2b input.pdf output.pdf
 ```
 
-You should see a JSON report:
-
-```json
-{"file":"input.pdf","ok":true,"level":"2b","engine":"BentoPDF Kura Engine 1.1.0","issues":[
-  {"code":"OUTPUT_INTENT_ADDED","detail":"added sRGB PDF/A output intent","fixed":true},
-  {"code":"FONT_SUBSTITUTED","detail":"embedded LiberationSans as substitute for /Helvetica","fixed":true},
-  {"code":"XMP_REBUILT","detail":"regenerated XMP metadata with PDF/A identification","fixed":true}]}
-```
-
-Reading it: `ok` says the conversion succeeded, `level` is what the output conforms to, and `issues` is every change the engine made, each with a code you can match on. This `kura` runs the WebAssembly build of the engine, so it works on any platform Node runs on.
+`kura-pdf` installs the native engine through a platform package for Linux x64, macOS arm64 or Windows x64; the `kura` command is the native CLI itself. On any other platform, `npm install -g kura-pdf-wasm` gives the `kura-wasm` command with the same flags on the WebAssembly build.
 
 ### With the native binary
 

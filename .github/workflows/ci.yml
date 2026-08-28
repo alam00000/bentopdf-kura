@@ -81,6 +81,10 @@ jobs:
         env:
           ASAN_OPTIONS: detect_leaks=0
         run: node scripts/server-smoke.mjs pdfa-engine/build-asan/cli/kura
+      - name: native npm package smoke against the sanitizer build
+        env:
+          ASAN_OPTIONS: detect_leaks=0
+        run: node scripts/smoke-native.mjs pdfa-engine/build-asan/cli/kura
       - name: Generate seeds + regression sentinels
         working-directory: pdfa-engine
         run: python3 fuzz/gen_seeds.py build-asan/seeds

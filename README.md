@@ -104,7 +104,7 @@ The full methodology, every document with its origin and SHA-256, and the per-fi
 Prebuilt binaries for Linux, Windows and macOS are attached to each [release](https://github.com/alam00000/bentopdf-kura/releases), with a `SHA256SUMS` file.
 
 ```bash
-npm install -g kura-pdf          # the engine as WebAssembly, plus the kura command
+npm install -g kura-pdf          # the native engine for Node.js, plus the kura command (kura-pdf-wasm for everything else)
 ```
 
 ```bash
@@ -152,13 +152,11 @@ Exit status is 0 on success, 1 when check mode found findings, 2 when the input 
 ```js
 import { convert, check } from 'kura-pdf';
 
-const { pdf, issues } = await convert(inputBytes, '2b');
-const { compliant, findings } = await check(inputBytes, '2b');
+const result = await convert(pdfBytes, '2b', { ua: true, lang: 'en-US' });
+const report = await check(result.pdf, '2b');
 ```
 
-The package is the engine compiled to WebAssembly, so it installs on any platform Node 22 runs on with no native binaries and no postinstall downloads. It also installs a `kura` command with the same flags and the same JSON report as the native CLI.
-
-Errors are thrown as `KuraError` with a typed `code` and, for rejections that have one, a `suggestedLevel`.
+`kura-pdf` installs the native engine through a platform package for Linux x64, macOS arm64 or Windows x64 and runs it in a subprocess; every native feature is there, signing and OCR included. `kura-pdf-wasm` is the same API on the WebAssembly build for every other platform and for browsers. See the [npm packages](https://kura.bentopdf.com/docs/npm) page.
 
 ### Browser (WebAssembly)
 

@@ -29,13 +29,17 @@ CI does the rest, in order:
    as its notes and a `SHA256SUMS` file covering every archive. Linux and the
    WebAssembly module are required; the Windows and macOS jobs may fail without
    blocking the release and ship in the next one.
-3. `npm-publish.yml` starts when `release.yml` finishes successfully. It takes
-   the WebAssembly tarball from the release, assembles `kura-pdf`, checks that
-   the package version matches the tag, runs the smoke test, publishes with
-   provenance, and waits until the registry serves the new version. A tag whose
-   version is already on the registry is skipped, so the workflow can be re-run
-   safely; the manual run has a `force` switch for the rare case where that is
-   wrong.
+3. `npm-publish.yml` starts when `release.yml` finishes successfully. It checks
+   that every package version matches the tag, fills the platform packages
+   from the release archives, assembles `kura-pdf-wasm` from the wasm tarball,
+   runs both smoke tests (the native one against the released Linux binary),
+   and publishes with provenance in dependency order: `kura-pdf-linux-x64`,
+   `kura-pdf-darwin-arm64`, `kura-pdf-win32-x64`, then `kura-pdf-wasm`, then
+   `kura-pdf`, waiting after each until the registry serves it. A platform
+   whose archive is missing is skipped with a log line and ships in the next
+   release; a package already on the registry at that version is skipped, so
+   the workflow can be re-run safely, and the manual run has a `force` switch
+   for the rare case where that is wrong.
 
    It runs as its own workflow rather than a job inside `release.yml` on
    purpose: npm's trusted publishing validates the OIDC claim against the
@@ -53,8 +57,7 @@ an OIDC token with `id-token: write` and npm 11.5 or newer exchanges it for a
 short-lived publish credential.
 
 npm only offers that setting for a package that already exists, so the very
-first version of a new package (`kura-pdf` 1.1.0) is published once from a
-maintainer's machine with `npm publish` and the account's second factor; every
+first version of a new package is published once from a maintainer's machine with `npm publish` and the account's second factor; every
 version after that comes from CI. If an `NPM_TOKEN` repository secret exists
 the workflow uses it instead, which is only meant for that bootstrap and
 should be deleted afterwards.

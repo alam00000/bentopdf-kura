@@ -60,17 +60,20 @@ sed -i.bak "s/kEngineVersion = \".*\"/kEngineVersion = \"$VERSION\"/" "$PDFA_HH"
 VERSION="$VERSION" node <<'EOF'
 const fs = require('fs');
 const version = process.env.VERSION;
-for (const p of ['package.json', 'packages/npm/kura-pdf/package.json']) {
+const stamp = (p) => {
   const pkg = JSON.parse(fs.readFileSync(p, 'utf8'));
   pkg.version = version;
+  for (const name of Object.keys(pkg.optionalDependencies ?? {})) pkg.optionalDependencies[name] = version;
   fs.writeFileSync(p, JSON.stringify(pkg, null, 2) + '\n');
   console.log(`stamped ${pkg.name} ${version}`);
-}
+};
+stamp('package.json');
+for (const dir of fs.readdirSync('packages/npm')) stamp(`packages/npm/${dir}/package.json`);
 EOF
 
 make check
 
-git add "$HEADER" "$PDFA_HH" package.json packages/npm/kura-pdf/package.json
+git add "$HEADER" "$PDFA_HH" package.json packages/npm/*/package.json
 if git diff --cached --quiet; then
   echo "==> versions already at $VERSION; tagging current HEAD"
 else
@@ -83,4 +86,4 @@ git push origin "$TAG"
 echo "==> $TAG pushed; CI takes it from here:"
 echo "    1. release.yml builds Linux, Windows, macOS, the wasm module and the docker image"
 echo "    2. it publishes the GitHub release with SHA256SUMS"
-echo "    3. npm-publish.yml publishes kura-pdf"
+echo "    3. npm-publish.yml publishes kura-pdf, kura-pdf-wasm and the platform packages"

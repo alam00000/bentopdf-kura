@@ -46,7 +46,7 @@ It validates against every public conformance suite: the veraPDF corpus, Isartor
 | Convert or check a PDF right now, in the browser | [kura.bentopdf.com](https://kura.bentopdf.com) |
 | Run print preflight on a PDF, in the browser | [kura.bentopdf.com/preflight.html](https://kura.bentopdf.com/preflight.html) |
 | Convert PDFs from the terminal | the [CLI](/cli) |
-| Convert PDFs from Node.js, or in your own web app | the [npm package](/npm) |
+| Convert PDFs from Node.js, or in your own web app | the [npm packages](/npm) |
 | Run it as a service on your own server, web interface included | [Self-hosting](/self-hosting) |
 | Call it over HTTP from any language | the [HTTP API](/http-api) |
 | Embed the engine in another language | the [C API](/c-api) |

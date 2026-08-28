@@ -1,32 +1,30 @@
 {
-  "name": "kura-pdf",
+  "name": "kura-pdf-wasm",
   "version": "1.1.0",
-  "description": "Kura, the open source PDF standards and preflight engine by BentoPDF: convert any PDF to PDF/A, PDF/UA, PDF/X, PDF/E or PDF/VT, check it, run print preflight, sign it and build e-invoices. Native engine for Node.js.",
+  "description": "Kura, the open source PDF standards and preflight engine by BentoPDF, compiled to WebAssembly: runs on any platform and in browsers, no native binaries.",
   "license": "AGPL-3.0-only",
   "type": "module",
   "main": "index.js",
   "types": "index.d.ts",
   "bin": {
-    "kura": "bin/kura.js"
+    "kura-wasm": "bin/kura.js"
   },
   "exports": {
     ".": {
       "types": "./index.d.ts",
       "import": "./index.js"
     },
+    "./engine/kura.js": "./engine/kura.js",
+    "./engine/kura.wasm": "./engine/kura.wasm",
     "./package.json": "./package.json"
   },
   "files": [
     "index.js",
     "index.d.ts",
     "bin",
+    "engine",
     "NOTICE.md"
   ],
-  "optionalDependencies": {
-    "kura-pdf-darwin-arm64": "1.1.0",
-    "kura-pdf-linux-x64": "1.1.0",
-    "kura-pdf-win32-x64": "1.1.0"
-  },
   "engines": {
     "node": ">=22"
   },
@@ -54,6 +52,7 @@
     "factur-x",
     "zugferd",
     "xrechnung",
-    "signing"
+    "wasm",
+    "webassembly"
   ]
 }
