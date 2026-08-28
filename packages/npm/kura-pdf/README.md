@@ -10,7 +10,7 @@ This package is the native engine for Node.js. Full documentation lives at [kura
 npm install kura-pdf
 ```
 
-Node 22 or newer, ESM only. The engine binary arrives automatically through a platform package (`kura-pdf-darwin-arm64`, `kura-pdf-linux-x64` or `kura-pdf-win32-x64`); npm installs the one matching your machine. To use a binary you built yourself, set `KURA_BIN` to its path and it takes precedence.
+Node 22 or newer, ESM only. The engine binary arrives automatically through a platform package (`@bentopdf/kura-pdf-darwin-arm64`, `@bentopdf/kura-pdf-linux-x64` or `@bentopdf/kura-pdf-win32-x64`); npm installs the one matching your machine. To use a binary you built yourself, set `KURA_BIN` to its path and it takes precedence.
 
 On platforms without a native package, or when you cannot ship native binaries at all, use [`kura-pdf-wasm`](https://www.npmjs.com/package/kura-pdf-wasm) instead: the same engine compiled to WebAssembly with the same API, running anywhere Node runs and in browsers, several times slower and without raster flattening, signing and OCR.
 

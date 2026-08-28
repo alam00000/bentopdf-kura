@@ -23,9 +23,9 @@
     "NOTICE.md"
   ],
   "optionalDependencies": {
-    "kura-pdf-darwin-arm64": "1.1.0",
-    "kura-pdf-linux-x64": "1.1.0",
-    "kura-pdf-win32-x64": "1.1.0"
+    "@bentopdf/kura-pdf-darwin-arm64": "1.1.0",
+    "@bentopdf/kura-pdf-linux-x64": "1.1.0",
+    "@bentopdf/kura-pdf-win32-x64": "1.1.0"
   },
   "engines": {
     "node": ">=22"

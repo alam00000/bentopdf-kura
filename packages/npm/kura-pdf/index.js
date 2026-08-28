@@ -24,7 +24,8 @@ export class KuraError extends Error {
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const EXE = process.platform === 'win32' ? '.exe' : '';
-const PLATFORM_PACKAGE = `kura-pdf-${process.platform}-${process.arch}`;
+const PLATFORM_SUFFIX = `kura-pdf-${process.platform}-${process.arch}`;
+const PLATFORM_PACKAGE = `@bentopdf/${PLATFORM_SUFFIX}`;
 const requireFromHere = createRequire(import.meta.url);
 let resolved;
 
@@ -35,10 +36,14 @@ export function binaryPath() {
     resolved = fromEnv;
     return resolved;
   }
-  const sibling = path.join(HERE, '..', PLATFORM_PACKAGE, 'bin', `kura${EXE}`);
-  if (fs.existsSync(sibling)) {
-    resolved = sibling;
-    return resolved;
+  for (const sibling of [
+    path.join(HERE, '..', '@bentopdf', PLATFORM_SUFFIX, 'bin', `kura${EXE}`),
+    path.join(HERE, '..', PLATFORM_SUFFIX, 'bin', `kura${EXE}`),
+  ]) {
+    if (fs.existsSync(sibling)) {
+      resolved = sibling;
+      return resolved;
+    }
   }
   try {
     const dir = path.dirname(requireFromHere.resolve(`${PLATFORM_PACKAGE}/package.json`));
