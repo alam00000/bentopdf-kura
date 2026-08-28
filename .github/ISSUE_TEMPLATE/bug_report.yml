@@ -1,0 +1,81 @@
+name: 🐛 Bug Report
+description: Report a bug in the Kura engine
+title: "(Bug) "
+labels: ["bug", "needs triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        ## ⚠️ Important Notice
+        **Bug reports without a sample PDF demonstrating the issue will not be investigated.**
+        The engine's behaviour depends almost entirely on the input document; a
+        reproducing file is the report.
+
+  - type: textarea
+    id: description
+    attributes:
+      label: Description
+      description: What happened, and what did you expect to happen?
+    validations:
+      required: true
+
+  - type: dropdown
+    id: interface
+    attributes:
+      label: Interface
+      description: How were you running the engine?
+      options:
+        - Native CLI (kura)
+        - npm package (kura-pdf)
+        - Browser (kura.bentopdf.com or the site/ build)
+        - Docker
+        - C API (libkura)
+    validations:
+      required: true
+
+  - type: input
+    id: command
+    attributes:
+      label: Exact command or call
+      description: The full command line or API call, including the level and every option.
+      placeholder: kura --level 2b --ua input.pdf output.pdf
+    validations:
+      required: true
+
+  - type: textarea
+    id: sample-file
+    attributes:
+      label: Reproducing PDF
+      description: |
+        Attach a PDF that reproduces the issue. If you cannot share the original,
+        produce a minimal file that still shows the problem. Files attached here
+        may be used as fuzzing seeds or regression inputs.
+      placeholder: Drag and drop the file here...
+    validations:
+      required: true
+
+  - type: textarea
+    id: output
+    attributes:
+      label: Report or error
+      description: The JSON report, the thrown error, or the stderr output.
+      render: shell
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: Engine version from `kura --version`, the npm version, or the docker image tag.
+      placeholder: 1.1.0
+    validations:
+      required: true
+
+  - type: input
+    id: os
+    attributes:
+      label: Operating system
+      placeholder: macOS 15 arm64 / Ubuntu 24.04 x64 / Windows 11 / Chrome 130
+    validations:
+      required: true

@@ -1,0 +1,85 @@
+name: release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+  packages: write
+
+jobs:
+  linux-x64:
+    uses: ./.github/workflows/linux-static.yml
+
+  windows-x64:
+    uses: ./.github/workflows/windows-static.yml
+
+  macos-arm64:
+    uses: ./.github/workflows/macos-static.yml
+
+  wasm:
+    uses: ./.github/workflows/wasm.yml
+
+  docker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: build and push
+        run: |
+          IMAGE="ghcr.io/${GITHUB_REPOSITORY,,}"
+          docker build -t "$IMAGE:${GITHUB_REF_NAME}" -t "$IMAGE:latest" pdfa-engine
+          docker run --rm "$IMAGE:${GITHUB_REF_NAME}" --version
+          docker push "$IMAGE:${GITHUB_REF_NAME}"
+          docker push "$IMAGE:latest"
+
+  release:
+    needs: [linux-x64, windows-x64, macos-arm64, wasm, docker]
+    if: always() && needs.linux-x64.result == 'success' && needs.wasm.result == 'success'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+      - name: package
+        run: |
+          set -e
+          TAG="$GITHUB_REF_NAME"
+          mkdir -p out
+          find artifacts -type f | sort
+          pack() {
+            local name=$1 dir=$2
+            [ -d "$dir" ] || { echo "skipping $name: no artifact"; return 0; }
+            mkdir -p "stage/$name/lib" "stage/$name/include/kura"
+            find "$dir" -type f \( -name 'kura' -o -name 'kura.exe' \) -exec cp {} "stage/$name/" \;
+            find "$dir" -type f \( -name '*.a' -o -name '*.lib' \) -exec cp {} "stage/$name/lib/" \;
+            cp LICENSE NOTICE.md "stage/$name/"
+            cp pdfa-engine/core/include/kura/kura.h "stage/$name/include/kura/"
+            if [ "$name" = windows-x64 ]; then
+              (cd "stage/$name" && zip -q -r "../../out/kura-$TAG-$name.zip" .)
+            else
+              chmod +x "stage/$name/kura"
+              tar -C "stage/$name" -czf "out/kura-$TAG-$name.tar.gz" .
+            fi
+          }
+          pack linux-x64 artifacts/kura-linux-x64
+          pack windows-x64 artifacts/kura-windows-x64
+          pack macos-arm64 artifacts/kura-macos-arm64
+          mkdir -p stage/wasm
+          cp artifacts/kura-wasm/kura.js artifacts/kura-wasm/kura.wasm LICENSE NOTICE.md stage/wasm/
+          tar -C stage/wasm -czf "out/kura-$TAG-wasm.tar.gz" .
+          cd out
+          sha256sum * > SHA256SUMS
+          cat SHA256SUMS
+      - name: create release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" out/* \
+            --repo "$GITHUB_REPOSITORY" --title "$GITHUB_REF_NAME" --generate-notes

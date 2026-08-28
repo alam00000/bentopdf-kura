@@ -1,0 +1,11 @@
+blank_issues_enabled: false
+contact_links:
+  - name: 💬 Discord Community
+    url: https://discord.gg/Bgq3Ay3f2w
+    about: Join the BentoPDF Discord for quick questions and community support
+  - name: 🔒 Security vulnerability
+    url: https://github.com/alam00000/bentopdf-kura/blob/main/SECURITY.md
+    about: Please report vulnerabilities privately, not as public issues
+  - name: 📖 Documentation
+    url: https://kura.bentopdf.com/docs/
+    about: Every flag, option, standard and rejection code

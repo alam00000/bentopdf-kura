@@ -1,0 +1,35 @@
+name: 💡 Feature Request
+description: Suggest a new feature for Kura
+title: "(Feature) "
+labels: ["enhancement", "needs triage"]
+body:
+  - type: textarea
+    id: description
+    attributes:
+      label: Feature Description
+      description: What functionality are you requesting?
+    validations:
+      required: true
+
+  - type: textarea
+    id: use-case
+    attributes:
+      label: Use Case
+      description: Why is this useful? What problem does it solve? Which standard or workflow does it serve?
+    validations:
+      required: true
+
+  - type: textarea
+    id: examples
+    attributes:
+      label: Examples
+      description: Sample documents, references to the relevant clause of a standard, or other tools that do this.
+    validations:
+      required: false
+
+  - type: textarea
+    id: additional
+    attributes:
+      label: Additional Context
+    validations:
+      required: false

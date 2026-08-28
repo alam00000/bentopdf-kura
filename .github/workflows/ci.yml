@@ -10,6 +10,18 @@ env:
   QPDF_VERSION: 12.3.2
 
 jobs:
+  check:
+    name: lint, version lock, npm smoke
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: make check
+
   asan:
     name: ASan + UBSan (memory-safety & recursion guard)
     runs-on: ubuntu-latest

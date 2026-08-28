@@ -1,0 +1,41 @@
+name: Trivy Security Scan
+
+on:
+  schedule:
+    - cron: '0 6 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  security-events: write
+
+jobs:
+  scan-image:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Pull release image
+        id: pull
+        continue-on-error: true
+        run: docker pull "ghcr.io/${GITHUB_REPOSITORY,,}:latest"
+
+      - name: Run Trivy vulnerability scanner
+        if: steps.pull.outcome == 'success'
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: ghcr.io/${{ github.repository }}:latest
+          format: sarif
+          output: trivy-image.sarif
+          severity: CRITICAL,HIGH
+          exit-code: '0'
+
+      - name: Upload results
+        if: steps.pull.outcome == 'success'
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: trivy-image.sarif
+
+      - name: No image yet
+        if: steps.pull.outcome != 'success'
+        run: echo "no published image to scan; run a release first"

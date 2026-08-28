@@ -1,0 +1,77 @@
+name: wasm
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+  workflow_call:
+
+env:
+  PDFIUM_BRANCH: chromium/7961
+  EMSDK_VERSION: 4.0.22
+
+jobs:
+  build:
+    name: WebAssembly module
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Free disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc
+          df -h /
+
+      - uses: mymindstorm/setup-emsdk@v14
+        with:
+          version: ${{ env.EMSDK_VERSION }}
+          actions-cache-folder: emsdk-cache
+
+      - name: Cache built PDFium
+        id: pdfium-cache
+        uses: actions/cache@v4
+        with:
+          path: pdfa-engine/third_party/pdfium-build/dist
+          key: pdfium-wasm-${{ env.PDFIUM_BRANCH }}-${{ hashFiles('pdfa-engine/scripts/pdfium/*') }}
+
+      - name: Build PDFium from source
+        if: steps.pdfium-cache.outputs.cache-hit != 'true'
+        working-directory: pdfa-engine
+        run: |
+          ./scripts/pdfium/sync.sh
+          ./scripts/pdfium/build.sh wasm
+          rm -rf third_party/pdfium-build/pdfium-src third_party/pdfium-build/depot_tools
+
+      - name: Cache wasm dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            pdfa-engine/third_party/build-qpdf-wasm
+            pdfa-engine/third_party/build-openjpeg-wasm
+            pdfa-engine/third_party/build-lcms2-wasm
+            pdfa-engine/third_party/qpdf-12.3.2
+            pdfa-engine/third_party/openjpeg-2.5.4
+            pdfa-engine/third_party/lcms2
+          key: wasm-deps-${{ env.EMSDK_VERSION }}-${{ hashFiles('pdfa-engine/scripts/build-wasm.sh') }}
+
+      - name: Build
+        run: pdfa-engine/scripts/build-wasm.sh
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Smoke test the module
+        run: |
+          scripts/pack-wasm-npm.sh pdfa-engine/build-wasm/wasm
+          node scripts/smoke.mjs
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: kura-wasm
+          path: |
+            pdfa-engine/build-wasm/wasm/kura.js
+            pdfa-engine/build-wasm/wasm/kura.wasm
+          if-no-files-found: error

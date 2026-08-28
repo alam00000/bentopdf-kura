@@ -1,0 +1,15 @@
+name: Kura CodeQL config
+
+paths-ignore:
+  - node_modules
+  - docs/.vitepress
+  - pdfa-engine/third_party
+  - pdfa-engine/core/assets
+  - pdfa-engine/build
+  - site/kura.js
+  - site/profiles.js
+  - '**/*.d.ts'
+
+query-filters:
+  - exclude:
+      id: js/log-injection
