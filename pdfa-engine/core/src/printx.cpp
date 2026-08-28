@@ -3,6 +3,7 @@
 #include <qpdf/QPDFPageObjectHelper.hh>
 
 #include <algorithm>
+#include <map>
 #include <string>
 #include <vector>
 
