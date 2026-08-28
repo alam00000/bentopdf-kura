@@ -90,8 +90,9 @@ AR_IN="$OUT/obj/libpdfium.a"
 [[ -f "$AR_IN" ]] || AR_IN="$OUT/obj/pdfium.lib"
 [[ -f "$AR_IN" ]] || { echo "expected $AR_IN" >&2; exit 3; }
 
+rm -rf "$DIST/include/public"
 mkdir -p "$DIST/include"
-rsync -a --delete "$SRC/public/" "$DIST/include/public/"
+cp -R "$SRC/public" "$DIST/include/public"
 case "$TARGET" in
   win-*) cp -f "$AR_IN" "$DIST/pdfium.lib" ;;
   *)     cp -f "$AR_IN" "$DIST/libpdfium.a" ;;
