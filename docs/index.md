@@ -21,7 +21,7 @@ hero:
 
 features:
   - title: Honest output
-    details: A file either conforms or the engine tells you why it cannot. Kura never writes a PDF that claims a standard it does not meet, and check mode has never reported a false finding.
+    details: A file either conforms or the engine tells you why it cannot. Kura checks its own output, and a veraPDF-validated sample of every benchmark run is published, misses included.
   - title: Every standard
     details: All eleven PDF/A levels, PDF/UA-1 and UA-2, PDF/X-1a to X-6, PDF/E-1, PDF/VT, and Factur-X, ZUGFeRD, XRechnung and Order-X e-invoices. Twenty-five targets, one set of options.
   - title: Print preflight
@@ -36,12 +36,13 @@ features:
 
 Kura is the PDF standards and preflight engine behind [BentoPDF](https://www.bentopdf.com). You hand it a PDF and a target standard; it parses the file, repairs what is wrong, embeds what needs embedding, converts colour where the standard demands it, and writes back a file that validates clean, or refuses with a specific reason.
 
-It validates against every public conformance suite: the veraPDF corpus, Isartor, BFO, the Ghent Output Suite, the PDF/UA reference files and the Cal Poly PDF/VT set. It has converted thirty thousand real-world PDFs from the open web without a crash, and it is fuzzed continuously.
+It validates against every public conformance suite: the veraPDF corpus, Isartor, BFO, the Ghent Output Suite, the PDF/UA reference files and the Cal Poly PDF/VT set. A published [benchmark](/benchmark) runs it over 30,677 real-world files, every one listed with its origin, and reports crashes, timeouts, rejections and a veraPDF-validated sample of the outputs.
 
 ## How do you want to use Kura?
 
 | You want to | Use |
 |---|---|
+| See how it holds up on real files | [Benchmark](/benchmark) |
 | Convert or check a PDF right now, in the browser | [kura.bentopdf.com](https://kura.bentopdf.com) |
 | Run print preflight on a PDF, in the browser | [kura.bentopdf.com/preflight.html](https://kura.bentopdf.com/preflight.html) |
 | Convert PDFs from the terminal | the [CLI](/cli) |

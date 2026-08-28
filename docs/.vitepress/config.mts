@@ -23,6 +23,7 @@ export default defineConfig({
       { text: 'Convert a PDF', link: 'https://kura.bentopdf.com' },
       { text: 'Getting Started', link: '/getting-started' },
       { text: 'Standards', link: '/standards' },
+      { text: 'Benchmark', link: '/benchmark' },
       { text: 'BentoPDF', link: 'https://www.bentopdf.com' },
     ],
 
@@ -31,6 +32,7 @@ export default defineConfig({
         text: 'Guide',
         items: [
           { text: 'What is Kura', link: '/' },
+          { text: 'Benchmark', link: '/benchmark' },
           { text: 'Getting Started', link: '/getting-started' },
           { text: 'The standards', link: '/standards' },
           { text: 'Check mode', link: '/check-mode' },

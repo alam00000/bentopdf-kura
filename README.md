@@ -10,11 +10,11 @@ Kura converts everyday PDFs into archival, print and accessible ones: every PDF/
 
 It is also a full print preflight engine: 396 bundled profiles check and repair what a press cares about, such as hairlines, rich black, low-resolution images, overprint, transparency, page boxes, fonts and colour, and you can write your own in JSON or bring the XML dialect you already use.
 
-The name comes from the 蔵 (*kura*), the traditional Japanese storehouse where a family kept the things meant to outlast them. That is what PDF/A is for.
+The name comes from the 蔵 (*kura*), the traditional Japanese storehouse where a family kept the things meant to outlast them.
 
 Kura is part of the [BentoPDF](https://github.com/alam00000/bentopdf) suite. The same engine is available as a CLI, a C library, an npm package, a Docker image and a WebAssembly build that runs entirely in the browser.
 
-Try the converter at [kura.bentopdf.com](https://kura.bentopdf.com) and the preflight tool at [kura.bentopdf.com/preflight.html](https://kura.bentopdf.com/preflight.html). Full documentation lives at [kura.bentopdf.com/docs](https://kura.bentopdf.com/docs/).
+Try the converter and preflight at [kura.bentopdf.com](https://kura.bentopdf.com). Full documentation lives at [kura.bentopdf.com/docs](https://kura.bentopdf.com/docs/).
 
 [![License: AGPL v3](https://img.shields.io/badge/License-AGPL_v3-blue.svg)](https://github.com/alam00000/bentopdf-kura/blob/main/LICENSE) ![GitHub Stars](https://img.shields.io/github/stars/alam00000/bentopdf-kura?style=social)
 
@@ -24,6 +24,7 @@ Try the converter at [kura.bentopdf.com](https://kura.bentopdf.com) and the pref
 
 * [Why Kura](#why-kura)
 * [Does it actually work?](#does-it-actually-work)
+* [Benchmark](#benchmark)
 * [Install](#install)
 * [Usage](#usage)
 
@@ -35,9 +36,7 @@ Try the converter at [kura.bentopdf.com](https://kura.bentopdf.com) and the pref
 * [The standards](#the-standards)
 * [Preflight](#preflight)
 * [What the engine does](#what-the-engine-does)
-* [What the engine refuses to do](#what-the-engine-refuses-to-do)
 * [Building from source](#building-from-source)
-* [Project layout](#project-layout)
 * [Licensing](#licensing)
 * [Contributing](#contributing)
 
@@ -57,7 +56,7 @@ Kura is built around solving those three.
 
 * **Preflight built in.** The same engine runs print preflight: 396 bundled profiles for hairlines, rich black, image resolution, overprint, transparency, page boxes, fonts and colour, each a set of checks with repairs where a repair exists, plus your own in JSON or the XML dialect you already use.
 
-* **Runs anywhere.** About twenty thousand lines of C++ on qpdf, FreeType, Little CMS, OpenJPEG and PDFium, linked statically. The CLI is one file, the browser build is one `.wasm`, and both rasterize with nothing extra to install.
+* **Runs anywhere.** The same engine powers the CLI, the C library, the npm package, the Docker image and the browser build, which runs entirely on your machine with nothing to install.
 
 ---
 
@@ -76,10 +75,27 @@ Kura validates clean against every public conformance suite there is:
 
 Check mode agrees with veraPDF on 568 of 568 files at PDF/A-1b and 954 of 970 at 2b, and every disagreement is a defect the converter cannot repair rather than a false finding.
 
-For robustness, the engine converted **thirty thousand real-world PDFs from the open web without a crash**. It is fuzzed continuously by ClusterFuzzLite in this repository's own CI through five harnesses, built and tested under AddressSanitizer and UndefinedBehaviorSanitizer on every push, and refuses pathological files with an error instead of falling over.
+For robustness, see the [benchmark](#benchmark): real-world files, every one listed, zero crashes. It is fuzzed continuously by ClusterFuzzLite in this repository's own CI through five harnesses, built and tested under AddressSanitizer and UndefinedBehaviorSanitizer on every push, and refuses pathological files with an error instead of falling over.
 
 > [!NOTE]
 > Check mode sees exactly what the converter can repair. That means it never reports a false finding, but it is blind to any defect the converter itself cannot detect. It is a preflight, not a replacement for an independent validator.
+
+---
+
+## Benchmark
+
+Kura was run over **30,677 real PDFs**: 966 files from the pdf.js regression corpus, 1,927 web PDFs fetched straight from the Common Crawl archive, 27,784 web PDFs from the DARPA SafeDocs archive of the 2021 crawl. Every file was converted to PDF/A-2b with the CLI exactly as shipped, one process per file, under the default 120-second watchdog, and a fixed one-in-ten sample of the outputs was validated independently with veraPDF. Every document is listed with its origin and SHA-256, so the run can be reproduced.
+
+| tranche | files | converted | rejected with a reason | timeouts | crashes | veraPDF sample | median | p95 |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| pdfjs | 966 | 938 | 28 | 0 | **0** | 86/94 pass | 0.02 s | 0.1 s |
+| cc | 1,927 | 1,922 | 5 | 0 | **0** | 189/193 pass | 0.06 s | 0.2 s |
+| safedocs | 27,784 | 27,576 | 208 | 0 | **0** | 2,760/2,779 pass | 0.05 s | 0.1 s |
+| **all** | 30,677 | 30,436 | 241 | 0 | **0** | 3,035/3,066 pass | 0.05 s | 0.1 s |
+
+Rejections are the engine saying no with a reason (139 carrying a font whose licence forbids embedding, 72 not parseable as PDF, 30 needing a password); a password-protected, unparseable or licence-locked file is supposed to land there. The 30 sampled outputs veraPDF does not accept were re-run one by one: 26 fail font rules (missing glyphs, glyph widths, use of .notdef, encodings), 6 fail colour-space rules and 2 contain an operator no PDF version defines, all in fonts and streams that arrived broken, and Kura's own check passes 27 of the 30. Those are checker blind spots as much as converter ones; they are listed by file in the report and are open engine work. One further sampled output could not be validated because veraPDF itself errored on it.
+
+The full methodology, every document with its origin and SHA-256, and the per-file outcomes are in [benchmark.md](benchmark.md). The run is reproducible with `make bench`; `TARGET` sets how many web PDFs to draw.
 
 ---
 
@@ -246,17 +262,6 @@ Depending on the document and the target, the engine can:
 
 ---
 
-## What the engine refuses to do
-
-* **Claim conformance it did not achieve.** A conversion that cannot make the document conform is refused with an error code and, where one exists, the level that would work. Check mode reports `SCAN_INCOMPLETE` when a pass could not finish rather than staying quiet.
-* **Rasterize when it can avoid it.** Flattening is the last resort for a page, never the first, and never without a line in the report.
-* **Decrypt what it has no key for.** Standard encryption is removed automatically; user passwords are accepted; files bound to external key material are reported as such, not silently emptied.
-* **Guess an invoice profile.** An e-invoice that declares no guideline is rejected rather than embedded as a guess.
-
-The full list of rejection codes and what to do about each is in the [documentation](https://kura.bentopdf.com/docs/rejections).
-
----
-
 ## Building from source
 
 ```bash
@@ -267,23 +272,6 @@ cmake --build build -j
 Needs a C++17 compiler, CMake, qpdf 12, FreeType, OpenJPEG, libjpeg, libpng, zlib and Little CMS. PDFium is optional, built from source once, and detected automatically. The WebAssembly module builds with `pdfa-engine/scripts/build-wasm.sh`.
 
 See [BUILDING.md](https://github.com/alam00000/bentopdf-kura/blob/main/BUILDING.md) for every platform and every option.
-
----
-
-## Project layout
-
-```
-pdfa-engine/core      the engine: buffer in, buffer out, one file per conformance pass
-pdfa-engine/cli       the kura command
-pdfa-engine/capi      libkura, the C library
-pdfa-engine/wasm      the WebAssembly bindings
-pdfa-engine/raster    the PDFium rasterizer
-pdfa-engine/profiles  396 preflight profiles and the script that generates them
-pdfa-engine/fuzz      five fuzz harnesses and their seeds
-packages/npm/kura-pdf the npm package
-site                  the browser demo
-docs                  the documentation site
-```
 
 ---
 
