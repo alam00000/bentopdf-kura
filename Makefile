@@ -1,4 +1,4 @@
-.PHONY: bench build wasm npm-pack site-sync check lint smoke server-smoke serve docker version-check shell-check yaml-check docs docs-dev fuzz clean
+.PHONY: bench build wasm npm-pack site-sync check lint smoke smoke-native server-smoke serve docker version-check shell-check yaml-check docs docs-dev fuzz clean
 
 build:
 	cmake -S pdfa-engine -B pdfa-engine/build -DCMAKE_BUILD_TYPE=Release
@@ -15,11 +15,15 @@ site-sync:
 
 check: shell-check yaml-check version-check lint smoke
 
+smoke-native:
+	@scripts/pack-native-npm.sh --local >/dev/null
+	node scripts/smoke-native.mjs
+
 lint:
 	npm run --silent lint
 
 smoke:
-	@test -f packages/npm/kura-pdf/engine/kura.wasm || scripts/pack-wasm-npm.sh site >/dev/null
+	@test -f packages/npm/kura-pdf-wasm/engine/kura.wasm || scripts/pack-wasm-npm.sh site >/dev/null
 	node scripts/smoke.mjs
 
 server-smoke:
@@ -32,7 +36,7 @@ docker:
 	docker build -f docker/Dockerfile -t kura .
 
 version-check:
-	@node -e "const fs=require('fs');const h=fs.readFileSync('pdfa-engine/core/include/kura/kura.h','utf8').match(/KURA_VERSION \"(.*)\"/)[1];const e=fs.readFileSync('pdfa-engine/core/include/pdfa/pdfa.hh','utf8').match(/kEngineVersion = \"(.*)\"/)[1];const p=require('./package.json').version;const n=require('./packages/npm/kura-pdf/package.json').version;const all=[h,e,p,n];if(new Set(all).size!==1){console.error('version drift: kura.h '+h+', pdfa.hh '+e+', package.json '+p+', kura-pdf '+n);process.exit(1)}console.log('version '+h)"
+	@node scripts/version-check.mjs
 
 shell-check:
 	@for f in scripts/*.sh docker/entrypoint.sh pdfa-engine/scripts/*.sh pdfa-engine/scripts/pdfium/*.sh .clusterfuzzlite/build.sh; do bash -n "$$f" || exit 1; done
@@ -54,7 +58,7 @@ fuzz:
 	pdfa-engine/build-fuzz/fuzz/fuzz_convert pdfa-engine/build-fuzz/seeds -max_total_time=60 -rss_limit_mb=4096
 
 clean:
-	rm -rf pdfa-engine/build pdfa-engine/build-wasm pdfa-engine/build-fuzz packages/npm/kura-pdf/engine docs/.vitepress/dist docs/.vitepress/cache
+	rm -rf pdfa-engine/build pdfa-engine/build-wasm pdfa-engine/build-fuzz packages/npm/kura-pdf-wasm/engine packages/npm/kura-pdf-*/bin/kura packages/npm/kura-pdf-*/bin/kura.exe docs/.vitepress/dist docs/.vitepress/cache
 
 bench:
 	python3 bench/bench.py --pdfjs "$${PDFJS:-cert/pdfjs/test/pdfs}" --target "$${TARGET:-30000}" --verify-every 10

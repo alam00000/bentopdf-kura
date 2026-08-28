@@ -28,6 +28,7 @@ jobs:
        startsWith(github.event.workflow_run.head_branch, 'v'))
     env:
       TAG: ${{ inputs.tag || github.event.workflow_run.head_branch }}
+      FORCE: ${{ inputs.force }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -48,49 +49,54 @@ jobs:
           else
             echo "auth: OIDC trusted publishing"
           fi
-      - name: verify version matches the release tag
+      - name: verify every package version matches the release tag
         run: |
+          node scripts/version-check.mjs
           PKG="$(node -p "require('./packages/npm/kura-pdf/package.json').version")"
-          [ "v$PKG" = "$TAG" ] || { echo "kura-pdf $PKG does not match tag $TAG"; exit 1; }
-      - name: skip when the registry already has this version
-        id: registry
-        run: |
-          VERSION="${TAG#v}"
-          if [ "${{ inputs.force }}" != "true" ] && npm view "kura-pdf@$VERSION" version >/dev/null 2>&1; then
-            echo "kura-pdf $VERSION is already on the registry; nothing to publish"
-            echo "done=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "done=false" >> "$GITHUB_OUTPUT"
-          fi
-      - name: fetch the wasm module from the release
-        if: steps.registry.outputs.done != 'true'
+          [ "v$PKG" = "$TAG" ] || { echo "packages are at $PKG but the tag is $TAG"; exit 1; }
+      - name: fetch the release archives
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           mkdir -p rel wasm
-          gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --pattern 'kura-*-wasm.tar.gz' --dir rel
+          gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --pattern 'kura-*' --dir rel
+          ls -la rel
           tar -xzf rel/kura-*-wasm.tar.gz -C wasm
-          ls -la wasm
-      - name: assemble the package
-        if: steps.registry.outputs.done != 'true'
+      - name: fill the platform packages from the release
+        run: scripts/pack-native-npm.sh "$PWD/rel"
+      - name: assemble kura-pdf-wasm
         run: scripts/pack-wasm-npm.sh "$PWD/wasm"
-      - name: smoke test the assembled package
-        if: steps.registry.outputs.done != 'true'
+      - name: smoke test the WebAssembly package
         run: node scripts/smoke.mjs
-      - name: publish kura-pdf
-        if: steps.registry.outputs.done != 'true'
-        working-directory: packages/npm/kura-pdf
-        run: npm publish --provenance --access public --ignore-scripts
-      - name: confirm the registry serves it
-        if: steps.registry.outputs.done != 'true'
+      - name: smoke test the native package with the released Linux binary
+        run: node scripts/smoke-native.mjs
+      - name: publish
         run: |
+          set -e
           VERSION="${TAG#v}"
-          for i in $(seq 1 30); do
-            if [ "$(npm view "kura-pdf@$VERSION" version 2>/dev/null)" = "$VERSION" ]; then
-              echo "kura-pdf $VERSION is live"
-              exit 0
+          publish() {
+            local pkg=$1
+            if [ "$FORCE" != "true" ] && [ "$(npm view "$pkg@$VERSION" version 2>/dev/null)" = "$VERSION" ]; then
+              echo "$pkg $VERSION is already on the registry; skipping"
+              return 0
             fi
-            sleep 10
+            (cd "packages/npm/$pkg" && npm publish --provenance --access public --ignore-scripts)
+            for i in $(seq 1 30); do
+              if [ "$(npm view "$pkg@$VERSION" version 2>/dev/null)" = "$VERSION" ]; then
+                echo "$pkg $VERSION is live"
+                return 0
+              fi
+              sleep 10
+            done
+            echo "$pkg $VERSION did not appear on the registry"
+            return 1
+          }
+          for pkg in kura-pdf-linux-x64 kura-pdf-darwin-arm64 kura-pdf-win32-x64; do
+            if [ -n "$(find "packages/npm/$pkg/bin" -type f \( -name kura -o -name kura.exe \) 2>/dev/null | head -1)" ]; then
+              publish "$pkg"
+            else
+              echo "skipping $pkg: no binary on this release"
+            fi
           done
-          echo "kura-pdf $VERSION did not appear on the registry"
-          exit 1
+          publish kura-pdf-wasm
+          publish kura-pdf

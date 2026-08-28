@@ -1,10 +1,17 @@
-# npm package
+# npm packages
 
 ```bash
 npm install kura-pdf
 ```
 
-`kura-pdf` is the engine compiled to WebAssembly with a small JavaScript API around it. There are no native binaries and no postinstall downloads; the module ships inside the package and runs on any platform Node 22 or newer runs on, and in browsers.
+Two packages carry the engine, with the same API:
+
+| Package | What it is | Use it when |
+|---|---|---|
+| `kura-pdf` | the native engine, installed through a platform package (`kura-pdf-linux-x64`, `kura-pdf-darwin-arm64`, `kura-pdf-win32-x64`) and run in a subprocess | you are on Linux x64, macOS arm64 or Windows x64 and want speed, raster flattening, signing and OCR |
+| `kura-pdf-wasm` | the engine compiled to WebAssembly, no native binaries, no postinstall downloads | any other platform, browsers, or environments that cannot ship native binaries |
+
+Both need Node 22 or newer and are ESM only. `kura-pdf` installs the `kura` command, the native CLI itself; `kura-pdf-wasm` installs `kura-wasm`. On a platform without a native package, `kura-pdf` throws `ENGINE_MISSING`; set `KURA_BIN` to a binary you built to use it anyway.
 
 ## A complete first program
 
@@ -12,14 +19,14 @@ npm install kura-pdf
 import { readFile, writeFile } from 'node:fs/promises';
 import { convert } from 'kura-pdf';
 
-const input = new Uint8Array(await readFile('input.pdf'));
+const input = await readFile('input.pdf');
 const result = await convert(input, '2b');
 
 await writeFile('output.pdf', result.pdf);
 for (const issue of result.issues) console.log(`${issue.code}: ${issue.detail}`);
 ```
 
-Run with `node convert.mjs`. The first call loads the WebAssembly module, which takes a moment; it stays loaded for the life of the process.
+Run with `node convert.mjs`. Swap the import for `kura-pdf-wasm` and the program is unchanged; the first call then loads the WebAssembly module, which takes a moment and stays loaded for the life of the process.
 
 ## convert(input, level, options?)
 
@@ -37,12 +44,12 @@ interface KuraOptions {
   rasterizePages?: boolean;     // render every page to an image
   rasterDpi?: number;           // 24 to 1200, default 300; also the transparency fallback
   outlineFonts?: boolean;       // outline text with no Unicode mapping
-  attachXml?: Uint8Array;       // e-invoice payload; see /e-invoices
+  imageMaxPpi?: number;         // downsample images above this resolution
+  attachXml?: Uint8Array | string; // e-invoice payload; see /e-invoices
   attachXmlName?: string;
   facturxProfile?: string;
-  embedSource?: Uint8Array;     // attach a file with /AFRelationship /Source
+  embedSource?: boolean;        // attach the input document with /AFRelationship /Source
   embedSourceName?: string;
-  embedSourceMime?: string;
   outputCondition?: string;     // PDF/X output intent identification
   outputConditionInfo?: string;
   registry?: string;
@@ -53,6 +60,19 @@ interface KuraOptions {
   vtRecords?: string;           // PDF/VT record ranges, "1-3,4-6"
   profile?: string;             // a preflight profile, JSON or XML text
   analyze?: boolean;            // add the document census to `analysis`
+  sign?: SignOptions;           // native only: PKCS#7 signature
+  ocr?: boolean;                // native only: run tesseract on image-only pages
+  ocrEngine?: string;           // native only: path to tesseract
+  fontFolder?: string;          // native only: extra fonts for substitution
+  timeoutMs?: number;           // native only: time limit for this call
+}
+
+interface SignOptions {
+  p12: Uint8Array | string;     // the PKCS#12 file, as bytes or a path
+  password?: string;
+  name?: string;
+  reason?: string;
+  location?: string;
 }
 
 interface KuraResult {
@@ -67,7 +87,7 @@ interface Issue { code: string; detail: string; fixed: boolean }
 interface Finding { code: string; detail: string }
 ```
 
-The options are the same as the [CLI flags](/cli) with the dashes turned into camelCase. Binary values, the ICC profiles, the invoice XML and the embedded source, are passed as `Uint8Array`.
+The options are the same as the [CLI flags](/cli) with the dashes turned into camelCase. Binary values, the ICC profiles and the invoice XML, are passed as `Uint8Array`. In `kura-pdf-wasm`, `embedSource` takes the bytes of the file to attach instead of a boolean, and the four native-only options are ignored.
 
 ## check(input, level, options?)
 
@@ -94,8 +114,7 @@ interface KuraCheckResult {
 }
 ```
 
-`check()` also accepts the seven check-only flavours `x4p`, `x5g`, `x5n`, `x5pg`, `x6n`, `x6p` and `vt2`. It throws only when the document cannot be read at all; a non-conforming document is a normal result with `compliant: false`.
-
+`check()` also accepts the seven check-only flavours `x4p`, `x5g`, `x5n`, `x5pg`, `x6n`, `x6p` and `vt2`. It throws only when the document cannot be read at all; a non-conforming document is a normal result with `compliant: false`. With `analyze: true` or a `profile`, the [preflight](/preflight) findings arrive in `analysis`.
 
 ## Locked files
 
@@ -136,34 +155,40 @@ try {
 }
 ```
 
-Every code is listed on [Rejection codes](/rejections).
+Every rejection code is listed on [Rejection codes](/rejections). The package adds `BAD_LEVEL`, `BAD_INPUT`, `BAD_OPTION`, `ENGINE_MISSING` (no binary for this platform) and `TIMEOUT`.
 
-## version()
+## version() and binaryPath()
 
 ```js
-import { version } from 'kura-pdf';
+import { version, binaryPath } from 'kura-pdf';
 console.log(await version());   // "BentoPDF Kura Engine 1.1.0"
+console.log(binaryPath());      // where the engine binary lives, or null
 ```
 
 ## The kura command
 
-The package installs a `kura` command with the same flags, the same JSON report and the same exit codes as the [native CLI](/cli), minus the four flags that need the host (`--sign`, `--ocr`, `--font-folder`, `--substitute`):
+`kura-pdf` installs `kura`, which is the [native CLI](/cli) itself, every flag included:
 
 ```bash
 npx kura --level 2b input.pdf output.pdf
 npx kura --check --level 2b input.pdf
 npx kura --einvoice invoice.xml input.pdf output.pdf
+npx kura --sign key.p12 --sign-password secret --level 2b input.pdf output.pdf
 npx kura --level 2b -r -d out/ inbox/
 ```
 
-## Blocking, and how to avoid it
+`kura-pdf-wasm` installs `kura-wasm` with the same flags, the same JSON report and the same exit codes, minus the four flags that need the host (`--sign`, `--ocr`, `--font-folder`, `--substitute`).
 
-Conversion runs synchronously inside your process once the module is loaded; a large document can hold the Node event loop for several seconds. Fine in a script; in a server, run it inside a worker thread:
+## Servers and concurrency
+
+`kura-pdf` runs the engine in a subprocess per call, so the event loop stays free and a crash on hostile input ends that process, not yours; set `timeoutMs` for untrusted uploads. Run as many calls in parallel as you have cores to spare.
+
+`kura-pdf-wasm` runs synchronously inside your process once the module is loaded; a large document can hold the event loop for several seconds. In a server, run it inside a worker thread:
 
 ```js
 // worker.js
 import { parentPort, workerData } from 'node:worker_threads';
-import { convert } from 'kura-pdf';
+import { convert } from 'kura-pdf-wasm';
 
 const result = await convert(new Uint8Array(workerData.input), workerData.level, workerData.options);
 parentPort.postMessage(result, [result.pdf.buffer]);
@@ -179,16 +204,14 @@ const worker = new Worker('./worker.js', { workerData: { input, level: '2b', opt
 worker.on('message', (result) => console.log('converted,', result.pdf.length, 'bytes'));
 ```
 
-This keeps your server responsive and gives you crash isolation: hostile input takes down the worker thread, not the process. For untrusted uploads at volume, the native binary in a subprocess with `PDFA_TIMEOUT` set is the more robust shape.
-
 ## In the browser
 
-The same module powers [kura.bentopdf.com](https://kura.bentopdf.com), running in a Web Worker so visitors' files never leave their machines. The [repository's `site/` directory](https://github.com/alam00000/bentopdf-kura/tree/main/site) is the reference integration. For your own build, load `engine/kura.js` from a worker, call the module's `convert(bytes, level, options)` directly, and post the result back; the package's `index.js` shows the mapping from the module's raw result to `KuraResult`.
+`kura-pdf-wasm` is the module that powers [kura.bentopdf.com](https://kura.bentopdf.com), running in a Web Worker so visitors' files never leave their machines. The [repository's `site/` directory](https://github.com/alam00000/bentopdf-kura/tree/main/site) is the reference integration. For your own build, load `engine/kura.js` from a worker, call the module's `convert(bytes, level, options)` directly, and post the result back; the package's `index.js` shows the mapping from the module's raw result to `KuraResult`.
 
 ## Troubleshooting
 
-**Out of memory on very large files.** The module holds input, working set and output inside a 4 GB address space. For files in the hundreds of megabytes, use the native binary.
+**`ENGINE_MISSING`.** No platform package matched this machine; install `kura-pdf-wasm`, or build the engine and point `KURA_BIN` at it.
 
-**Rasterization does nothing.** The module only rasterizes when it was built with PDFium, which the published package is. If you built the module yourself without a PDFium wasm build, pages that need flattening are reported instead.
+**Out of memory on very large files with the WebAssembly build.** The module holds input, working set and output inside a 4 GB address space. For files in the hundreds of megabytes, use `kura-pdf`.
 
-**The event loop stalls.** Expected in-process; use the worker thread pattern above.
+**Rasterization does nothing in the WebAssembly build.** The module only rasterizes when it was built with PDFium, which the published package is. If you built the module yourself without a PDFium wasm build, pages that need flattening are reported instead.

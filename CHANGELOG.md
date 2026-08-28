@@ -6,6 +6,19 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- `kura-pdf` on npm is now the native engine for Node.js: the binary arrives
+  through `kura-pdf-linux-x64`, `kura-pdf-darwin-arm64` or `kura-pdf-win32-x64`,
+  runs in a subprocess per call, and the `kura` command is the native CLI with
+  every flag, signing and OCR included. The API adds `sign`, `ocr`,
+  `ocrEngine`, `fontFolder`, `timeoutMs` and `binaryPath()`.
+
+### Changed
+
+- The WebAssembly build moved to `kura-pdf-wasm`, with the same API and a
+  `kura-wasm` command.
+
 ## [1.1.0] - 2026-08-28
 
 First tri-platform release: native CLI, C library and WebAssembly module,

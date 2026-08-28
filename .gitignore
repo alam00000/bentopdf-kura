@@ -26,3 +26,5 @@ docs/.vitepress/dist/
 bench/work/
 bench/repro/
 bench/cc-index.jsonl
+packages/npm/*/bin/kura
+packages/npm/*/bin/kura.exe

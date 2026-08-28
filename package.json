@@ -14,8 +14,9 @@
     "url": "https://github.com/alam00000/bentopdf-kura/issues"
   },
   "scripts": {
-    "lint": "eslint packages/npm/kura-pdf/index.js packages/npm/kura-pdf/bin scripts server site/worker.js site/serve.mjs site/engine-http.js",
+    "lint": "eslint packages/npm scripts server site/worker.js site/serve.mjs site/engine-http.js",
     "smoke": "node scripts/smoke.mjs",
+    "smoke:native": "node scripts/smoke-native.mjs",
     "site": "node site/serve.mjs",
     "serve": "node server/server.mjs",
     "server-smoke": "node scripts/server-smoke.mjs",

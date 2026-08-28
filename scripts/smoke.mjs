@@ -5,7 +5,7 @@ import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const PKG = path.join(ROOT, 'packages', 'npm', 'kura-pdf');
+const PKG = path.join(ROOT, 'packages', 'npm', 'kura-pdf-wasm');
 const { convert, check, version, verifyPassword, KuraError, LEVELS } = await import(path.join(PKG, 'index.js'));
 
 let failures = 0;

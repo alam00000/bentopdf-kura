@@ -2,10 +2,10 @@ import js from '@eslint/js';
 import globals from 'globals';
 
 export default [
-  { ignores: ['node_modules/', 'docs/.vitepress/cache/', 'docs/.vitepress/dist/', 'packages/npm/kura-pdf/engine/', 'site/kura.js', 'site/profiles.js', 'pdfa-engine/'] },
+  { ignores: ['node_modules/', 'docs/.vitepress/cache/', 'docs/.vitepress/dist/', 'packages/npm/kura-pdf-wasm/engine/', 'site/kura.js', 'site/profiles.js', 'pdfa-engine/'] },
   js.configs.recommended,
   {
-    files: ['packages/npm/kura-pdf/**/*.js', 'scripts/**/*.mjs', 'server/**/*.mjs', 'site/serve.mjs'],
+    files: ['packages/npm/*/index.js', 'packages/npm/*/bin/*.js', 'scripts/**/*.mjs', 'server/**/*.mjs', 'site/serve.mjs'],
     languageOptions: { ecmaVersion: 2022, sourceType: 'module', globals: { ...globals.node } },
   },
   {
