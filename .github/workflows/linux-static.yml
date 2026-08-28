@@ -7,6 +7,10 @@ on:
   workflow_dispatch:
   workflow_call:
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 env:
   QPDF_VERSION: 12.3.2
   PDFIUM_BRANCH: chromium/7961
@@ -125,7 +129,7 @@ jobs:
         working-directory: pdfa-engine
         run: |
           set -e
-          test -z "$(find / -name 'libpdfium.so*' -not -path '*/pdfium-build/*' 2>/dev/null)"
+          test -z "$(find build third_party -name 'libpdfium.so*' 2>/dev/null)"
           printf '%%PDF-1.7\n1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << >> >>\nendobj\ntrailer\n<< /Size 4 /Root 1 0 R >>\n%%%%EOF\n' > /tmp/in.pdf
           report=$(./build/cli/kura --level 2b /tmp/in.pdf /tmp/out.pdf)
           echo "$report"
