@@ -74,6 +74,13 @@ jobs:
           cmake --build build-asan --target kura \
             fuzz_replay_convert fuzz_replay_profile fuzz_replay_invoice \
             fuzz_replay_icc fuzz_replay_password
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: HTTP service smoke against the sanitizer build
+        env:
+          ASAN_OPTIONS: detect_leaks=0
+        run: node scripts/server-smoke.mjs pdfa-engine/build-asan/cli/kura
       - name: Generate seeds + regression sentinels
         working-directory: pdfa-engine
         run: python3 fuzz/gen_seeds.py build-asan/seeds

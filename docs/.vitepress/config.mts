@@ -45,6 +45,7 @@ export default defineConfig({
         items: [
           { text: 'CLI', link: '/cli' },
           { text: 'npm package', link: '/npm' },
+          { text: 'HTTP API', link: '/http-api' },
           { text: 'C API', link: '/c-api' },
           { text: 'Rejection codes', link: '/rejections' },
         ],
@@ -52,6 +53,7 @@ export default defineConfig({
       {
         text: 'Operate',
         items: [
+          { text: 'Self-hosting', link: '/self-hosting' },
           { text: 'Building from source', link: '/building' },
           { text: 'Fuzzing', link: '/fuzzing' },
           { text: 'Security', link: '/security' },

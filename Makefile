@@ -1,4 +1,4 @@
-.PHONY: bench build wasm npm-pack site-sync check lint smoke version-check shell-check yaml-check docs docs-dev fuzz clean
+.PHONY: bench build wasm npm-pack site-sync check lint smoke server-smoke serve docker version-check shell-check yaml-check docs docs-dev fuzz clean
 
 build:
 	cmake -S pdfa-engine -B pdfa-engine/build -DCMAKE_BUILD_TYPE=Release
@@ -22,11 +22,20 @@ smoke:
 	@test -f packages/npm/kura-pdf/engine/kura.wasm || scripts/pack-wasm-npm.sh site >/dev/null
 	node scripts/smoke.mjs
 
+server-smoke:
+	node scripts/server-smoke.mjs
+
+serve:
+	KURA_BIN=$${KURA_BIN:-pdfa-engine/build/cli/kura} node server/server.mjs
+
+docker:
+	docker build -f docker/Dockerfile -t kura .
+
 version-check:
 	@node -e "const fs=require('fs');const h=fs.readFileSync('pdfa-engine/core/include/kura/kura.h','utf8').match(/KURA_VERSION \"(.*)\"/)[1];const e=fs.readFileSync('pdfa-engine/core/include/pdfa/pdfa.hh','utf8').match(/kEngineVersion = \"(.*)\"/)[1];const p=require('./package.json').version;const n=require('./packages/npm/kura-pdf/package.json').version;const all=[h,e,p,n];if(new Set(all).size!==1){console.error('version drift: kura.h '+h+', pdfa.hh '+e+', package.json '+p+', kura-pdf '+n);process.exit(1)}console.log('version '+h)"
 
 shell-check:
-	@for f in scripts/*.sh pdfa-engine/scripts/*.sh pdfa-engine/scripts/pdfium/*.sh .clusterfuzzlite/build.sh; do bash -n "$$f" || exit 1; done
+	@for f in scripts/*.sh docker/entrypoint.sh pdfa-engine/scripts/*.sh pdfa-engine/scripts/pdfium/*.sh .clusterfuzzlite/build.sh; do bash -n "$$f" || exit 1; done
 	@echo "shell syntax ok"
 
 yaml-check:

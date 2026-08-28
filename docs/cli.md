@@ -26,6 +26,7 @@ kura --check --level <level> [options] <input.pdf>
 kura --einvoice <invoice.xml> [--level 3b|3u|3a|4f] <input.pdf> <output.pdf>
 kura --extract-invoice <input.pdf> [out.xml]
 kura --check-invoice <input.pdf>
+kura --verify-password [--password <pw>] <input.pdf>
 kura --level <level> --batch [-r] [-d <dir>] [-s <suffix>] [-w] <folder>
 kura --help
 kura --version
@@ -102,6 +103,8 @@ kura --version
 `--attach-xml <file>`, `--attach-xml-name <name>` attach an arbitrary XML file. For invoices use `--einvoice` instead, which derives the name and relationship from the payload.
 
 ### E-invoices
+
+`--verify-password` reports whether a password opens the file, as `{"ok":true,"valid":true}`, exit status 0 when it does and 1 when it does not; the self-hosted service uses it to check a password before queueing real work.
 
 `--einvoice <invoice.xml>` builds a hybrid e-invoice; the level defaults to `3b`. `--facturx-profile <name>` overrides the detected profile. `--extract-invoice` and `--check-invoice` read an existing invoice back. All three are explained on [E-invoices](/e-invoices).
 

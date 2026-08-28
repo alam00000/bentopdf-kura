@@ -400,6 +400,7 @@ void printUsage(std::ostream& out) {
                "       kura --einvoice <invoice.xml> [--level 3b|3u|3a] <input.pdf> <output.pdf>\n"
                "       kura --extract-invoice <input.pdf> [out.xml]\n"
                "       kura --check-invoice <input.pdf>\n"
+               "       kura --verify-password [--password <pw>] <input.pdf>\n"
                "       kura --level <level> --batch [-r] [-d <dir>] [-s <suffix>] [-w] <folder>\n"
                "\n"
                "exit status: 0 ok, 1 check found findings, 2 input rejected, 3 timeout, "
@@ -528,6 +529,7 @@ int main(int argc, char** argv) {
   bool embedSource = false;
   bool extractInvoice = false;
   bool checkInvoice = false;
+  bool verifyPw = false;
   std::string signP12, signPw;
   bool ocr = false;
   std::string ocrExe = "tesseract";
@@ -569,6 +571,8 @@ int main(int argc, char** argv) {
       extractInvoice = true;
     } else if (arg == "--check-invoice") {
       checkInvoice = true;
+    } else if (arg == "--verify-password") {
+      verifyPw = true;
     } else if (arg == "--batch") {
       batch.active = true;
     } else if (arg == "--recursive" || arg == "-r") {
@@ -657,6 +661,15 @@ int main(int argc, char** argv) {
     } else {
       return usage();
     }
+  }
+  if (verifyPw) {
+    if (input.empty()) return usage();
+    std::string bytes;
+    if (!readFile(input.c_str(), bytes)) return kExitRejected;
+    const bool valid = pdfa::verifyPassword(
+        reinterpret_cast<const unsigned char*>(bytes.data()), bytes.size(), opt.password);
+    std::cout << "{\"ok\":true,\"valid\":" << (valid ? "true" : "false") << "}" << std::endl;
+    return valid ? kExitOk : kExitFindings;
   }
   if (extractInvoice || checkInvoice) {
     if (input.empty()) return usage();

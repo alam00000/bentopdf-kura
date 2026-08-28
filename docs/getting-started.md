@@ -70,10 +70,17 @@ Save that as `convert.mjs` next to an `input.pdf` and run `node convert.mjs`. Th
 ## In a container
 
 ```bash
-docker run --rm -v "$PWD:/work" ghcr.io/alam00000/bentopdf-kura:latest --level 2b in.pdf out.pdf
+docker run -d -p 8080:8080 ghcr.io/alam00000/bentopdf-kura:latest
 ```
 
-The image contains the native CLI, runs as an unprivileged user, and processes files on your own machine.
+That serves the web interface at `http://localhost:8080` and an [HTTP API](/http-api) on the native engine, all on your own machine. The same image is the CLI when you pass arguments:
+
+```bash
+docker run --rm --user "$(id -u):$(id -g)" -v "$PWD:/work" \
+  ghcr.io/alam00000/bentopdf-kura:latest --level 2b in.pdf out.pdf
+```
+
+[Self-hosting](/self-hosting) covers configuration, TLS, updates and monitoring.
 
 ## Picking a target
 

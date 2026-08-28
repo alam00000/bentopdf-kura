@@ -1,0 +1,73 @@
+name: docker
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  image:
+    name: Self-hosted image
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Free disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc
+          df -h /
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Build the image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/Dockerfile
+          load: true
+          tags: kura:test
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Serve and exercise the API
+        run: |
+          set -e
+          printf '%%PDF-1.7\n1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << >> >>\nendobj\ntrailer\n<< /Size 4 /Root 1 0 R >>\n%%%%EOF\n' > in.pdf
+          docker run -d --name kura -p 8080:8080 kura:test
+          for i in $(seq 1 60); do curl -sf http://localhost:8080/healthz >/dev/null && break; sleep 1; done
+          curl -s http://localhost:8080/healthz
+          curl -sf http://localhost:8080/healthz | grep -q '"ok":true'
+          code=$(curl -s -o out.pdf -w '%{http_code}' --data-binary @in.pdf 'http://localhost:8080/api/convert?level=2b')
+          test "$code" = 200
+          head -c 4 out.pdf | grep -q '%PDF'
+          curl -s --data-binary @out.pdf 'http://localhost:8080/api/check?level=2b' | tee check.json
+          grep -q '"compliant":true' check.json
+          curl -s -F file=@in.pdf 'http://localhost:8080/api/check?level=2b&profile=press/book-text-pages-check' | grep -q '"analysis"'
+          curl -s -F file=@in.pdf 'http://localhost:8080/api/convert?level=2b&report=json' | grep -q '"pdf":"JVBERi'
+          test "$(curl -s -o /dev/null -w '%{http_code}' http://localhost:8080/)" = 200
+          test "$(curl -s -o /dev/null -w '%{http_code}' http://localhost:8080/preflight)" = 200
+          curl -s http://localhost:8080/engine.js | grep -q '/api/convert'
+          test "$(curl -s -o /dev/null -w '%{http_code}' http://localhost:8080/api/profiles)" = 200
+          docker logs kura | tail -3
+          docker rm -f kura
+
+      - name: Token, upload limit and CLI mode
+        run: |
+          set -e
+          docker run -d --name kura2 -e KURA_API_TOKEN=secret -e KURA_MAX_UPLOAD_MB=1 -p 8081:8080 kura:test
+          for i in $(seq 1 60); do curl -sf http://localhost:8081/healthz >/dev/null && break; sleep 1; done
+          test "$(curl -s -o /dev/null -w '%{http_code}' --data-binary @in.pdf 'http://localhost:8081/api/convert?level=2b')" = 401
+          test "$(curl -s -o /dev/null -w '%{http_code}' -H 'Authorization: Bearer secret' --data-binary @in.pdf 'http://localhost:8081/api/convert?level=2b')" = 200
+          head -c 2000000 /dev/zero > big.bin
+          test "$(curl -s -o /dev/null -w '%{http_code}' -H 'Authorization: Bearer secret' --data-binary @big.bin 'http://localhost:8081/api/convert?level=2b')" = 413
+          docker rm -f kura2
+          mkdir -p work && cp in.pdf work/ && chmod 777 work
+          docker run --rm --user "$(id -u):$(id -g)" -v "$PWD/work":/work kura:test --level 2b in.pdf out.pdf | grep -q '"ok":true'
+          head -c 4 work/out.pdf | grep -q '%PDF'
+          docker run --rm kura:test --version
+          docker run --rm kura:test --check --level 2b in.pdf 2>/dev/null || true

@@ -4,9 +4,14 @@ out
 suite
 cert
 corpus
+corpus-synth
 calpoly
 preflight-parity
 dist
+docs
+bench
+packages
+tests
 **/build
 **/build-*
 **/__pycache__
@@ -14,4 +19,9 @@ dist
 **/*.a
 **/node_modules
 pdfa-engine/third_party
-site/*.wasm
+site/kura.js
+site/kura.wasm
+site/worker.js
+site/engine.js
+site/serve.mjs
+*.md

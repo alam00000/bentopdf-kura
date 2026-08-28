@@ -30,13 +30,27 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      - name: build and push
+      - name: Free disk space
         run: |
-          IMAGE="ghcr.io/${GITHUB_REPOSITORY,,}"
-          docker build -t "$IMAGE:${GITHUB_REF_NAME}" -t "$IMAGE:latest" pdfa-engine
-          docker run --rm "$IMAGE:${GITHUB_REF_NAME}" --version
-          docker push "$IMAGE:${GITHUB_REF_NAME}"
-          docker push "$IMAGE:latest"
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc
+      - uses: docker/setup-buildx-action@v3
+      - name: image name
+        id: image
+        run: echo "name=ghcr.io/${GITHUB_REPOSITORY,,}" >> "$GITHUB_OUTPUT"
+      - name: build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/Dockerfile
+          push: true
+          tags: |
+            ${{ steps.image.outputs.name }}:${{ github.ref_name }}
+            ${{ steps.image.outputs.name }}:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      - name: smoke the published image
+        run: |
+          docker run --rm "${{ steps.image.outputs.name }}:${{ github.ref_name }}" --version
 
   release:
     needs: [linux-x64, windows-x64, macos-arm64, wasm, docker]
