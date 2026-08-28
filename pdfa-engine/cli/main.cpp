@@ -9,6 +9,7 @@
 #include <unistd.h>
 #define kura_getpid getpid
 #endif
+#include <atomic>
 #include <chrono>
 #include <cmath>
 #include <cstdio>
@@ -28,6 +29,24 @@
 #endif
 
 namespace {
+constexpr int kExitOk = 0;
+constexpr int kExitFindings = 1;
+constexpr int kExitRejected = 2;
+constexpr int kExitUsage = 64;
+
+std::atomic<long long> gDeadlineMs{0};
+unsigned gWatchdogSeconds = 0;
+
+long long nowMs() {
+  return std::chrono::duration_cast<std::chrono::milliseconds>(
+             std::chrono::steady_clock::now().time_since_epoch())
+      .count();
+}
+
+void armWatchdog(unsigned seconds) {
+  gDeadlineMs.store(nowMs() + static_cast<long long>(seconds) * 1000);
+}
+
 std::string jsonEscape(const std::string& in) {
   std::string out;
   out.reserve(in.size());
@@ -144,8 +163,16 @@ bool runTesseract(const std::string& exe, int, double, int w, int h, const std::
     f << "P6\n" << w << " " << h << "\n255\n";
     f.write(rgb.data(), static_cast<std::streamsize>(rgb.size()));
   }
-  std::string cmd = "'" + exe + "' '" + ppm.string() + "' '" + tmp.string() +
-                    "' tsv 2>/dev/null";
+  auto quoted = [](const std::string& raw) {
+    std::string out = "'";
+    for (char c : raw) {
+      if (c == '\'') out += "'\\''";
+      else out += c;
+    }
+    return out + "'";
+  };
+  std::string cmd = quoted(exe) + " " + quoted(ppm.string()) + " " + quoted(tmp.string()) +
+                    " tsv 2>/dev/null";
   int rc = std::system(cmd.c_str());
   std::filesystem::path tsv = tmp;
   tsv += ".tsv";
@@ -207,6 +234,7 @@ struct BatchOptions {
 
 int runOne(pdfa::Options opt, bool embedSource, const std::string& input,
            const std::string& output) {
+  if (gWatchdogSeconds) armWatchdog(gWatchdogSeconds);
   std::ifstream in(input, std::ios::binary);
   if (!in) {
     std::cerr << "cannot open " << input << std::endl;
@@ -244,8 +272,8 @@ int runOne(pdfa::Options opt, bool embedSource, const std::string& input,
               static_cast<std::streamsize>(res.pdf.size()));
   }
   printReport(opt, res, input);
-  if (!res.ok) return 2;
-  return (opt.verifyOnly && !res.compliant) ? 1 : 0;
+  if (!res.ok) return kExitRejected;
+  return (opt.verifyOnly && !res.compliant) ? kExitFindings : kExitOk;
 }
 
 int einvoiceExtract(const std::string& input, const std::string& output,
@@ -361,22 +389,36 @@ int einvoiceValidate(const std::string& input, const std::string& password) {
   return problems.empty() ? 0 : 1;
 }
 
-int usage() {
-  std::cerr << "usage: kura --level "
+void printUsage(std::ostream& out) {
+  out << "usage: kura --level "
                "{1b,1a,2b,2u,2a,3b,3u,3a,4,4f,4e,x1a,x3,x4,x6,e1,vt1,vt3} [--ua] [--lang <tag>] "
                "(check only: x4p,x5g,x5n,x5pg,x6n,x6p,vt2) "
                "[--output-condition <name>] [--output-condition-info <text>] "
                "[--registry <url>] [--vt-records <ranges>] [--allow-visual-risk] "
                "[--password <pw>] <input.pdf> <output.pdf>\n"
                "       kura --check --level <level> [options] <input.pdf>\n"
-               "       kura --einvoice <invoice.xml> [--level 3b|3u|3a] <input.pdf> <output.pdf>"
+               "       kura --einvoice <invoice.xml> [--level 3b|3u|3a] <input.pdf> <output.pdf>\n"
+               "       kura --extract-invoice <input.pdf> [out.xml]\n"
+               "       kura --check-invoice <input.pdf>\n"
+               "       kura --level <level> --batch [-r] [-d <dir>] [-s <suffix>] [-w] <folder>\n"
+               "\n"
+               "exit status: 0 ok, 1 check found findings, 2 input rejected, 3 timeout, "
+               "64 usage error"
             << std::endl;
-  return 1;
+}
+
+int usage() {
+  printUsage(std::cerr);
+  return kExitUsage;
 }
 }
 
-void pdfa_watchdog(unsigned seconds) {
-  std::this_thread::sleep_for(std::chrono::seconds(seconds));
+void pdfa_watchdog() {
+  for (;;) {
+    std::this_thread::sleep_for(std::chrono::milliseconds(250));
+    long long deadline = gDeadlineMs.load();
+    if (deadline && nowMs() >= deadline) break;
+  }
   std::fputs(
       "{\n  \"ok\": false,\n  \"errorCode\": \"CONVERT_TIMEOUT\",\n"
       "  \"error\": \"conversion exceeded the time budget; the input may be "
@@ -474,7 +516,11 @@ int main(int argc, char** argv) {
 #endif
   const char* budget = std::getenv("PDFA_TIMEOUT");
   unsigned seconds = budget ? static_cast<unsigned>(std::atoi(budget)) : 120u;
-  if (seconds) std::thread(pdfa_watchdog, seconds).detach();
+  gWatchdogSeconds = seconds;
+  if (seconds) {
+    armWatchdog(seconds);
+    std::thread(pdfa_watchdog).detach();
+  }
   pdfa::Options opt;
   std::string input, output;
   bool haveLevel = false;
@@ -488,9 +534,12 @@ int main(int argc, char** argv) {
   BatchOptions batch;
   for (int i = 1; i < argc; ++i) {
     std::string arg = argv[i];
-    if (arg == "--version") {
+    if (arg == "--version" || arg == "-v") {
       std::cout << pdfa::kEngineName << " (kura) " << pdfa::kEngineVersion << std::endl;
-      return 0;
+      return kExitOk;
+    } else if (arg == "--help" || arg == "-h") {
+      printUsage(std::cout);
+      return kExitOk;
     } else if (arg == "--level" && i + 1 < argc) {
       if (!pdfa::levelFromString(argv[++i], opt.level)) return usage();
       haveLevel = true;
@@ -595,6 +644,10 @@ int main(int argc, char** argv) {
       opt.facturxProfile = argv[++i];
     } else if (arg == "--image-max-ppi" && i + 1 < argc) {
       opt.imageMaxPpi = std::atof(argv[++i]);
+      if (!(opt.imageMaxPpi >= 0) || opt.imageMaxPpi > 10000) {
+        std::cerr << "--image-max-ppi must be between 0 and 10000" << std::endl;
+        return kExitUsage;
+      }
     } else if (arg == "--password" && i + 1 < argc) {
       opt.password = argv[++i];
     } else if (input.empty()) {
