@@ -1,4 +1,4 @@
-.PHONY: build wasm npm-pack site-sync check lint smoke version-check shell-check yaml-check docs docs-dev fuzz clean
+.PHONY: bench build wasm npm-pack site-sync check lint smoke version-check shell-check yaml-check docs docs-dev fuzz clean
 
 build:
 	cmake -S pdfa-engine -B pdfa-engine/build -DCMAKE_BUILD_TYPE=Release
@@ -46,3 +46,7 @@ fuzz:
 
 clean:
 	rm -rf pdfa-engine/build pdfa-engine/build-wasm pdfa-engine/build-fuzz packages/npm/kura-pdf/engine docs/.vitepress/dist docs/.vitepress/cache
+
+bench:
+	python3 bench/bench.py --pdfjs "$${PDFJS:-cert/pdfjs/test/pdfs}" --target "$${TARGET:-30000}" --verify-every 10
+	python3 bench/report.py

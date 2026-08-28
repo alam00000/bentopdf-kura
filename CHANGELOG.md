@@ -12,6 +12,9 @@ All notable changes to this project are documented here. The format follows
   buffer-based API and a `kura` command that mirrors the native CLI.
 - A documentation site under `docs/`, and the demo site restyled to match the
   rest of BentoPDF.
+- A reproducible robustness benchmark, `make bench`, over public corpora with every
+  file's origin and SHA-256 recorded, reported in `benchmark.md` with a veraPDF-verified
+  sample of the outputs.
 - A preflight library of 396 profiles written by BentoPDF from the Ghent Workgroup
   2022 specifications, the ISO standards and prepress practice, generated from
   one script, with readable property and built-in names in the JSON dialect.
