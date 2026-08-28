@@ -1,0 +1,67 @@
+{
+  "kura-profile": 1,
+  "name": "Report small text",
+  "description": "Reports text at sizes that print or read poorly.",
+  "checks": [
+    {
+      "name": "Text smaller than 5 pt",
+      "severity": "warning",
+      "all": [
+        {
+          "prop": "text.size",
+          "op": "<",
+          "value": 5
+        },
+        {
+          "prop": "text.size",
+          "op": ">",
+          "value": 0.01
+        }
+      ]
+    },
+    {
+      "name": "Text smaller than 8 pt in more than one ink",
+      "severity": "warning",
+      "all": [
+        {
+          "prop": "text.size",
+          "op": "<",
+          "value": 8
+        },
+        {
+          "prop": "text.size",
+          "op": ">",
+          "value": 0.01
+        },
+        {
+          "prop": "paint.inkCount",
+          "op": ">",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "name": "White text smaller than 8 pt",
+      "severity": "warning",
+      "all": [
+        {
+          "prop": "text.size",
+          "op": "<",
+          "value": 8
+        },
+        {
+          "prop": "text.size",
+          "op": ">",
+          "value": 0.01
+        },
+        {
+          "prop": "paint.isWhite",
+          "op": "==",
+          "value": true
+        }
+      ]
+    }
+  ],
+  "builtins": [],
+  "fixes": []
+}

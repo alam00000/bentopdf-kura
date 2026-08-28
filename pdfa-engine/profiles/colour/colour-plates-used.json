@@ -1,0 +1,13 @@
+{
+  "kura-profile": 1,
+  "name": "Colour plates used",
+  "description": "Reports every object that produces output on the cyan, magenta or yellow plates; useful for jobs meant to be black only.",
+  "checks": [],
+  "builtins": [
+    {
+      "name": "colourPlatesUsed",
+      "severity": "warning"
+    }
+  ],
+  "fixes": []
+}

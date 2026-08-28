@@ -1,0 +1,16 @@
+{
+  "kura-profile": 1,
+  "name": "Screen viewing at 96 ppi: report",
+  "description": "Reports images above 96 ppi, the point past which a screen shows no more detail.",
+  "checks": [],
+  "builtins": [
+    {
+      "name": "imageResolutionAbove",
+      "severity": "info",
+      "params": {
+        "ppi": 96
+      }
+    }
+  ],
+  "fixes": []
+}

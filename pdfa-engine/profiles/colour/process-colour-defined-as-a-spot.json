@@ -1,0 +1,20 @@
+{
+  "kura-profile": 1,
+  "name": "Process colour defined as a spot",
+  "description": "Reports every object painted with process colour defined as a spot.",
+  "checks": [
+    {
+      "name": "Process colour defined as a spot",
+      "severity": "info",
+      "all": [
+        {
+          "prop": "paint.processColourAsSpot",
+          "op": "==",
+          "value": true
+        }
+      ]
+    }
+  ],
+  "builtins": [],
+  "fixes": []
+}

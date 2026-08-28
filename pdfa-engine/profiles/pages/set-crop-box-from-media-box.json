@@ -1,0 +1,21 @@
+{
+  "kura-profile": 1,
+  "name": "Set crop box from media box",
+  "description": "Adds a crop box equal to the media box where missing.",
+  "checks": [],
+  "builtins": [],
+  "fixes": [
+    {
+      "op": "setpagebox",
+      "params": [
+        "CropBox",
+        "RelativeToMediaBox",
+        "0",
+        "0",
+        "0",
+        "0",
+        "pt"
+      ]
+    }
+  ]
+}

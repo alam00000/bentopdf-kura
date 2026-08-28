@@ -1,0 +1,20 @@
+{
+  "kura-profile": 1,
+  "name": "Bitmap-only fonts",
+  "description": "Reports bitmap-only fonts.",
+  "checks": [
+    {
+      "name": "Bitmap-only fonts",
+      "severity": "info",
+      "all": [
+        {
+          "prop": "font.bitmapOnly",
+          "op": "==",
+          "value": true
+        }
+      ]
+    }
+  ],
+  "builtins": [],
+  "fixes": []
+}

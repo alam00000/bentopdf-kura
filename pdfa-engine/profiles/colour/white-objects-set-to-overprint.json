@@ -1,0 +1,25 @@
+{
+  "kura-profile": 1,
+  "name": "White objects set to overprint",
+  "description": "Reports white objects that overprint and would vanish on press.",
+  "checks": [
+    {
+      "name": "White object set to overprint",
+      "severity": "error",
+      "all": [
+        {
+          "prop": "paint.isWhite",
+          "op": "==",
+          "value": true
+        },
+        {
+          "prop": "fill.overprint",
+          "op": "==",
+          "value": true
+        }
+      ]
+    }
+  ],
+  "builtins": [],
+  "fixes": []
+}

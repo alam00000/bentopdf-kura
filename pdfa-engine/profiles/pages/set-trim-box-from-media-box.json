@@ -1,0 +1,21 @@
+{
+  "kura-profile": 1,
+  "name": "Set trim box from media box",
+  "description": "Adds a trim box equal to the media box on pages that lack one.",
+  "checks": [],
+  "builtins": [],
+  "fixes": [
+    {
+      "op": "setpagebox",
+      "params": [
+        "TrimBox",
+        "RelativeToMediaBox",
+        "0",
+        "0",
+        "0",
+        "0",
+        "pt"
+      ]
+    }
+  ]
+}

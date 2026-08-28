@@ -1,0 +1,20 @@
+{
+  "kura-profile": 1,
+  "name": "Pantone-suffixed spot names",
+  "description": "Reports spot colours whose names carry a Pantone suffix, which often signals duplicates.",
+  "checks": [
+    {
+      "name": "Spot name with a Pantone suffix",
+      "severity": "info",
+      "all": [
+        {
+          "prop": "paint.spotNameHasPantoneSuffix",
+          "op": "==",
+          "value": true
+        }
+      ]
+    }
+  ],
+  "builtins": [],
+  "fixes": []
+}

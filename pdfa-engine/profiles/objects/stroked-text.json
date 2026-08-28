@@ -1,0 +1,20 @@
+{
+  "kura-profile": 1,
+  "name": "Stroked text",
+  "description": "Reports text that is stroked rather than filled.",
+  "checks": [
+    {
+      "name": "Stroked text",
+      "severity": "info",
+      "all": [
+        {
+          "prop": "text.isStroked",
+          "op": "==",
+          "value": true
+        }
+      ]
+    }
+  ],
+  "builtins": [],
+  "fixes": []
+}

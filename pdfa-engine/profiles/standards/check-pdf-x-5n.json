@@ -1,0 +1,14 @@
+{
+  "kura-profile": 1,
+  "name": "Check PDF/X-5n",
+  "description": "Reports every deviation from PDF/X-5n; validated only; it references an external press profile.",
+  "checks": [],
+  "builtins": [
+    {
+      "name": "conformsTo",
+      "severity": "error",
+      "level": "x5n"
+    }
+  ],
+  "fixes": []
+}

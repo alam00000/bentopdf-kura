@@ -1,0 +1,25 @@
+{
+  "kura-profile": 1,
+  "name": "Blend modes other than Normal",
+  "description": "Reports objects using Multiply, Screen, Overlay and the other blend modes.",
+  "checks": [
+    {
+      "name": "Blend mode other than Normal",
+      "severity": "info",
+      "all": [
+        {
+          "prop": "gstate.blendMode",
+          "op": "!=",
+          "value": "Normal"
+        },
+        {
+          "prop": "gstate.blendMode",
+          "op": "!=",
+          "value": "Compatible"
+        }
+      ]
+    }
+  ],
+  "builtins": [],
+  "fixes": []
+}

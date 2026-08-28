@@ -1,0 +1,20 @@
+{
+  "kura-profile": 1,
+  "name": "Invalid font programs",
+  "description": "Reports invalid font programs.",
+  "checks": [
+    {
+      "name": "Invalid font programs",
+      "severity": "warning",
+      "all": [
+        {
+          "prop": "font.invalid",
+          "op": "==",
+          "value": true
+        }
+      ]
+    }
+  ],
+  "builtins": [],
+  "fixes": []
+}

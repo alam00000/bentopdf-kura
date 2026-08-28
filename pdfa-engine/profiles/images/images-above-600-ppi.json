@@ -1,0 +1,16 @@
+{
+  "kura-profile": 1,
+  "name": "Images above 600 ppi",
+  "description": "Reports images above 600 ppi, candidates for downsampling with --image-max-ppi.",
+  "checks": [],
+  "builtins": [
+    {
+      "name": "imageResolutionAbove",
+      "severity": "info",
+      "params": {
+        "ppi": 600
+      }
+    }
+  ],
+  "fixes": []
+}

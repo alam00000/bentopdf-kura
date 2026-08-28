@@ -1,0 +1,16 @@
+{
+  "kura-profile": 1,
+  "name": "Mark content as a processing step",
+  "description": "Places page content on a processing-steps layer (ISO 19593).",
+  "checks": [],
+  "builtins": [],
+  "fixes": [
+    {
+      "op": "putobjpsteps",
+      "params": [
+        "Structural",
+        "Structural"
+      ]
+    }
+  ]
+}

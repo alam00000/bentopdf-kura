@@ -1,0 +1,115 @@
+{
+  "kura-profile": 1,
+  "name": "Online publishing: check and fix",
+  "description": "The online checks, then the safe cleanups: page scaling removed, flatness and smoothness dropped, interpolation removed, sRGB blending; convert with --image-max-ppi 150 to downsample.",
+  "checks": [
+    {
+      "name": "Spot colour in use",
+      "severity": "warning",
+      "all": [
+        {
+          "prop": "paint.isSpot",
+          "op": "==",
+          "value": true
+        }
+      ]
+    },
+    {
+      "name": "Registration colour used for content",
+      "severity": "error",
+      "all": [
+        {
+          "prop": "paint.isRegistration",
+          "op": "==",
+          "value": true
+        }
+      ]
+    },
+    {
+      "name": "Text smaller than 6 pt",
+      "severity": "info",
+      "all": [
+        {
+          "prop": "text.size",
+          "op": "<",
+          "value": 6
+        },
+        {
+          "prop": "text.size",
+          "op": ">",
+          "value": 0.01
+        }
+      ]
+    }
+  ],
+  "builtins": [
+    {
+      "name": "imageResolutionAbove",
+      "severity": "warning",
+      "params": {
+        "ppi": 150
+      }
+    },
+    {
+      "name": "bitmapResolutionAbove",
+      "severity": "info",
+      "params": {
+        "ppi": 600
+      }
+    },
+    {
+      "name": "imageResolutionBelow",
+      "severity": "info",
+      "params": {
+        "ppi": 72
+      }
+    },
+    {
+      "name": "fontsNotEmbedded",
+      "severity": "error"
+    },
+    {
+      "name": "encrypted",
+      "severity": "warning"
+    },
+    {
+      "name": "damaged",
+      "severity": "error"
+    },
+    {
+      "name": "syntaxProblems",
+      "severity": "error"
+    },
+    {
+      "name": "uncompressedImages",
+      "severity": "warning"
+    }
+  ],
+  "fixes": [
+    {
+      "op": "removepagescaling",
+      "params": []
+    },
+    {
+      "op": "removeflatness",
+      "params": []
+    },
+    {
+      "op": "removesmoothness",
+      "params": []
+    },
+    {
+      "op": "settransparencyblendcs",
+      "params": [
+        "sRGB"
+      ]
+    },
+    {
+      "op": "setinitialviewdocumentoptions",
+      "params": [
+        "UseNone",
+        "SinglePage"
+      ]
+    }
+  ]
+}

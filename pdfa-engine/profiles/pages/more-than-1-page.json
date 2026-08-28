@@ -1,0 +1,20 @@
+{
+  "kura-profile": 1,
+  "name": "More than 1 page",
+  "description": "Reports documents with more than 1 page.",
+  "checks": [
+    {
+      "name": "More than 1 pages",
+      "severity": "info",
+      "all": [
+        {
+          "prop": "doc.pages",
+          "op": ">",
+          "value": 1
+        }
+      ]
+    }
+  ],
+  "builtins": [],
+  "fixes": []
+}

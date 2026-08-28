@@ -1,0 +1,77 @@
+{
+  "kura-profile": 1,
+  "name": "Prepress cleanup",
+  "description": "The safe prepress repairs in one step: trim and bleed boxes, hairlines, overprint, knockout, scaling, transparency groups.",
+  "checks": [],
+  "builtins": [],
+  "fixes": [
+    {
+      "op": "setpagebox",
+      "params": [
+        "TrimBox",
+        "RelativeToCropBox",
+        "0",
+        "0",
+        "0",
+        "0",
+        "pt"
+      ]
+    },
+    {
+      "op": "generatebleed",
+      "params": [
+        "Amount",
+        "3",
+        "mm"
+      ]
+    },
+    {
+      "op": "removepagescaling",
+      "params": []
+    },
+    {
+      "op": "increaselinewidth",
+      "params": [
+        "0.25",
+        "",
+        "pt"
+      ]
+    },
+    {
+      "op": "overprintblack",
+      "params": [
+        "Text"
+      ]
+    },
+    {
+      "op": "knockoutwhite",
+      "params": [
+        ""
+      ]
+    },
+    {
+      "op": "trappedkey",
+      "params": [
+        "false"
+      ]
+    },
+    {
+      "op": "removeflatness",
+      "params": []
+    },
+    {
+      "op": "removesmoothness",
+      "params": []
+    },
+    {
+      "op": "removeunnecessarytransparencygroups",
+      "params": []
+    },
+    {
+      "op": "settransparencyblendcs",
+      "params": [
+        "CMYK"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,52 @@
+{
+  "kura-profile": 1,
+  "name": "Report ink coverage",
+  "description": "Reports fills and strokes above 300% total ink and rich black on text.",
+  "checks": [
+    {
+      "name": "Total ink above 300% in fills",
+      "severity": "error",
+      "all": [
+        {
+          "prop": "fill.totalInk",
+          "op": ">",
+          "value": 300
+        }
+      ]
+    },
+    {
+      "name": "Total ink above 300% in strokes",
+      "severity": "error",
+      "all": [
+        {
+          "prop": "stroke.totalInk",
+          "op": ">",
+          "value": 300
+        }
+      ]
+    },
+    {
+      "name": "Rich black on text smaller than 12 pt",
+      "severity": "warning",
+      "all": [
+        {
+          "prop": "content.isText",
+          "op": "==",
+          "value": true
+        },
+        {
+          "prop": "text.size",
+          "op": "<",
+          "value": 12
+        },
+        {
+          "prop": "paint.richBlackCmyPercent",
+          "op": ">",
+          "value": 0
+        }
+      ]
+    }
+  ],
+  "builtins": [],
+  "fixes": []
+}

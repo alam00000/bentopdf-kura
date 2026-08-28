@@ -1,0 +1,13 @@
+{
+  "kura-profile": 1,
+  "name": "Encrypted document",
+  "description": "Reports files protected by encryption.",
+  "checks": [],
+  "builtins": [
+    {
+      "name": "encrypted",
+      "severity": "warning"
+    }
+  ],
+  "fixes": []
+}

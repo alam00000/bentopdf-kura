@@ -1,0 +1,42 @@
+{
+  "kura-profile": 1,
+  "name": "Report annotations",
+  "description": "Reports annotations that print, carry opacity or lie outside the trim area.",
+  "checks": [
+    {
+      "name": "Annotation that prints",
+      "severity": "info",
+      "all": [
+        {
+          "prop": "annot.prints",
+          "op": "==",
+          "value": true
+        }
+      ]
+    },
+    {
+      "name": "Annotation with opacity",
+      "severity": "info",
+      "all": [
+        {
+          "prop": "annot.hasOpacity",
+          "op": "==",
+          "value": true
+        }
+      ]
+    },
+    {
+      "name": "Annotation outside bleed and trim",
+      "severity": "info",
+      "all": [
+        {
+          "prop": "annot.insideBleedOrTrim",
+          "op": "==",
+          "value": false
+        }
+      ]
+    }
+  ],
+  "builtins": [],
+  "fixes": []
+}

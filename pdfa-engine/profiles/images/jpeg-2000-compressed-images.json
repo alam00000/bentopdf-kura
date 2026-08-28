@@ -1,0 +1,20 @@
+{
+  "kura-profile": 1,
+  "name": "JPEG 2000-compressed images",
+  "description": "Reports images stored with JPEG 2000 compression.",
+  "checks": [
+    {
+      "name": "JPEG 2000-compressed image",
+      "severity": "info",
+      "all": [
+        {
+          "prop": "image.filter",
+          "op": "contains",
+          "value": "JPX"
+        }
+      ]
+    }
+  ],
+  "builtins": [],
+  "fixes": []
+}

@@ -1,0 +1,23 @@
+{
+  "kura-profile": 1,
+  "name": "Report low resolution images",
+  "description": "Reports colour and grayscale images below 300 ppi and bitmaps below 1200 ppi.",
+  "checks": [],
+  "builtins": [
+    {
+      "name": "imageResolutionBelow",
+      "severity": "warning",
+      "params": {
+        "ppi": 300
+      }
+    },
+    {
+      "name": "bitmapResolutionBelow",
+      "severity": "warning",
+      "params": {
+        "ppi": 1200
+      }
+    }
+  ],
+  "fixes": []
+}

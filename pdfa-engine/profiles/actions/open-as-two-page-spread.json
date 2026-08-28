@@ -1,0 +1,16 @@
+{
+  "kura-profile": 1,
+  "name": "Open as two-page spread",
+  "description": "Sets the initial view to facing pages with the first page on the right.",
+  "checks": [],
+  "builtins": [],
+  "fixes": [
+    {
+      "op": "setinitialviewdocumentoptions",
+      "params": [
+        "UseNone",
+        "TwoPageRight"
+      ]
+    }
+  ]
+}

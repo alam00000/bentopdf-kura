@@ -1,0 +1,25 @@
+{
+  "kura-profile": 1,
+  "name": "Hidden layers",
+  "description": "Reports content on layers that are switched off.",
+  "checks": [
+    {
+      "name": "Content on a hidden layer",
+      "severity": "warning",
+      "all": [
+        {
+          "prop": "layers.onLayer",
+          "op": "==",
+          "value": true
+        },
+        {
+          "prop": "layers.visible",
+          "op": "==",
+          "value": false
+        }
+      ]
+    }
+  ],
+  "builtins": [],
+  "fixes": []
+}

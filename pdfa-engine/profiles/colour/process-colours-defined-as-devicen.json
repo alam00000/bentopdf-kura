@@ -1,0 +1,20 @@
+{
+  "kura-profile": 1,
+  "name": "Process colours defined as DeviceN",
+  "description": "Reports every object painted with process colours defined as devicen.",
+  "checks": [
+    {
+      "name": "Process colours defined as DeviceN",
+      "severity": "info",
+      "all": [
+        {
+          "prop": "paint.processColoursAsDeviceN",
+          "op": "==",
+          "value": true
+        }
+      ]
+    }
+  ],
+  "builtins": [],
+  "fixes": []
+}

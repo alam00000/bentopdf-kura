@@ -1,0 +1,17 @@
+{
+  "kura-profile": 1,
+  "name": "Thicken hairlines to 0.5 pt",
+  "description": "Raises every stroke thinner than 0.5 pt to 0.5 pt.",
+  "checks": [],
+  "builtins": [],
+  "fixes": [
+    {
+      "op": "increaselinewidth",
+      "params": [
+        "0.5",
+        "",
+        "pt"
+      ]
+    }
+  ]
+}

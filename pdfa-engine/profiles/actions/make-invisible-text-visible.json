@@ -1,0 +1,15 @@
+{
+  "kura-profile": 1,
+  "name": "Make invisible text visible",
+  "description": "Sets invisible text to plain fill so it shows and prints.",
+  "checks": [],
+  "builtins": [],
+  "fixes": [
+    {
+      "op": "settextrendermode",
+      "params": [
+        "0"
+      ]
+    }
+  ]
+}

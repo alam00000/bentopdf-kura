@@ -1,0 +1,21 @@
+{
+  "kura-profile": 1,
+  "name": "Set art box from trim box",
+  "description": "Adds an art box equal to the trim box where missing.",
+  "checks": [],
+  "builtins": [],
+  "fixes": [
+    {
+      "op": "setpagebox",
+      "params": [
+        "ArtBox",
+        "RelativeToTrimBox",
+        "0",
+        "0",
+        "0",
+        "0",
+        "pt"
+      ]
+    }
+  ]
+}

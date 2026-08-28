@@ -1,0 +1,58 @@
+{
+  "kura-profile": 1,
+  "name": "Report fonts",
+  "description": "Reports fonts not embedded, Type 3 fonts, missing glyphs and text without Unicode.",
+  "checks": [
+    {
+      "name": "Type 3 font in use",
+      "severity": "warning",
+      "all": [
+        {
+          "prop": "font.isType3",
+          "op": "==",
+          "value": true
+        }
+      ]
+    },
+    {
+      "name": "Glyph falls back to .notdef",
+      "severity": "error",
+      "all": [
+        {
+          "prop": "font.notdefUsed",
+          "op": "==",
+          "value": true
+        }
+      ]
+    },
+    {
+      "name": "Font program is not valid",
+      "severity": "error",
+      "all": [
+        {
+          "prop": "font.invalid",
+          "op": "==",
+          "value": true
+        }
+      ]
+    },
+    {
+      "name": "Text without Unicode",
+      "severity": "info",
+      "all": [
+        {
+          "prop": "font.unicodeComplete",
+          "op": "==",
+          "value": false
+        }
+      ]
+    }
+  ],
+  "builtins": [
+    {
+      "name": "fontsNotEmbedded",
+      "severity": "warning"
+    }
+  ],
+  "fixes": []
+}

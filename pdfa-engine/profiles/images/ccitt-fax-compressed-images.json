@@ -1,0 +1,20 @@
+{
+  "kura-profile": 1,
+  "name": "CCITT fax-compressed images",
+  "description": "Reports images stored with CCITT fax compression.",
+  "checks": [
+    {
+      "name": "CCITT fax-compressed image",
+      "severity": "info",
+      "all": [
+        {
+          "prop": "image.filter",
+          "op": "contains",
+          "value": "CCITT"
+        }
+      ]
+    }
+  ],
+  "builtins": [],
+  "fixes": []
+}

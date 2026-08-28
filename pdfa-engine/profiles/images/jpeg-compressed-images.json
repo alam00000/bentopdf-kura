@@ -1,0 +1,20 @@
+{
+  "kura-profile": 1,
+  "name": "JPEG-compressed images",
+  "description": "Reports images stored with JPEG compression.",
+  "checks": [
+    {
+      "name": "JPEG-compressed image",
+      "severity": "info",
+      "all": [
+        {
+          "prop": "image.filter",
+          "op": "contains",
+          "value": "DCT"
+        }
+      ]
+    }
+  ],
+  "builtins": [],
+  "fixes": []
+}

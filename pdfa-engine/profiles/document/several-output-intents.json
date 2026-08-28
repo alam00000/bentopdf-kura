@@ -1,0 +1,20 @@
+{
+  "kura-profile": 1,
+  "name": "Several output intents",
+  "description": "Reports files with more than one output intent.",
+  "checks": [
+    {
+      "name": "More than one output intent",
+      "severity": "info",
+      "all": [
+        {
+          "prop": "outputIntent.count",
+          "op": ">",
+          "value": 1
+        }
+      ]
+    }
+  ],
+  "builtins": [],
+  "fixes": []
+}

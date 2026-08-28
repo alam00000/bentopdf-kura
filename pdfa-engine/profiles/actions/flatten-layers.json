@@ -1,0 +1,13 @@
+{
+  "kura-profile": 1,
+  "name": "Flatten layers",
+  "description": "Discards hidden layers and merges the visible ones into the page.",
+  "checks": [],
+  "builtins": [],
+  "fixes": [
+    {
+      "op": "dscdhdnlycntfltnvsblyrs",
+      "params": []
+    }
+  ]
+}

@@ -1,0 +1,31 @@
+{
+  "kura-profile": 1,
+  "name": "Overprinting objects",
+  "description": "Reports every object with overprint switched on.",
+  "checks": [
+    {
+      "name": "Fill set to overprint",
+      "severity": "info",
+      "all": [
+        {
+          "prop": "fill.overprint",
+          "op": "==",
+          "value": true
+        }
+      ]
+    },
+    {
+      "name": "Stroke set to overprint",
+      "severity": "info",
+      "all": [
+        {
+          "prop": "stroke.overprint",
+          "op": "==",
+          "value": true
+        }
+      ]
+    }
+  ],
+  "builtins": [],
+  "fixes": []
+}

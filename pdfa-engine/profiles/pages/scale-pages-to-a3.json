@@ -1,0 +1,17 @@
+{
+  "kura-profile": 1,
+  "name": "Scale pages to A3",
+  "description": "Scales every page proportionally to fit A3 (297 x 420 mm).",
+  "checks": [],
+  "builtins": [],
+  "fixes": [
+    {
+      "op": "scalepagesex",
+      "params": [
+        "297",
+        "420",
+        "mm"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,16 @@
+{
+  "kura-profile": 1,
+  "name": "Images above 800 ppi",
+  "description": "Reports images above 800 ppi, candidates for downsampling with --image-max-ppi.",
+  "checks": [],
+  "builtins": [
+    {
+      "name": "imageResolutionAbove",
+      "severity": "info",
+      "params": {
+        "ppi": 800
+      }
+    }
+  ],
+  "fixes": []
+}

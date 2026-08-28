@@ -1,0 +1,13 @@
+{
+  "kura-profile": 1,
+  "name": "Empty pages",
+  "description": "Reports pages with no visible content.",
+  "checks": [],
+  "builtins": [
+    {
+      "name": "emptyPage",
+      "severity": "warning"
+    }
+  ],
+  "fixes": []
+}

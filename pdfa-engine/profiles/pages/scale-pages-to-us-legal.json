@@ -1,0 +1,17 @@
+{
+  "kura-profile": 1,
+  "name": "Scale pages to US Legal",
+  "description": "Scales every page proportionally to fit US Legal (8.5 x 14 inch).",
+  "checks": [],
+  "builtins": [],
+  "fixes": [
+    {
+      "op": "scalepagesex",
+      "params": [
+        "8.5",
+        "14",
+        "inch"
+      ]
+    }
+  ]
+}

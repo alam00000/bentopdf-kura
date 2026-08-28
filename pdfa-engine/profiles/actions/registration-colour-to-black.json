@@ -1,0 +1,13 @@
+{
+  "kura-profile": 1,
+  "name": "Registration colour to black",
+  "description": "Repaints registration-colour content in black.",
+  "checks": [],
+  "builtins": [],
+  "fixes": [
+    {
+      "op": "convertregistrationcolortoblack",
+      "params": []
+    }
+  ]
+}

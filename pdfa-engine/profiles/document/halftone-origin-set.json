@@ -1,0 +1,20 @@
+{
+  "kura-profile": 1,
+  "name": "Halftone origin set",
+  "description": "Reports halftone dictionaries that fix a screen origin.",
+  "checks": [
+    {
+      "name": "Halftone origin",
+      "severity": "info",
+      "all": [
+        {
+          "prop": "halftone.hasOrigin",
+          "op": "==",
+          "value": true
+        }
+      ]
+    }
+  ],
+  "builtins": [],
+  "fixes": []
+}

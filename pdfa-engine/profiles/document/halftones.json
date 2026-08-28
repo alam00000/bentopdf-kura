@@ -1,0 +1,13 @@
+{
+  "kura-profile": 1,
+  "name": "Halftones",
+  "description": "Reports custom halftone settings.",
+  "checks": [],
+  "builtins": [
+    {
+      "name": "halftones",
+      "severity": "info"
+    }
+  ],
+  "fixes": []
+}

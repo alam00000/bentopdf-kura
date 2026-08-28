@@ -1,0 +1,20 @@
+{
+  "kura-profile": 1,
+  "name": "Black point compensation set",
+  "description": "Reports graphics states that switch black point compensation on.",
+  "checks": [
+    {
+      "name": "Black point compensation",
+      "severity": "info",
+      "all": [
+        {
+          "prop": "gstate.hasBlackPointCompensation",
+          "op": "==",
+          "value": true
+        }
+      ]
+    }
+  ],
+  "builtins": [],
+  "fixes": []
+}

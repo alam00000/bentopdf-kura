@@ -1,0 +1,30 @@
+{
+  "kura-profile": 1,
+  "name": "Black text not set to overprint",
+  "description": "Reports 100% black text that knocks out, a registration risk.",
+  "checks": [
+    {
+      "name": "Black text not set to overprint",
+      "severity": "warning",
+      "all": [
+        {
+          "prop": "content.isText",
+          "op": "==",
+          "value": true
+        },
+        {
+          "prop": "paint.is100Black",
+          "op": "==",
+          "value": true
+        },
+        {
+          "prop": "fill.overprint",
+          "op": "==",
+          "value": false
+        }
+      ]
+    }
+  ],
+  "builtins": [],
+  "fixes": []
+}

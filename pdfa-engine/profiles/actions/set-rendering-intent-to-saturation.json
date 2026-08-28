@@ -1,0 +1,15 @@
+{
+  "kura-profile": 1,
+  "name": "Set rendering intent to Saturation",
+  "description": "Sets every graphics state's rendering intent to Saturation.",
+  "checks": [],
+  "builtins": [],
+  "fixes": [
+    {
+      "op": "setrenderingintent",
+      "params": [
+        "Saturation"
+      ]
+    }
+  ]
+}

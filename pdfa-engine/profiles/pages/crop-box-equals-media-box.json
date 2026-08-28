@@ -1,0 +1,20 @@
+{
+  "kura-profile": 1,
+  "name": "Crop box equals media box",
+  "description": "Reports pages whose crop box adds nothing.",
+  "checks": [
+    {
+      "name": "Crop box equals media box",
+      "severity": "info",
+      "all": [
+        {
+          "prop": "page.cropEqualsMedia",
+          "op": "==",
+          "value": true
+        }
+      ]
+    }
+  ],
+  "builtins": [],
+  "fixes": []
+}

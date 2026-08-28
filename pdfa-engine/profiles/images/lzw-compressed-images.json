@@ -1,0 +1,20 @@
+{
+  "kura-profile": 1,
+  "name": "LZW-compressed images",
+  "description": "Reports images stored with LZW compression.",
+  "checks": [
+    {
+      "name": "LZW-compressed image",
+      "severity": "info",
+      "all": [
+        {
+          "prop": "image.filter",
+          "op": "contains",
+          "value": "LZW"
+        }
+      ]
+    }
+  ],
+  "builtins": [],
+  "fixes": []
+}

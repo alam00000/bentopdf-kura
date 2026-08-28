@@ -1,0 +1,30 @@
+{
+  "kura-profile": 1,
+  "name": "White text below 9 pt",
+  "description": "Reports knockout white text under 9 pt, which fills in on press.",
+  "checks": [
+    {
+      "name": "White text smaller than 9 pt",
+      "severity": "warning",
+      "all": [
+        {
+          "prop": "text.size",
+          "op": "<",
+          "value": 9
+        },
+        {
+          "prop": "text.size",
+          "op": ">",
+          "value": 0.01
+        },
+        {
+          "prop": "paint.isWhite",
+          "op": "==",
+          "value": true
+        }
+      ]
+    }
+  ],
+  "builtins": [],
+  "fixes": []
+}

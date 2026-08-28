@@ -1,0 +1,16 @@
+{
+  "kura-profile": 1,
+  "name": "Images below 400 ppi",
+  "description": "Reports colour and grayscale images whose effective resolution is below 400 ppi.",
+  "checks": [],
+  "builtins": [
+    {
+      "name": "imageResolutionBelow",
+      "severity": "warning",
+      "params": {
+        "ppi": 400
+      }
+    }
+  ],
+  "fixes": []
+}

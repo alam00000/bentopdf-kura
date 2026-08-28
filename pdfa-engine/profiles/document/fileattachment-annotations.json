@@ -1,0 +1,20 @@
+{
+  "kura-profile": 1,
+  "name": "FileAttachment annotations",
+  "description": "Reports annotations of type FileAttachment.",
+  "checks": [
+    {
+      "name": "FileAttachment annotation",
+      "severity": "info",
+      "all": [
+        {
+          "prop": "annot.type",
+          "op": "==",
+          "value": "FileAttachment"
+        }
+      ]
+    }
+  ],
+  "builtins": [],
+  "fixes": []
+}

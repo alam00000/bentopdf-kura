@@ -1,0 +1,22 @@
+{
+  "kura-profile": 1,
+  "name": "Reset trim box to crop box",
+  "description": "Replaces the trim box with the crop box on every page.",
+  "checks": [],
+  "builtins": [],
+  "fixes": [
+    {
+      "op": "setpagebox",
+      "params": [
+        "TrimBox",
+        "RelativeToCropBox",
+        "0",
+        "0",
+        "0",
+        "0",
+        "pt",
+        "Always"
+      ]
+    }
+  ]
+}

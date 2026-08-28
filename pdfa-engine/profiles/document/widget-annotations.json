@@ -1,0 +1,20 @@
+{
+  "kura-profile": 1,
+  "name": "Widget annotations",
+  "description": "Reports annotations of type Widget.",
+  "checks": [
+    {
+      "name": "Widget annotation",
+      "severity": "info",
+      "all": [
+        {
+          "prop": "annot.type",
+          "op": "==",
+          "value": "Widget"
+        }
+      ]
+    }
+  ],
+  "builtins": [],
+  "fixes": []
+}

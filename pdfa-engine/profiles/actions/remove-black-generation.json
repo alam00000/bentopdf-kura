@@ -1,0 +1,13 @@
+{
+  "kura-profile": 1,
+  "name": "Remove black generation",
+  "description": "Removes black-generation functions.",
+  "checks": [],
+  "builtins": [],
+  "fixes": [
+    {
+      "op": "removebg",
+      "params": []
+    }
+  ]
+}

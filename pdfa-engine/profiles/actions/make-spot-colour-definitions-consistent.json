@@ -1,0 +1,13 @@
+{
+  "kura-profile": 1,
+  "name": "Make spot colour definitions consistent",
+  "description": "Gives every use of a spot colour the same definition.",
+  "checks": [],
+  "builtins": [],
+  "fixes": [
+    {
+      "op": "makecustomspotcolornamesconsistent",
+      "params": []
+    }
+  ]
+}

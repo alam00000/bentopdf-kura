@@ -1,0 +1,20 @@
+{
+  "kura-profile": 1,
+  "name": "Rotated pages",
+  "description": "Reports pages with a rotation attribute.",
+  "checks": [
+    {
+      "name": "Rotated page",
+      "severity": "info",
+      "all": [
+        {
+          "prop": "page.isRotated",
+          "op": "==",
+          "value": true
+        }
+      ]
+    }
+  ],
+  "builtins": [],
+  "fixes": []
+}

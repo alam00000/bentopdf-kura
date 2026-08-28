@@ -1,0 +1,86 @@
+{
+  "kura-profile": 1,
+  "name": "Colour usage: report",
+  "description": "One report of RGB, Lab, ICC, spot, DeviceN, pattern and registration colour in use.",
+  "checks": [
+    {
+      "name": "RGB object",
+      "severity": "info",
+      "all": [
+        {
+          "prop": "paint.isRgb",
+          "op": "==",
+          "value": true
+        }
+      ]
+    },
+    {
+      "name": "Lab object",
+      "severity": "info",
+      "all": [
+        {
+          "prop": "paint.isLab",
+          "op": "==",
+          "value": true
+        }
+      ]
+    },
+    {
+      "name": "ICC-based object",
+      "severity": "info",
+      "all": [
+        {
+          "prop": "paint.isIccBased",
+          "op": "==",
+          "value": true
+        }
+      ]
+    },
+    {
+      "name": "Spot object",
+      "severity": "info",
+      "all": [
+        {
+          "prop": "paint.isSpot",
+          "op": "==",
+          "value": true
+        }
+      ]
+    },
+    {
+      "name": "DeviceN object",
+      "severity": "info",
+      "all": [
+        {
+          "prop": "paint.deviceNColorants",
+          "op": ">",
+          "value": 0
+        }
+      ]
+    },
+    {
+      "name": "Pattern fill",
+      "severity": "info",
+      "all": [
+        {
+          "prop": "paint.isPattern",
+          "op": "==",
+          "value": true
+        }
+      ]
+    },
+    {
+      "name": "Registration colour",
+      "severity": "warning",
+      "all": [
+        {
+          "prop": "paint.isRegistration",
+          "op": "==",
+          "value": true
+        }
+      ]
+    }
+  ],
+  "builtins": [],
+  "fixes": []
+}

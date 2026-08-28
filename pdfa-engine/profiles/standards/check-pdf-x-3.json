@@ -1,0 +1,14 @@
+{
+  "kura-profile": 1,
+  "name": "Check PDF/X-3",
+  "description": "Reports every deviation from PDF/X-3; convert with --level x3 to fix them.",
+  "checks": [],
+  "builtins": [
+    {
+      "name": "conformsTo",
+      "severity": "error",
+      "level": "x3"
+    }
+  ],
+  "fixes": []
+}

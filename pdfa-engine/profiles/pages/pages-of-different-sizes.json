@@ -1,0 +1,13 @@
+{
+  "kura-profile": 1,
+  "name": "Pages of different sizes",
+  "description": "Reports documents whose pages differ in size or orientation.",
+  "checks": [],
+  "builtins": [
+    {
+      "name": "pagesDifferInSize",
+      "severity": "warning"
+    }
+  ],
+  "fixes": []
+}

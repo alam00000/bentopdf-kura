@@ -1,0 +1,20 @@
+{
+  "kura-profile": 1,
+  "name": "Processing steps layers",
+  "description": "Reports processing-steps metadata (ISO 19593) on layers, used in packaging.",
+  "checks": [
+    {
+      "name": "Processing steps present",
+      "severity": "info",
+      "all": [
+        {
+          "prop": "layers.hasProcessingSteps",
+          "op": "==",
+          "value": true
+        }
+      ]
+    }
+  ],
+  "builtins": [],
+  "fixes": []
+}

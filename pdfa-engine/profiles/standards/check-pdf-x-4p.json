@@ -1,0 +1,14 @@
+{
+  "kura-profile": 1,
+  "name": "Check PDF/X-4p",
+  "description": "Reports every deviation from PDF/X-4p; validated only; it references an external press profile.",
+  "checks": [],
+  "builtins": [
+    {
+      "name": "conformsTo",
+      "severity": "error",
+      "level": "x4p"
+    }
+  ],
+  "fixes": []
+}

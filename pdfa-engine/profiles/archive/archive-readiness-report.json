@@ -1,0 +1,59 @@
+{
+  "kura-profile": 1,
+  "name": "Archive readiness: report",
+  "description": "The things that block archiving: encryption, damage, fonts not embedded, invisible text, layers and JavaScript-bearing annotations.",
+  "checks": [
+    {
+      "name": "Invisible text",
+      "severity": "info",
+      "all": [
+        {
+          "prop": "text.isInvisible",
+          "op": "==",
+          "value": true
+        }
+      ]
+    },
+    {
+      "name": "Content on a layer",
+      "severity": "warning",
+      "all": [
+        {
+          "prop": "layers.onLayer",
+          "op": "==",
+          "value": true
+        }
+      ]
+    },
+    {
+      "name": "Annotation with opacity",
+      "severity": "info",
+      "all": [
+        {
+          "prop": "annot.hasOpacity",
+          "op": "==",
+          "value": true
+        }
+      ]
+    }
+  ],
+  "builtins": [
+    {
+      "name": "encrypted",
+      "severity": "error"
+    },
+    {
+      "name": "damaged",
+      "severity": "error"
+    },
+    {
+      "name": "fontsNotEmbedded",
+      "severity": "error"
+    },
+    {
+      "name": "transparencyUsed",
+      "severity": "info"
+    }
+  ],
+  "fixes": []
+}

@@ -1,0 +1,16 @@
+{
+  "kura-profile": 1,
+  "name": "Open in full screen",
+  "description": "Sets the initial view to full-screen presentation.",
+  "checks": [],
+  "builtins": [],
+  "fixes": [
+    {
+      "op": "setinitialviewdocumentoptions",
+      "params": [
+        "FullScreen",
+        "SinglePage"
+      ]
+    }
+  ]
+}

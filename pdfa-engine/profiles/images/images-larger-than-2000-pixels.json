@@ -1,0 +1,31 @@
+{
+  "kura-profile": 1,
+  "name": "Images larger than 2000 pixels",
+  "description": "Reports images wider or taller than 2000 pixels.",
+  "checks": [
+    {
+      "name": "Image wider than 2000 px",
+      "severity": "info",
+      "all": [
+        {
+          "prop": "image.width",
+          "op": ">",
+          "value": 2000
+        }
+      ]
+    },
+    {
+      "name": "Image taller than 2000 px",
+      "severity": "info",
+      "all": [
+        {
+          "prop": "image.height",
+          "op": ">",
+          "value": 2000
+        }
+      ]
+    }
+  ],
+  "builtins": [],
+  "fixes": []
+}

@@ -1,0 +1,13 @@
+{
+  "kura-profile": 1,
+  "name": "Remove smoothness",
+  "description": "Removes smoothness tolerances from graphics states.",
+  "checks": [],
+  "builtins": [],
+  "fixes": [
+    {
+      "op": "removesmoothness",
+      "params": []
+    }
+  ]
+}

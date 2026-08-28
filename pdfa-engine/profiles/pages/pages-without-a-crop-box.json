@@ -1,0 +1,20 @@
+{
+  "kura-profile": 1,
+  "name": "Pages without a crop box",
+  "description": "Reports pages that rely on the media box alone.",
+  "checks": [
+    {
+      "name": "No crop box",
+      "severity": "info",
+      "all": [
+        {
+          "prop": "page.hasCropBox",
+          "op": "==",
+          "value": false
+        }
+      ]
+    }
+  ],
+  "builtins": [],
+  "fixes": []
+}

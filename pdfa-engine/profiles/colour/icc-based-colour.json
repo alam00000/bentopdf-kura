@@ -1,0 +1,20 @@
+{
+  "kura-profile": 1,
+  "name": "ICC-based colour",
+  "description": "Reports every object painted with icc-based colour.",
+  "checks": [
+    {
+      "name": "ICC-based colour",
+      "severity": "info",
+      "all": [
+        {
+          "prop": "paint.isIccBased",
+          "op": "==",
+          "value": true
+        }
+      ]
+    }
+  ],
+  "builtins": [],
+  "fixes": []
+}

@@ -1,0 +1,47 @@
+{
+  "kura-profile": 1,
+  "name": "Report transparency",
+  "description": "Reports transparency, blend modes and soft masks.",
+  "checks": [
+    {
+      "name": "Transparency in use",
+      "severity": "info",
+      "all": [
+        {
+          "prop": "gstate.transparency",
+          "op": "==",
+          "value": true
+        }
+      ]
+    },
+    {
+      "name": "Blend mode other than Normal",
+      "severity": "info",
+      "all": [
+        {
+          "prop": "gstate.blendMode",
+          "op": "!=",
+          "value": "Normal"
+        },
+        {
+          "prop": "gstate.blendMode",
+          "op": "!=",
+          "value": "Compatible"
+        }
+      ]
+    },
+    {
+      "name": "Soft mask in use",
+      "severity": "info",
+      "all": [
+        {
+          "prop": "gstate.hasSoftMask",
+          "op": "==",
+          "value": true
+        }
+      ]
+    }
+  ],
+  "builtins": [],
+  "fixes": []
+}

@@ -1,0 +1,20 @@
+{
+  "kura-profile": 1,
+  "name": "Paths with more than 5000 nodes",
+  "description": "Reports vector paths with more than 5000 nodes, which slow rendering and RIPs.",
+  "checks": [
+    {
+      "name": "Path with more than 5000 nodes",
+      "severity": "warning",
+      "all": [
+        {
+          "prop": "content.pathNodes",
+          "op": ">",
+          "value": 5000
+        }
+      ]
+    }
+  ],
+  "builtins": [],
+  "fixes": []
+}

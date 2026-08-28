@@ -1,0 +1,21 @@
+{
+  "kura-profile": 1,
+  "name": "Objects within 3 mm of the trim edge",
+  "description": "Reports content closer than 3 mm to the trim edge, the usual safety margin.",
+  "checks": [
+    {
+      "name": "Object within 3 mm of the trim edge",
+      "severity": "info",
+      "all": [
+        {
+          "prop": "content.distanceInsideTrimBox",
+          "op": "<",
+          "value": 8.5
+        }
+      ],
+      "scope": "trim"
+    }
+  ],
+  "builtins": [],
+  "fixes": []
+}

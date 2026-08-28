@@ -1,0 +1,20 @@
+{
+  "kura-profile": 1,
+  "name": "Link annotations",
+  "description": "Reports annotations of type Link.",
+  "checks": [
+    {
+      "name": "Link annotation",
+      "severity": "info",
+      "all": [
+        {
+          "prop": "annot.type",
+          "op": "==",
+          "value": "Link"
+        }
+      ]
+    }
+  ],
+  "builtins": [],
+  "fixes": []
+}

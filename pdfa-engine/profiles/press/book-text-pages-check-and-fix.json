@@ -1,0 +1,422 @@
+{
+  "kura-profile": 1,
+  "name": "Book, text pages: check and fix",
+  "description": "The same checks for single-colour text pages for book interiors, with the safe repairs applied: trim and bleed boxes, hairlines, black overprint, white knockout, page scaling and transparency groups.",
+  "checks": [
+    {
+      "name": "Stroke thinner than 0.125 pt",
+      "severity": "error",
+      "all": [
+        {
+          "prop": "stroke.width",
+          "op": "<=",
+          "value": 0.125
+        }
+      ]
+    },
+    {
+      "name": "Stroke between 0.125 and 0.25 pt",
+      "severity": "warning",
+      "all": [
+        {
+          "prop": "stroke.width",
+          "op": "<=",
+          "value": 0.25
+        },
+        {
+          "prop": "stroke.width",
+          "op": ">",
+          "value": 0.125
+        }
+      ]
+    },
+    {
+      "name": "Thin stroke below 0.25 pt in more than one ink",
+      "severity": "error",
+      "all": [
+        {
+          "prop": "stroke.width",
+          "op": "<=",
+          "value": 0.25
+        },
+        {
+          "prop": "paint.inkCount",
+          "op": ">",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "name": "Text smaller than 5 pt",
+      "severity": "warning",
+      "all": [
+        {
+          "prop": "text.size",
+          "op": "<",
+          "value": 5
+        },
+        {
+          "prop": "text.size",
+          "op": ">",
+          "value": 0.01
+        }
+      ]
+    },
+    {
+      "name": "Text smaller than 8 pt in more than one ink",
+      "severity": "warning",
+      "all": [
+        {
+          "prop": "text.size",
+          "op": "<",
+          "value": 8
+        },
+        {
+          "prop": "text.size",
+          "op": ">",
+          "value": 0.01
+        },
+        {
+          "prop": "paint.inkCount",
+          "op": ">",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "name": "White text smaller than 8 pt",
+      "severity": "warning",
+      "all": [
+        {
+          "prop": "text.size",
+          "op": "<",
+          "value": 8
+        },
+        {
+          "prop": "text.size",
+          "op": ">",
+          "value": 0.01
+        },
+        {
+          "prop": "paint.isWhite",
+          "op": "==",
+          "value": true
+        }
+      ]
+    },
+    {
+      "name": "Total ink above 100% in fills",
+      "severity": "error",
+      "all": [
+        {
+          "prop": "fill.totalInk",
+          "op": ">",
+          "value": 100
+        }
+      ]
+    },
+    {
+      "name": "Total ink above 100% in strokes",
+      "severity": "error",
+      "all": [
+        {
+          "prop": "stroke.totalInk",
+          "op": ">",
+          "value": 100
+        }
+      ]
+    },
+    {
+      "name": "Rich black on text smaller than 12 pt",
+      "severity": "warning",
+      "all": [
+        {
+          "prop": "content.isText",
+          "op": "==",
+          "value": true
+        },
+        {
+          "prop": "text.size",
+          "op": "<",
+          "value": 12
+        },
+        {
+          "prop": "paint.richBlackCmyPercent",
+          "op": ">",
+          "value": 0
+        }
+      ]
+    },
+    {
+      "name": "White object set to overprint",
+      "severity": "error",
+      "all": [
+        {
+          "prop": "paint.isWhite",
+          "op": "==",
+          "value": true
+        },
+        {
+          "prop": "fill.overprint",
+          "op": "==",
+          "value": true
+        }
+      ]
+    },
+    {
+      "name": "Black text not set to overprint",
+      "severity": "warning",
+      "all": [
+        {
+          "prop": "content.isText",
+          "op": "==",
+          "value": true
+        },
+        {
+          "prop": "paint.is100Black",
+          "op": "==",
+          "value": true
+        },
+        {
+          "prop": "fill.overprint",
+          "op": "==",
+          "value": false
+        }
+      ]
+    },
+    {
+      "name": "Transparency in use",
+      "severity": "info",
+      "all": [
+        {
+          "prop": "gstate.transparency",
+          "op": "==",
+          "value": true
+        }
+      ]
+    },
+    {
+      "name": "Blend mode other than Normal",
+      "severity": "info",
+      "all": [
+        {
+          "prop": "gstate.blendMode",
+          "op": "!=",
+          "value": "Normal"
+        },
+        {
+          "prop": "gstate.blendMode",
+          "op": "!=",
+          "value": "Compatible"
+        }
+      ]
+    },
+    {
+      "name": "Registration colour used for content",
+      "severity": "error",
+      "all": [
+        {
+          "prop": "paint.isRegistration",
+          "op": "==",
+          "value": true
+        }
+      ]
+    },
+    {
+      "name": "Type 3 font in use",
+      "severity": "warning",
+      "all": [
+        {
+          "prop": "font.isType3",
+          "op": "==",
+          "value": true
+        }
+      ]
+    },
+    {
+      "name": "Glyph falls back to .notdef",
+      "severity": "error",
+      "all": [
+        {
+          "prop": "font.notdefUsed",
+          "op": "==",
+          "value": true
+        }
+      ]
+    },
+    {
+      "name": "Font program is not valid",
+      "severity": "error",
+      "all": [
+        {
+          "prop": "font.invalid",
+          "op": "==",
+          "value": true
+        }
+      ]
+    },
+    {
+      "name": "Object within 3 mm of the trim edge",
+      "severity": "info",
+      "all": [
+        {
+          "prop": "content.distanceInsideTrimBox",
+          "op": "<",
+          "value": 8.5
+        }
+      ],
+      "scope": "trim"
+    },
+    {
+      "name": "Annotation that prints",
+      "severity": "warning",
+      "all": [
+        {
+          "prop": "annot.prints",
+          "op": "==",
+          "value": true
+        }
+      ]
+    },
+    {
+      "name": "Content on a layer",
+      "severity": "info",
+      "all": [
+        {
+          "prop": "layers.onLayer",
+          "op": "==",
+          "value": true
+        }
+      ]
+    }
+  ],
+  "builtins": [
+    {
+      "name": "imageResolutionBelow",
+      "severity": "error",
+      "params": {
+        "ppi": 300
+      }
+    },
+    {
+      "name": "bitmapResolutionBelow",
+      "severity": "warning",
+      "params": {
+        "ppi": 1200
+      }
+    },
+    {
+      "name": "imageResolutionAbove",
+      "severity": "info",
+      "params": {
+        "ppi": 450
+      }
+    },
+    {
+      "name": "encrypted",
+      "severity": "error"
+    },
+    {
+      "name": "damaged",
+      "severity": "error"
+    },
+    {
+      "name": "syntaxProblems",
+      "severity": "error"
+    },
+    {
+      "name": "pdfVersionBelow",
+      "severity": "warning",
+      "params": {
+        "version": 1.6
+      }
+    },
+    {
+      "name": "colourPlatesUsed",
+      "severity": "error"
+    },
+    {
+      "name": "spotColoursMoreThan",
+      "severity": "error",
+      "params": {
+        "count": 0
+      }
+    },
+    {
+      "name": "fontsNotEmbedded",
+      "severity": "error"
+    },
+    {
+      "name": "pagesDifferInSize",
+      "severity": "warning"
+    },
+    {
+      "name": "emptyPage",
+      "severity": "warning"
+    }
+  ],
+  "fixes": [
+    {
+      "op": "setpagebox",
+      "params": [
+        "TrimBox",
+        "RelativeToCropBox",
+        "0",
+        "0",
+        "0",
+        "0",
+        "pt"
+      ]
+    },
+    {
+      "op": "generatebleed",
+      "params": [
+        "Amount",
+        "3",
+        "mm"
+      ]
+    },
+    {
+      "op": "removepagescaling",
+      "params": []
+    },
+    {
+      "op": "increaselinewidth",
+      "params": [
+        "0.25",
+        "",
+        "pt"
+      ]
+    },
+    {
+      "op": "overprintblack",
+      "params": [
+        "Text"
+      ]
+    },
+    {
+      "op": "knockoutwhite",
+      "params": [
+        ""
+      ]
+    },
+    {
+      "op": "trappedkey",
+      "params": [
+        "false"
+      ]
+    },
+    {
+      "op": "removeflatness",
+      "params": []
+    },
+    {
+      "op": "removesmoothness",
+      "params": []
+    },
+    {
+      "op": "removeunnecessarytransparencygroups",
+      "params": []
+    }
+  ]
+}

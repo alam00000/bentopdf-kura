@@ -1,0 +1,16 @@
+{
+  "kura-profile": 1,
+  "name": "PDF version below 2.0",
+  "description": "Reports files written against a PDF version older than 2.0.",
+  "checks": [],
+  "builtins": [
+    {
+      "name": "pdfVersionBelow",
+      "severity": "info",
+      "params": {
+        "version": 2.0
+      }
+    }
+  ],
+  "fixes": []
+}

@@ -1,0 +1,20 @@
+{
+  "kura-profile": 1,
+  "name": "Soft masks",
+  "description": "Reports objects drawn through a soft mask.",
+  "checks": [
+    {
+      "name": "Soft mask in use",
+      "severity": "info",
+      "all": [
+        {
+          "prop": "gstate.hasSoftMask",
+          "op": "==",
+          "value": true
+        }
+      ]
+    }
+  ],
+  "builtins": [],
+  "fixes": []
+}

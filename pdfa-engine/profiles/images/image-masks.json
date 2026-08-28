@@ -1,0 +1,20 @@
+{
+  "kura-profile": 1,
+  "name": "Image masks",
+  "description": "Reports stencil masks painted with the current colour.",
+  "checks": [
+    {
+      "name": "Image mask",
+      "severity": "info",
+      "all": [
+        {
+          "prop": "content.isImageMask",
+          "op": "==",
+          "value": true
+        }
+      ]
+    }
+  ],
+  "builtins": [],
+  "fixes": []
+}

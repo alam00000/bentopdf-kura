@@ -1,0 +1,20 @@
+{
+  "kura-profile": 1,
+  "name": "Watermark annotations",
+  "description": "Reports annotations of type Watermark.",
+  "checks": [
+    {
+      "name": "Watermark annotation",
+      "severity": "info",
+      "all": [
+        {
+          "prop": "annot.type",
+          "op": "==",
+          "value": "Watermark"
+        }
+      ]
+    }
+  ],
+  "builtins": [],
+  "fixes": []
+}

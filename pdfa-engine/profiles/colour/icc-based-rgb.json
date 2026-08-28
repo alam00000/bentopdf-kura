@@ -1,0 +1,20 @@
+{
+  "kura-profile": 1,
+  "name": "ICC-based RGB",
+  "description": "Reports every object painted with icc-based rgb.",
+  "checks": [
+    {
+      "name": "ICC-based RGB",
+      "severity": "info",
+      "all": [
+        {
+          "prop": "paint.usesIccRgb",
+          "op": "==",
+          "value": true
+        }
+      ]
+    }
+  ],
+  "builtins": [],
+  "fixes": []
+}

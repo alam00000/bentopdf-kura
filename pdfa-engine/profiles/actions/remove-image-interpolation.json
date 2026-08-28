@@ -1,0 +1,15 @@
+{
+  "kura-profile": 1,
+  "name": "Remove image interpolation",
+  "description": "Removes the interpolation flag from every image.",
+  "checks": [],
+  "builtins": [],
+  "fixes": [
+    {
+      "op": "modifyinterpolateentry",
+      "params": [
+        "Remove"
+      ]
+    }
+  ]
+}

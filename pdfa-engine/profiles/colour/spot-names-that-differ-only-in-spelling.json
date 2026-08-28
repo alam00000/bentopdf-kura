@@ -1,0 +1,25 @@
+{
+  "kura-profile": 1,
+  "name": "Spot names that differ only in spelling",
+  "description": "Reports spot colours that are the same ink under two names.",
+  "checks": [
+    {
+      "name": "Equivalent spot names",
+      "severity": "warning",
+      "all": [
+        {
+          "prop": "doc.spotNamesEquivalent",
+          "op": "==",
+          "value": true
+        }
+      ]
+    }
+  ],
+  "builtins": [
+    {
+      "name": "spotNamesInconsistent",
+      "severity": "warning"
+    }
+  ],
+  "fixes": []
+}

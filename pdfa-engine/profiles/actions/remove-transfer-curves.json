@@ -1,0 +1,13 @@
+{
+  "kura-profile": 1,
+  "name": "Remove transfer curves",
+  "description": "Removes transfer functions.",
+  "checks": [],
+  "builtins": [],
+  "fixes": [
+    {
+      "op": "transfercurves",
+      "params": []
+    }
+  ]
+}

@@ -1,0 +1,15 @@
+{
+  "kura-profile": 1,
+  "name": "Set rendering intent to Perceptual",
+  "description": "Sets every graphics state's rendering intent to Perceptual.",
+  "checks": [],
+  "builtins": [],
+  "fixes": [
+    {
+      "op": "setrenderingintent",
+      "params": [
+        "Perceptual"
+      ]
+    }
+  ]
+}

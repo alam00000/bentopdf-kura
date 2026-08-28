@@ -1,0 +1,13 @@
+{
+  "kura-profile": 1,
+  "name": "Damaged document",
+  "description": "Reports files the parser had to repair.",
+  "checks": [],
+  "builtins": [
+    {
+      "name": "damaged",
+      "severity": "error"
+    }
+  ],
+  "fixes": []
+}

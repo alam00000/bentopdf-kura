@@ -1,0 +1,16 @@
+{
+  "kura-profile": 1,
+  "name": "More than 2 spot colours",
+  "description": "Reports pages that use more than 2 spot colours.",
+  "checks": [],
+  "builtins": [
+    {
+      "name": "spotColoursMoreThan",
+      "severity": "warning",
+      "params": {
+        "count": 2
+      }
+    }
+  ],
+  "fixes": []
+}

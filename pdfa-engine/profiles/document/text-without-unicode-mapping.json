@@ -1,0 +1,20 @@
+{
+  "kura-profile": 1,
+  "name": "Text without Unicode mapping",
+  "description": "Reports fonts whose text cannot be mapped to Unicode, so it cannot be searched or read aloud.",
+  "checks": [
+    {
+      "name": "Text without Unicode",
+      "severity": "warning",
+      "all": [
+        {
+          "prop": "font.unicodeComplete",
+          "op": "==",
+          "value": false
+        }
+      ]
+    }
+  ],
+  "builtins": [],
+  "fixes": []
+}

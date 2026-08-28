@@ -1,0 +1,17 @@
+{
+  "kura-profile": 1,
+  "name": "Scale pages to A5",
+  "description": "Scales every page proportionally to fit A5 (148 x 210 mm).",
+  "checks": [],
+  "builtins": [],
+  "fixes": [
+    {
+      "op": "scalepagesex",
+      "params": [
+        "148",
+        "210",
+        "mm"
+      ]
+    }
+  ]
+}

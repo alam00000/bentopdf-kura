@@ -1,0 +1,20 @@
+{
+  "kura-profile": 1,
+  "name": "Font widths mismatch",
+  "description": "Reports fonts whose declared widths disagree with the embedded program.",
+  "checks": [
+    {
+      "name": "Width mismatch",
+      "severity": "warning",
+      "all": [
+        {
+          "prop": "font.widthsMatch",
+          "op": "==",
+          "value": false
+        }
+      ]
+    }
+  ],
+  "builtins": [],
+  "fixes": []
+}
