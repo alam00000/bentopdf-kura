@@ -43,8 +43,6 @@ jobs:
           path: pdfa-engine/third_party/pdfium-build/dist
           key: pdfium-mac-arm64-${{ env.PDFIUM_BRANCH }}-${{ hashFiles('pdfa-engine/scripts/pdfium/*') }}
 
-          key: ${{ steps.pdfium-cache.outputs.cache-primary-key }}
-
       - name: Install engine dependencies
         run: brew install cmake ninja qpdf freetype openjpeg jpeg-turbo libpng little-cms2 openssl@3
 

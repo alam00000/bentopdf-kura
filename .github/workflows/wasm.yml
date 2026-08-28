@@ -56,8 +56,6 @@ jobs:
           path: pdfa-engine/third_party/pdfium-build/dist
           key: pdfium-wasm-${{ env.PDFIUM_BRANCH }}-${{ hashFiles('pdfa-engine/scripts/pdfium/*') }}
 
-          key: ${{ steps.pdfium-cache.outputs.cache-primary-key }}
-
       - name: Cache wasm dependencies
         id: wasm-deps-cache
         uses: actions/cache/restore@v4
@@ -86,8 +84,6 @@ jobs:
             pdfa-engine/third_party/openjpeg-2.5.4
             pdfa-engine/third_party/lcms2
           key: wasm-deps-${{ env.EMSDK_VERSION }}-${{ hashFiles('pdfa-engine/scripts/build-wasm.sh') }}
-
-          key: ${{ steps.wasm-deps-cache.outputs.cache-primary-key }}
 
       - uses: actions/setup-node@v4
         with:
