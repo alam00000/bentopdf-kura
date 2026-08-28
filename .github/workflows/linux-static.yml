@@ -5,6 +5,7 @@ on:
     branches: [main]
   pull_request:
   workflow_dispatch:
+  workflow_call:
 
 env:
   QPDF_VERSION: 12.3.2
@@ -106,5 +107,6 @@ jobs:
           path: |
             pdfa-engine/build/cli/kura
             pdfa-engine/build/capi/libkura.a
+            pdfa-engine/build/raster/libkura_raster.a
             pdfa-engine/third_party/pdfium-build/dist/linux-x64/libpdfium.a
           if-no-files-found: error

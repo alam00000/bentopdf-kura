@@ -1,0 +1,64 @@
+name: npm-publish
+
+on:
+  workflow_run:
+    workflows: [release]
+    types: [completed]
+  workflow_dispatch:
+    inputs:
+      tag:
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.conclusion == 'success' &&
+       startsWith(github.event.workflow_run.head_branch, 'v'))
+    env:
+      TAG: ${{ inputs.tag || github.event.workflow_run.head_branch }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag || github.event.workflow_run.head_branch }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          registry-url: https://registry.npmjs.org
+      - name: update npm for trusted publishing
+        run: npm install -g npm@latest
+      - name: npm auth
+        env:
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          if [ -n "$NPM_TOKEN" ]; then
+            npm config set //registry.npmjs.org/:_authToken "$NPM_TOKEN"
+            echo "auth: npm token from the NPM_TOKEN secret"
+          else
+            echo "auth: OIDC trusted publishing"
+          fi
+      - name: verify version matches the release tag
+        run: |
+          PKG="$(node -p "require('./packages/npm/kura-pdf/package.json').version")"
+          [ "v$PKG" = "$TAG" ] || { echo "kura-pdf $PKG does not match tag $TAG"; exit 1; }
+      - name: fetch the wasm module from the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p rel wasm
+          gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --pattern 'kura-*-wasm.tar.gz' --dir rel
+          tar -xzf rel/kura-*-wasm.tar.gz -C wasm
+          ls -la wasm
+      - name: assemble the package
+        run: scripts/pack-wasm-npm.sh "$PWD/wasm"
+      - name: smoke test the assembled package
+        run: node scripts/smoke.mjs
+      - name: publish kura-pdf
+        working-directory: packages/npm/kura-pdf
+        run: npm publish --provenance --access public

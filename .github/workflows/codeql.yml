@@ -1,0 +1,84 @@
+name: CodeQL
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    - cron: '0 6 * * 1'
+
+permissions:
+  contents: read
+
+env:
+  QPDF_VERSION: 12.3.2
+
+jobs:
+  javascript:
+    name: Analyze JavaScript
+    runs-on: ubuntu-latest
+    permissions:
+      security-events: write
+      actions: read
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: github/codeql-action/init@v3
+        with:
+          languages: javascript-typescript
+          queries: security-extended
+          config-file: ./.github/codeql-config.yml
+      - uses: github/codeql-action/analyze@v3
+        with:
+          category: /language:javascript-typescript
+
+  cpp:
+    name: Analyze C++
+    runs-on: ubuntu-latest
+    permissions:
+      security-events: write
+      actions: read
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            cmake ninja-build pkg-config zlib1g-dev libjpeg-dev \
+            libfreetype-dev libpng-dev libopenjp2-7-dev liblcms2-dev libssl-dev
+      - name: Cache qpdf
+        id: qpdf-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/qpdf-install
+          key: qpdf-openssl-${{ env.QPDF_VERSION }}-${{ runner.os }}
+      - name: Build qpdf from source
+        if: steps.qpdf-cache.outputs.cache-hit != 'true'
+        run: |
+          curl -sSL -o /tmp/qpdf.tar.gz \
+            "https://github.com/qpdf/qpdf/releases/download/v${QPDF_VERSION}/qpdf-${QPDF_VERSION}.tar.gz"
+          tar -xzf /tmp/qpdf.tar.gz -C /tmp
+          cmake -S "/tmp/qpdf-${QPDF_VERSION}" -B /tmp/qpdf-build -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=OFF \
+            -DREQUIRE_CRYPTO_OPENSSL=ON -DUSE_IMPLICIT_CRYPTO=OFF \
+            -DBUILD_DOC=OFF -DBUILD_EXAMPLES=OFF -DQPDF_TEST_COMPARE_IMAGES=OFF \
+            -DCMAKE_INSTALL_PREFIX="$HOME/qpdf-install"
+          cmake --build /tmp/qpdf-build --target libqpdf
+          cmake --install /tmp/qpdf-build --component dev
+          cmake --install /tmp/qpdf-build --component lib
+      - uses: github/codeql-action/init@v3
+        with:
+          languages: c-cpp
+          build-mode: manual
+          queries: security-extended
+          config-file: ./.github/codeql-config.yml
+      - name: Build
+        run: |
+          cmake -S pdfa-engine -B build -G Ninja -DCMAKE_BUILD_TYPE=Release \
+            -DPDFA_WITH_PDFIUM=OFF -DCMAKE_PREFIX_PATH="$HOME/qpdf-install"
+          cmake --build build --target kura kura_sdk
+      - uses: github/codeql-action/analyze@v3
+        with:
+          category: /language:c-cpp

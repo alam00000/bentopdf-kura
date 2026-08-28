@@ -5,6 +5,7 @@ on:
     branches: [main]
   pull_request:
   workflow_dispatch:
+  workflow_call:
 
 env:
   PDFIUM_BRANCH: chromium/7961
@@ -91,5 +92,6 @@ jobs:
           path: |
             pdfa-engine/build/**/kura.exe
             pdfa-engine/build/**/kura.lib
+            pdfa-engine/build/**/kura_raster.lib
             pdfa-engine/third_party/pdfium-build/dist/win-x64/pdfium.lib
           if-no-files-found: error
