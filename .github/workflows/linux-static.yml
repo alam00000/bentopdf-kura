@@ -133,7 +133,7 @@ jobs:
           printf '%%PDF-1.7\n1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << >> >>\nendobj\ntrailer\n<< /Size 4 /Root 1 0 R >>\n%%%%EOF\n' > /tmp/in.pdf
           if ! report=$(./build/cli/kura --level 2b /tmp/in.pdf /tmp/out.pdf); then
             echo "conversion failed with status $?; backtrace:"
-            gdb -batch -ex run -ex bt -ex 'info registers rip' --args ./build/cli/kura --level 2b /tmp/in.pdf /tmp/out.pdf 2>&1 | tail -60
+            gdb -batch -ex run -ex bt -ex 'info symbol $pc' -ex 'x/6i $pc' -ex 'frame 3' -ex 'x/24i $pc-72' --args ./build/cli/kura --level 2b /tmp/in.pdf /tmp/out.pdf 2>&1 | tail -90
             exit 1
           fi
           echo "$report"
