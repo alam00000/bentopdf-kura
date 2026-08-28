@@ -99,11 +99,25 @@ else()
         endif()
       endif()
     endforeach()
+    set(PDFA_ZLIB_LINK ZLIB::ZLIB)
+    set(PDFA_BZ2_LINK bz2)
+    if(PDFA_STATIC_DEPS)
+      find_library(PDFA_A_z NAMES libz.a
+        HINTS /opt/homebrew/opt/zlib/lib ${CMAKE_PREFIX_PATH} $ENV{CMAKE_PREFIX_PATH})
+      find_library(PDFA_A_bz2 NAMES libbz2.a
+        HINTS /opt/homebrew/opt/bzip2/lib ${CMAKE_PREFIX_PATH} $ENV{CMAKE_PREFIX_PATH})
+      if(PDFA_A_z)
+        set(PDFA_ZLIB_LINK ${PDFA_A_z})
+      endif()
+      if(PDFA_A_bz2)
+        set(PDFA_BZ2_LINK ${PDFA_A_bz2})
+      endif()
+    endif()
     target_include_directories(pdfa_core SYSTEM PRIVATE ${FREETYPE_INCLUDE_DIRS})
     target_link_libraries(pdfa_core
       PUBLIC ${PDFA_A_qpdf}
       PRIVATE ${PDFA_A_freetype} ${PDFA_A_png} ${PDFA_A_openjp2}
-              ${PDFA_A_jpeg} ${PDFA_A_lcms2} ${PDFA_A_crypto} ZLIB::ZLIB bz2)
+              ${PDFA_A_jpeg} ${PDFA_A_lcms2} ${PDFA_A_crypto} ${PDFA_ZLIB_LINK} ${PDFA_BZ2_LINK})
   else()
     target_link_libraries(pdfa_core
       PUBLIC qpdf::libqpdf
