@@ -11,6 +11,9 @@ if(NOT EMSCRIPTEN)
   if(NOT LCMS2_LIBRARY OR NOT LCMS2_INCLUDE_DIR)
     message(FATAL_ERROR "lcms2 not found (brew install little-cms2)")
   endif()
+  if(DEFINED VCPKG_INSTALLED_DIR AND DEFINED VCPKG_TARGET_TRIPLET)
+    link_directories("${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/lib")
+  endif()
 endif()
 
 add_library(pdfa_core STATIC
