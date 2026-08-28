@@ -91,12 +91,18 @@ jobs:
             echo "$pkg $VERSION did not appear on the registry"
             return 1
           }
+          missing=""
           for pkg in kura-pdf-linux-x64 kura-pdf-darwin-arm64 kura-pdf-win32-x64; do
-            if [ -n "$(find "packages/npm/$pkg/bin" -type f \( -name kura -o -name kura.exe \) 2>/dev/null | head -1)" ]; then
-              publish "$pkg"
-            else
+            if [ -z "$(find "packages/npm/$pkg/bin" -type f \( -name kura -o -name kura.exe \) 2>/dev/null | head -1)" ]; then
               echo "skipping $pkg: no binary on this release"
+              missing="$missing $pkg"
+            elif ! publish "$pkg"; then
+              echo "$pkg could not be published; kura-pdf ships without it and npm skips the optional dependency on that platform"
+              missing="$missing $pkg"
             fi
           done
           publish kura-pdf-wasm
           publish kura-pdf
+          if [ -n "$missing" ]; then
+            echo "::warning::platform packages not published for $TAG:$missing"
+          fi
