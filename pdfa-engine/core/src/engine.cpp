@@ -474,4 +474,15 @@ Result convert(const unsigned char* data, std::size_t size, const Options& optIn
   if (!res.ok) res.pdf.clear();
   return res;
 }
+
+bool verifyPassword(const unsigned char* data, std::size_t size, const std::string& password) {
+  try {
+    QPDF pdf;
+    pdf.setSuppressWarnings(true);
+    pdf.processMemoryFile("input", reinterpret_cast<const char*>(data), size, password.c_str());
+    return true;
+  } catch (const std::exception&) {
+    return false;
+  }
+}
 }
