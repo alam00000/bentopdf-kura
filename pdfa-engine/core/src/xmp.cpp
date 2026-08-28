@@ -137,7 +137,11 @@ std::string pdfNow(Ctx& ctx) {
   if (!ctx.opt.nowOverride.empty()) return ctx.opt.nowOverride;
   std::time_t t = std::time(nullptr);
   std::tm g{};
+#ifdef _WIN32
+  gmtime_s(&g, &t);
+#else
   gmtime_r(&t, &g);
+#endif
   char buf[32];
   std::snprintf(buf, sizeof(buf), "D:%04d%02d%02d%02d%02d%02dZ", g.tm_year + 1900,
                 g.tm_mon + 1, g.tm_mday, g.tm_hour, g.tm_min, g.tm_sec);

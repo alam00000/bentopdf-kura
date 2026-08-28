@@ -31,4 +31,6 @@ target_link_libraries(kura_raster PUBLIC ${KURA_PDFIUM_LIB})
 if(APPLE)
   target_link_libraries(kura_raster PUBLIC
     "-framework CoreFoundation" "-framework CoreGraphics" "-framework AppKit")
+elseif(WIN32)
+  target_link_libraries(kura_raster PUBLIC user32 gdi32 advapi32 shell32 ole32 ws2_32)
 endif()

@@ -64,8 +64,8 @@ ARGS='is_debug=false treat_warnings_as_errors=false pdf_use_skia=false
 case "$TARGET" in
   mac-arm64)   EXTRA=$'target_os="mac"\ntarget_cpu="arm64"';   ARGS="$ARGS is_clang=true" ;;
   mac-x64)     EXTRA=$'target_os="mac"\ntarget_cpu="x64"';     ARGS="$ARGS is_clang=true" ;;
-  linux-x64)   EXTRA=$'target_os="linux"\ntarget_cpu="x64"';   ARGS="$ARGS is_clang=true use_glib=false" ;;
-  linux-arm64) EXTRA=$'target_os="linux"\ntarget_cpu="arm64"'; ARGS="$ARGS is_clang=true use_glib=false" ;;
+  linux-x64)   EXTRA=$'target_os="linux"\ntarget_cpu="x64"';   ARGS="$ARGS is_clang=true use_glib=false use_lld=false" ;;
+  linux-arm64) EXTRA=$'target_os="linux"\ntarget_cpu="arm64"'; ARGS="$ARGS is_clang=true use_glib=false use_lld=false" ;;
   win-x64)     EXTRA=$'target_os="win"\ntarget_cpu="x64"';     ARGS="$ARGS is_clang=true" ;;
   wasm)
     EMROOT="${EMSCRIPTEN_ROOT:-$(dirname "$(dirname "$(readlink "$(command -v emcc)" \
