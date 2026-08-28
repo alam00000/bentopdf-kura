@@ -34,7 +34,7 @@ jobs:
 
       - name: Cache built PDFium
         id: pdfium-cache
-        uses: actions/cache@v4
+        uses: actions/cache/restore@v4
         with:
           path: pdfa-engine/third_party/pdfium-build/dist
           key: pdfium-wasm-${{ env.PDFIUM_BRANCH }}-${{ hashFiles('pdfa-engine/scripts/pdfium/*') }}
@@ -49,8 +49,18 @@ jobs:
           ./scripts/pdfium/build.sh wasm
           rm -rf third_party/pdfium-build/pdfium-src third_party/pdfium-build/depot_tools
 
+      - name: Save built PDFium
+        if: steps.pdfium-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: pdfa-engine/third_party/pdfium-build/dist
+          key: pdfium-wasm-${{ env.PDFIUM_BRANCH }}-${{ hashFiles('pdfa-engine/scripts/pdfium/*') }}
+
+          key: ${{ steps.pdfium-cache.outputs.cache-primary-key }}
+
       - name: Cache wasm dependencies
-        uses: actions/cache@v4
+        id: wasm-deps-cache
+        uses: actions/cache/restore@v4
         with:
           path: |
             pdfa-engine/third_party/build-qpdf-wasm
@@ -63,6 +73,21 @@ jobs:
 
       - name: Build
         run: pdfa-engine/scripts/build-wasm.sh
+
+      - name: Save wasm dependencies
+        if: steps.wasm-deps-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            pdfa-engine/third_party/build-qpdf-wasm
+            pdfa-engine/third_party/build-openjpeg-wasm
+            pdfa-engine/third_party/build-lcms2-wasm
+            pdfa-engine/third_party/qpdf-12.3.2
+            pdfa-engine/third_party/openjpeg-2.5.4
+            pdfa-engine/third_party/lcms2
+          key: wasm-deps-${{ env.EMSDK_VERSION }}-${{ hashFiles('pdfa-engine/scripts/build-wasm.sh') }}
+
+          key: ${{ steps.wasm-deps-cache.outputs.cache-primary-key }}
 
       - uses: actions/setup-node@v4
         with:
