@@ -6,7 +6,22 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-08-28
+
+First tri-platform release: native CLI, C library and WebAssembly module,
+covering 25 conversion targets across PDF/A, PDF/UA, PDF/X, PDF/E and PDF/VT,
+with e-invoice, signing and OCR support.
+
 ### Added
+
+- Self-hosting: a Docker image that serves the converter and preflight pages
+  and an HTTP API on the native engine, with a compose file, optional
+  bearer-token authentication, upload, concurrency and time limits, and a
+  `/healthz` endpoint; the same image is the CLI when given arguments.
+- `kura --verify-password`, which reports whether a password opens a file
+  without converting it.
+- Self-contained Linux, Windows and macOS binaries built and checked in CI:
+  every conversion runs with no shared library beyond the operating system's.
 
 - The `kura-pdf` npm package: the engine compiled to WebAssembly with a
   buffer-based API and a `kura` command that mirrors the native CLI.
@@ -29,6 +44,14 @@ All notable changes to this project are documented here. The format follows
 
 ### Fixed
 
+- The self-contained Linux binary crashed on its first rendering call: the
+  rendering library's objects used a relocation format the distribution's
+  linker did not understand, so its code was linked without relocations. They
+  now use standard relocations.
+- The Windows build did not compile, called a time function that Windows lacks,
+  and lost the symbols of assembly-built members of the rendering library while
+  isolating them from the engine's own libraries; the isolation now rewrites
+  the symbol tables itself and rebuilds the archive with the linker's librarian.
 - The conversion watchdog was one timer for the whole process, so a batch of
   many documents tripped it; it now covers each document separately.
 - The Docker image copied a gitignored qpdf source tree and could not build from
@@ -76,9 +99,6 @@ All notable changes to this project are documented here. The format follows
 - The preflight engine is split into parsing, event model, scanning, evaluation
   and fixup units, and every recursion and size cap is named in one header.
 - PDFium is detected automatically; a build without it configures cleanly.
-
-## [1.1.0]
-
-First tri-platform release: native CLI, C library and WebAssembly module,
-covering 25 conversion targets across PDF/A, PDF/UA, PDF/X, PDF/E and PDF/VT,
-with e-invoice, signing and OCR support.
+- The Linux release build is one script, `scripts/linux-static.sh`, shared by
+  CI and the Docker image, and the caches of every expensive build step are
+  saved as soon as that step finishes.
