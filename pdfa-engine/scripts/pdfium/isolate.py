@@ -25,7 +25,7 @@ ENGINE_LIBS = {
         "/usr/lib/*/libjpeg.a", "/usr/lib/*/liblcms2.a",
         "/usr/lib/*/libcrypto.a", "/usr/lib/*/libz.a",
     ],
-    "win": [],
+    "win": ["C:/vcpkg/installed/x64-windows-static/lib/*.lib"],
     "wasm": [
         "third_party/build-qpdf-wasm/libqpdf/libqpdf.a",
         "third_party/build-openjpeg-wasm/bin/libopenjp2.a",
@@ -37,9 +37,10 @@ def platform_of(target):
     return target.split("-")[0]
 
 def nm_bin(target, objcopy):
-    if platform_of(target) != "wasm":
+    if platform_of(target) in ("mac", "linux"):
         return "nm"
-    local = os.path.join(os.path.dirname(objcopy), "llvm-nm")
+    exe = ".exe" if platform_of(target) == "win" else ""
+    local = os.path.join(os.path.dirname(objcopy), "llvm-nm" + exe)
     return local if os.path.exists(local) else "llvm-nm"
 
 def sym_prefix(target):
@@ -53,8 +54,9 @@ def defined_symbols(path, nm):
         parts = line.split()
         if len(parts) >= 3 and parts[1] in STRONG:
             name = parts[2]
-            if not name.startswith("__Z") and not name.startswith("_ZN"):
-                syms.add(name)
+            if name.startswith(("__Z", "_ZN", "?", "$", "__imp_", ".")):
+                continue
+            syms.add(name)
     return syms
 
 def entry_points(path, nm, pfx):
@@ -102,8 +104,8 @@ def main():
         print("no colliding symbols")
         return 0
 
-    if plat in ("wasm", "win"):
-        print(f"{len(colliding)} colliding symbol(s); {plat} objects cannot be "
+    if plat == "wasm":
+        print(f"{len(colliding)} colliding symbol(s); wasm objects cannot be "
               f"renamed by llvm-objcopy, so the link resolves them by order "
               f"(engine libraries precede libpdfium.a)")
         return 0
@@ -121,8 +123,11 @@ def main():
                        capture_output=True, text=True)
     if r.returncode != 0:
         print(r.stderr[:2000], file=sys.stderr)
+        if plat == "win":
+            print("objcopy could not rewrite the COFF archive; the link resolves collisions by order")
+            return 0
         return 3
-    if plat != "wasm":
+    if plat in ("mac", "linux"):
         subprocess.run(["ranlib", archive], capture_output=True)
 
     left = defined_symbols(archive, nm) & engine_syms
