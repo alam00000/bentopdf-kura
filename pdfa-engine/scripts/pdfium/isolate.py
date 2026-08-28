@@ -4,7 +4,7 @@ import os
 import subprocess
 import sys
 
-STRONG = ("T", "D", "B", "S")
+STRONG = ("T", "D", "B", "S", "R")
 PREFIX = "pdfium_"
 
 ENGINE_LIBS = {
