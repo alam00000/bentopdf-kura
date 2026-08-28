@@ -4,9 +4,9 @@ set -euo pipefail
 PDFIUM_BRANCH="${PDFIUM_BRANCH:-chromium/7961}"
 DEPOT_TOOLS_REV="${DEPOT_TOOLS_REV:-c0148d63d4909b3f27c9df5b6273efc496bc4459}"
 
-ROOT="$(cd "$(dirname "$0")/../../third_party/pdfium-build" 2>/dev/null && pwd \
-        || { mkdir -p "$(dirname "$0")/../../third_party/pdfium-build" \
-             && cd "$(dirname "$0")/../../third_party/pdfium-build" && pwd; })"
+HERE="$(cd "$(dirname "$0")" && pwd)"
+mkdir -p "$HERE/../../third_party/pdfium-build"
+ROOT="$(cd "$HERE/../../third_party/pdfium-build" && pwd)"
 
 cd "$ROOT"
 
@@ -23,7 +23,7 @@ if [[ ! -d pdfium-src/.git ]]; then
     https://pdfium.googlesource.com/pdfium.git pdfium-src
 fi
 
-python3 "$(dirname "$0")/strip_reclient.py" "$ROOT/pdfium-src/DEPS"
+python3 "$HERE/strip_reclient.py" "$ROOT/pdfium-src/DEPS"
 
 cat > "$ROOT/.gclient" <<EOF
 solutions = [
