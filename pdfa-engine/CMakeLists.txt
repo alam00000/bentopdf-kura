@@ -12,13 +12,30 @@ set(PDFA_WITH_PDFIUM "AUTO" CACHE STRING
     "Bundle PDFium for raster flattening: ON, OFF, or AUTO (use it when a build is present)")
 option(PDFA_STATIC_DEPS "Link third-party libs statically (self-contained binary)" OFF)
 
+if(EMSCRIPTEN)
+  set(KURA_PDFIUM_TARGET wasm)
+elseif(WIN32)
+  set(KURA_PDFIUM_TARGET win-x64)
+elseif(APPLE)
+  if(CMAKE_SYSTEM_PROCESSOR MATCHES "arm64|aarch64")
+    set(KURA_PDFIUM_TARGET mac-arm64)
+  else()
+    set(KURA_PDFIUM_TARGET mac-x64)
+  endif()
+elseif(CMAKE_SYSTEM_PROCESSOR MATCHES "aarch64|arm64")
+  set(KURA_PDFIUM_TARGET linux-arm64)
+else()
+  set(KURA_PDFIUM_TARGET linux-x64)
+endif()
+
 if(PDFA_WITH_PDFIUM STREQUAL "AUTO")
-  if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/third_party/pdfium-build/dist")
+  set(_pdfium_dist "${CMAKE_CURRENT_SOURCE_DIR}/third_party/pdfium-build/dist/${KURA_PDFIUM_TARGET}")
+  if(EXISTS "${_pdfium_dist}/libpdfium.a" OR EXISTS "${_pdfium_dist}/pdfium.lib")
     set(PDFA_WITH_PDFIUM ON)
   else()
     set(PDFA_WITH_PDFIUM OFF)
     message(STATUS
-      "PDFium not found under third_party/pdfium-build/dist: building without raster "
+      "PDFium not found for ${KURA_PDFIUM_TARGET} under third_party/pdfium-build/dist: building without raster "
       "flattening. Transparency at PDF/A-1 and PDF/X-1a/X-3 will be reported rather than "
       "flattened. Run scripts/pdfium/sync.sh && scripts/pdfium/build.sh <target> to enable "
       "it, or set -DPDFA_WITH_PDFIUM=ON to require it.")
