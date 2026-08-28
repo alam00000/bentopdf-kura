@@ -406,21 +406,6 @@ void scanContent(QPDFObjectHandle contents, QPDFObjectHandle res, const Gs& init
   }
 }
 
-std::string pageList(const std::set<int>& pages) {
-  std::string out;
-  int shown = 0;
-  for (int p : pages) {
-    if (shown == 8) {
-      out += ", …";
-      break;
-    }
-    if (shown) out += ", ";
-    out += std::to_string(p);
-    ++shown;
-  }
-  std::string label = pages.size() == 1 ? "page " : "pages ";
-  return label + out;
-}
 }
 
 void passAnalyze(Ctx& ctx) {
@@ -470,50 +455,50 @@ void passAnalyze(Ctx& ctx) {
   if (tally.hairlines) {
     finding("ANALYZE_HAIRLINE",
             std::to_string(tally.hairlines) + " stroke(s) thinner than 0.125 pt at their "
-            "rendered size (" + pageList(tally.hairlinePages) + ")");
+            "rendered size (" + pageRangeList(tally.hairlinePages) + ")");
   }
   if (tally.richBlack) {
     finding("ANALYZE_RICH_BLACK",
             std::to_string(tally.richBlack) + " object(s) painted in rich black (CMYK "
-            "black over 90% with additional C/M/Y ink) (" + pageList(tally.richPages) +
+            "black over 90% with additional C/M/Y ink) (" + pageRangeList(tally.richPages) +
             ")");
   }
   if (tally.invisibleText) {
     finding("ANALYZE_INVISIBLE_TEXT",
             std::to_string(tally.invisibleText) + " text run(s) in rendering mode 3, "
-            "invisible and not used for clipping (" + pageList(tally.invisPages) + ")");
+            "invisible and not used for clipping (" + pageRangeList(tally.invisPages) + ")");
   }
   if (tally.lowRes) {
     finding("ANALYZE_IMAGE_LOWRES",
             std::to_string(tally.lowRes) + " image(s) below the minimum analysis "
             "resolution at their placed size, 250 ppi contone or 550 ppi bitonal; "
             "lowest is " + std::to_string(static_cast<int>(tally.minPpi)) + " ppi (" +
-            pageList(tally.lowPages) + ")");
+            pageRangeList(tally.lowPages) + ")");
   }
   if (tally.highRes) {
     finding("ANALYZE_IMAGE_HIGHRES",
             std::to_string(tally.highRes) + " image(s) above the maximum analysis "
             "resolution at their placed size, 450 ppi contone or 3600 ppi bitonal; "
             "highest is " + std::to_string(static_cast<int>(tally.maxPpi)) + " ppi (" +
-            pageList(tally.highPages) + ")");
+            pageRangeList(tally.highPages) + ")");
   }
   if (tally.smallText) {
     char minBuf[24];
     std::snprintf(minBuf, sizeof(minBuf), "%.1f", tally.minTextPt);
     finding("ANALYZE_SMALL_TEXT",
             std::to_string(tally.smallText) + " text run(s) below 4 pt at rendered size; "
-            "smallest is " + minBuf + " pt (" + pageList(tally.smallTextPages) + ")");
+            "smallest is " + minBuf + " pt (" + pageRangeList(tally.smallTextPages) + ")");
   }
   if (tally.transparency) {
     finding("ANALYZE_TRANSPARENCY",
             std::to_string(tally.transparency) + " use(s) of transparency (soft masks, "
             "constant alpha below 1, non-normal blend modes or transparency groups) (" +
-            pageList(tally.transparencyPages) + ")");
+            pageRangeList(tally.transparencyPages) + ")");
   }
   if (tally.overprint) {
     finding("ANALYZE_OVERPRINT",
             std::to_string(tally.overprint) + " graphics state(s) enabling overprint (" +
-            pageList(tally.overprintPages) + ")");
+            pageRangeList(tally.overprintPages) + ")");
   }
   if (tally.rgbOps || tally.cmykOps || tally.grayOps || !tally.colorants.empty()) {
     std::string detail = "colour usage: " + std::to_string(tally.rgbOps) + " RGB, " +
@@ -523,10 +508,6 @@ void passAnalyze(Ctx& ctx) {
       detail += "; spot colourant(s):";
       int shown = 0;
       for (const std::string& c : tally.colorants) {
-        if (shown == 8) {
-          detail += " …";
-          break;
-        }
         detail += (shown ? ", " : " ") + c;
         ++shown;
       }
@@ -596,11 +577,7 @@ void passAnalyze(Ctx& ctx) {
     std::string detail = std::to_string(pageSizes.size()) + " distinct page sizes:";
     int shown = 0;
     for (const auto& kv : pageSizes) {
-      if (shown == 4) {
-        detail += " …";
-        break;
-      }
-      detail += (shown ? ", " : " ") + kv.first + " (" + pageList(kv.second) + ")";
+      detail += (shown ? ", " : " ") + kv.first + " (" + pageRangeList(kv.second) + ")";
       ++shown;
     }
     finding("ANALYZE_MIXED_PAGE_SIZES", detail);
