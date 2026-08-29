@@ -124,15 +124,15 @@ function renderRow(it, i) {
   }
   meta.appendChild(status);
   if (it.encrypted && !it.verified && !running) meta.appendChild(unlockRow(it));
+  let list = null;
   if (it.open && it.issues && it.issues.length) {
-    const list = el('ul', 'issues');
+    list = el('ul', 'issues');
     for (const is of it.issues) {
       const li = el('li');
       li.appendChild(el('code', null, is.code));
       li.appendChild(el('span', null, is.detail));
       list.appendChild(li);
     }
-    meta.appendChild(list);
   }
   row.appendChild(meta);
   const actions = el('div', 'tool-file-actions');
@@ -151,6 +151,7 @@ function renderRow(it, i) {
   x.onclick = () => { files.splice(files.indexOf(it), 1); renderAll(); refresh(); };
   actions.appendChild(x);
   row.appendChild(actions);
+  if (list) row.appendChild(list);
   return row;
 }
 
