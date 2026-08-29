@@ -84,7 +84,7 @@ try {
 
 function loadProfiles() {
   const out = [];
-  let folders = [];
+  let folders;
   try { folders = fs.readdirSync(PROFILES, { withFileTypes: true }); } catch { return out; }
   for (const folder of folders) {
     if (!folder.isDirectory()) continue;

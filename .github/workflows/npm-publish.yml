@@ -30,10 +30,10 @@ jobs:
       TAG: ${{ inputs.tag || github.event.workflow_run.head_branch }}
       FORCE: ${{ inputs.force }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           ref: ${{ inputs.tag || github.event.workflow_run.head_branch }}
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
           registry-url: https://registry.npmjs.org

@@ -20,21 +20,21 @@ jobs:
     name: WebAssembly module
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Free disk space
         run: |
           sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc
           df -h /
 
-      - uses: mymindstorm/setup-emsdk@v14
+      - uses: mymindstorm/setup-emsdk@v16
         with:
           version: ${{ env.EMSDK_VERSION }}
           actions-cache-folder: emsdk-cache
 
       - name: Cache built PDFium
         id: pdfium-cache
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@v6
         with:
           path: pdfa-engine/third_party/pdfium-build/dist
           key: pdfium-wasm-${{ env.PDFIUM_BRANCH }}-${{ hashFiles('pdfa-engine/scripts/pdfium/*') }}
@@ -51,14 +51,14 @@ jobs:
 
       - name: Save built PDFium
         if: steps.pdfium-cache.outputs.cache-hit != 'true'
-        uses: actions/cache/save@v4
+        uses: actions/cache/save@v6
         with:
           path: pdfa-engine/third_party/pdfium-build/dist
           key: pdfium-wasm-${{ env.PDFIUM_BRANCH }}-${{ hashFiles('pdfa-engine/scripts/pdfium/*') }}
 
       - name: Cache wasm dependencies
         id: wasm-deps-cache
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@v6
         with:
           path: |
             pdfa-engine/third_party/build-qpdf-wasm
@@ -74,7 +74,7 @@ jobs:
 
       - name: Save wasm dependencies
         if: steps.wasm-deps-cache.outputs.cache-hit != 'true'
-        uses: actions/cache/save@v4
+        uses: actions/cache/save@v6
         with:
           path: |
             pdfa-engine/third_party/build-qpdf-wasm
@@ -85,7 +85,7 @@ jobs:
             pdfa-engine/third_party/lcms2
           key: wasm-deps-${{ env.EMSDK_VERSION }}-${{ hashFiles('pdfa-engine/scripts/build-wasm.sh') }}
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
 
@@ -95,7 +95,7 @@ jobs:
           node scripts/smoke.mjs
 
       - name: Upload artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: kura-wasm
           path: |

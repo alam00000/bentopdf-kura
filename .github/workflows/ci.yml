@@ -18,8 +18,8 @@ jobs:
     name: lint, version lock, npm smoke
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
           cache: npm
@@ -30,7 +30,7 @@ jobs:
     name: ASan + UBSan (memory-safety & recursion guard)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Install dependencies
         run: |
           sudo apt-get update
@@ -39,7 +39,7 @@ jobs:
             libfreetype-dev libopenjp2-7-dev liblcms2-dev libgnutls28-dev
       - name: Cache qpdf
         id: qpdf-cache
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: ~/qpdf-install
           key: qpdf-${{ env.QPDF_VERSION }}-${{ runner.os }}
@@ -74,7 +74,7 @@ jobs:
           cmake --build build-asan --target kura \
             fuzz_replay_convert fuzz_replay_profile fuzz_replay_invoice \
             fuzz_replay_icc fuzz_replay_password
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
       - name: HTTP service smoke against the sanitizer build
@@ -117,7 +117,7 @@ jobs:
     name: libFuzzer smoke (short coverage-guided run)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Install dependencies
         run: |
           sudo apt-get update
@@ -126,7 +126,7 @@ jobs:
             libfreetype-dev libopenjp2-7-dev liblcms2-dev libgnutls28-dev
       - name: Cache qpdf
         id: qpdf-cache
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: ~/qpdf-install
           key: qpdf-${{ env.QPDF_VERSION }}-${{ runner.os }}
@@ -165,7 +165,7 @@ jobs:
             -max_total_time=60 -rss_limit_mb=4096 -timeout=45 -print_final_stats=1
       - name: Upload crash reproducers
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: fuzz-crashes
           path: pdfa-engine/crash-*
