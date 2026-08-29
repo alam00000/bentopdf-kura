@@ -10,7 +10,7 @@ extern "C" {
 #define KURA_NOEXCEPT
 #endif
 
-#define KURA_VERSION "1.1.0"
+#define KURA_VERSION "1.2.0"
 
 typedef struct {
   int ua;
