@@ -1,6 +1,6 @@
 {
   "name": "@bentopdf/kura-pdf-win32-x64",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "description": "Prebuilt Kura engine binary for Windows x64",
   "license": "AGPL-3.0-only",
   "repository": {

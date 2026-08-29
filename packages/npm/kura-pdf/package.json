@@ -1,6 +1,6 @@
 {
   "name": "kura-pdf",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "description": "Kura, the open source PDF standards and preflight engine by BentoPDF: convert any PDF to PDF/A, PDF/UA, PDF/X, PDF/E or PDF/VT, check it, run print preflight, sign it and build e-invoices. Native engine for Node.js.",
   "license": "AGPL-3.0-only",
   "type": "module",
@@ -23,9 +23,9 @@
     "NOTICE.md"
   ],
   "optionalDependencies": {
-    "@bentopdf/kura-pdf-darwin-arm64": "1.2.0",
-    "@bentopdf/kura-pdf-linux-x64": "1.2.0",
-    "@bentopdf/kura-pdf-win32-x64": "1.2.0"
+    "@bentopdf/kura-pdf-darwin-arm64": "1.2.1",
+    "@bentopdf/kura-pdf-linux-x64": "1.2.1",
+    "@bentopdf/kura-pdf-win32-x64": "1.2.1"
   },
   "engines": {
     "node": ">=22"
