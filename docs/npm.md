@@ -177,7 +177,7 @@ npx kura --sign key.p12 --sign-password secret --level 2b input.pdf output.pdf
 npx kura --level 2b -r -d out/ inbox/
 ```
 
-`kura-pdf-wasm` installs `kura-wasm` with the same flags, the same JSON report and the same exit codes, minus the four flags that need the host (`--sign`, `--ocr`, `--font-folder`, `--substitute`).
+The output path is optional: left out, the result is written next to the input as `<input>.<level>.pdf`. `kura-pdf-wasm` installs `kura-wasm` with the same flags, the same JSON report and the same exit codes, minus the four flags that need the host (`--sign`, `--ocr`, `--font-folder`, `--substitute`).
 
 ## Servers and concurrency
 

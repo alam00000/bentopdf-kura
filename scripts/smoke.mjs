@@ -91,6 +91,12 @@ try {
   assert(p.status === 0 && JSON.parse(p.stdout).ok === true, `cli convert -> exit ${p.status}`);
   assert((await readFile(outPath)).length > 0, 'cli wrote the output');
 
+  p = run('--level', '2b', inPath);
+  const dflt = inPath.replace(/\.pdf$/, '.2b.pdf');
+  assert(p.status === 0 && JSON.parse(p.stdout).output === dflt && (await readFile(dflt)).length > 0, 'cli writes <input>.<level>.pdf when no output path is given');
+  p = run('--level', '2a', '--ua', inPath);
+  assert(p.status === 0 && JSON.parse(p.stdout).output === inPath.replace(/\.pdf$/, '.2a-ua.pdf'), 'default output name carries the level and -ua');
+
   p = run('--check', '--level', '2b', inPath);
   assert(p.status === 1 && JSON.parse(p.stdout).compliant === false, `cli check on non-conforming -> exit ${p.status}`);
 

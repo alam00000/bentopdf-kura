@@ -6,6 +6,12 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- The CLI's output path is optional: left out, the result is written next to
+  the input as `<input>.<level>.pdf` (`-ua` appended with `--ua`), and the
+  report carries an `output` field with the path.
+
 ## [1.2.0] - 2026-08-29
 
 ### Added
