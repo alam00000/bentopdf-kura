@@ -20,6 +20,10 @@
     "site": "node site/serve.mjs",
     "serve": "node server/server.mjs",
     "server-smoke": "node scripts/server-smoke.mjs",
+    "release": "scripts/release.sh patch",
+    "release:minor": "scripts/release.sh minor",
+    "release:major": "scripts/release.sh major",
+    "release:dry": "DRY_RUN=1 scripts/release.sh patch",
     "docs:dev": "vitepress dev docs",
     "docs:build": "vitepress build docs",
     "docs:preview": "vitepress preview docs"

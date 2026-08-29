@@ -3,7 +3,10 @@
 One command:
 
 ```bash
-scripts/release.sh patch     # or minor, major, or an explicit X.Y.Z
+npm run release              # patch: 1.2.0 -> 1.2.1
+npm run release:minor        # 1.2.0 -> 1.3.0
+npm run release:major        # 1.2.0 -> 2.0.0
+scripts/release.sh 1.4.2     # or an explicit version
 ```
 
 The script refuses to run unless you are on a clean, up-to-date `main`. It
@@ -11,8 +14,7 @@ bumps the version in the three places that must agree: `KURA_VERSION` in
 `pdfa-engine/core/include/kura/kura.h`, `kEngineVersion` in
 `pdfa-engine/core/include/pdfa/pdfa.hh`, and every `package.json`. It then runs
 `make check`, commits `chore: release vX.Y.Z`, tags, and pushes.
-`DRY_RUN=1 scripts/release.sh patch` shows what would happen without changing
-anything.
+`npm run release:dry` shows what would happen without changing anything.
 
 CI does the rest, in order:
 
