@@ -32,3 +32,4 @@ site/docs/
 scripts/build-site.sh
 scripts/deploy-site.sh
 deploy/
+dist-site/
