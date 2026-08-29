@@ -248,7 +248,7 @@ Findings come back under `analysis`, separate from the conformance `issues`, wit
 {"code":"PROFILE_HIT","detail":"Error: Stroke thinner than 0.125 pt (11 hit(s), pages 1-8, 10-12)"}
 ```
 
-Profiles are plain JSON, so you can write your own, and the XML preflight dialect many print shops already have is accepted as well. `--analyze` adds the engine's own document analysis (colour usage, transparency, overprint, fonts, page sizes) to any run. The browser preflight tool at [kura.bentopdf.com/preflight.html](https://kura.bentopdf.com/preflight.html) runs a curated set of profiles on a dropped file and can apply the repairs. The [preflight page](https://kura.bentopdf.com/docs/preflight) documents the profile format.
+Profiles are plain JSON, so you can write your own, and the XML preflight dialect many print shops already have is accepted as well. `--analyze` adds the engine's own document analysis (colour usage, transparency, overprint, fonts, page sizes) to any run. The browser preflight tool at [kura.bentopdf.com](https://kura.bentopdf.com) (Preflight in the top bar) runs a curated set of profiles on a dropped file and can apply the repairs. The [preflight page](https://kura.bentopdf.com/docs/preflight) documents the profile format.
 
 ---
 

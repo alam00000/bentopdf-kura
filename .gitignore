@@ -28,3 +28,7 @@ bench/repro/
 bench/cc-index.jsonl
 packages/npm/*/bin/kura
 packages/npm/*/bin/kura.exe
+site/docs/
+scripts/build-site.sh
+scripts/deploy-site.sh
+deploy/
