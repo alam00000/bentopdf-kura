@@ -1,6 +1,6 @@
 {
   "name": "kura-pdf-wasm",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "description": "Kura, the open source PDF standards and preflight engine by BentoPDF, compiled to WebAssembly: runs on any platform and in browsers, no native binaries.",
   "license": "AGPL-3.0-only",
   "type": "module",
