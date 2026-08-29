@@ -6,18 +6,25 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-08-29
+
 ### Added
 
 - `kura-pdf` on npm is now the native engine for Node.js: the binary arrives
-  through `@bentopdf/kura-pdf-linux-x64`, `@bentopdf/kura-pdf-darwin-arm64` or `@bentopdf/kura-pdf-win32-x64`,
-  runs in a subprocess per call, and the `kura` command is the native CLI with
-  every flag, signing and OCR included. The API adds `sign`, `ocr`,
-  `ocrEngine`, `fontFolder`, `timeoutMs` and `binaryPath()`.
+  through `@bentopdf/kura-pdf-linux-x64`, `@bentopdf/kura-pdf-darwin-arm64`
+  or `@bentopdf/kura-pdf-win32-x64`, runs in a subprocess per call, and the
+  `kura` command is the native CLI with every flag, signing and OCR included.
+  The API adds `sign`, `ocr`, `ocrEngine`, `fontFolder`, `timeoutMs` and
+  `binaryPath()`.
+- The npm packages are published by CI with provenance through npm's trusted
+  publishing; no publishing token exists anywhere.
 
 ### Changed
 
 - The WebAssembly build moved to `kura-pdf-wasm`, with the same API and a
   `kura-wasm` command.
+- The converter's level menu shows the plain standard names, and the preflight
+  page lives at `/preflight`.
 
 ## [1.1.0] - 2026-08-28
 
