@@ -36,7 +36,7 @@ npx kura-wasm --level 2b -r -d out/ inbox/
 npx kura-wasm --help
 ```
 
-Exit status: 0 on success, 1 when check mode found findings, 2 when the input was rejected, 64 on a usage error.
+The output path is optional: left out, the result is written next to the input as `<input>.<level>.pdf`. Exit status: 0 on success, 1 when check mode found findings, 2 when the input was rejected, 64 on a usage error.
 
 ## API
 

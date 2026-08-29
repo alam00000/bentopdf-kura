@@ -21,9 +21,9 @@ One JSON object per run, on stdout. Anything that is not the report, such as "ca
 ## Usage
 
 ```
-kura --level <level> [options] <input.pdf> <output.pdf>
+kura --level <level> [options] <input.pdf> [output.pdf]
 kura --check --level <level> [options] <input.pdf>
-kura --einvoice <invoice.xml> [--level 3b|3u|3a|4f] <input.pdf> <output.pdf>
+kura --einvoice <invoice.xml> [--level 3b|3u|3a|4f] <input.pdf> [output.pdf]
 kura --extract-invoice <input.pdf> [out.xml]
 kura --check-invoice <input.pdf>
 kura --verify-password [--password <pw>] <input.pdf>
@@ -31,6 +31,8 @@ kura --level <level> --batch [-r] [-d <dir>] [-s <suffix>] [-w] <folder>
 kura --help
 kura --version
 ```
+
+The output path is optional. Leave it out and the result is written next to the input as `<input>.<level>.pdf`, for example `report.2b.pdf`, or `report.2a-ua.pdf` with `--ua`; the report's `output` field says where it went.
 
 ## Exit status
 
@@ -47,6 +49,7 @@ kura --version
 | Field | Present | Meaning |
 |---|---|---|
 | `file` | always | the input path |
+| `output` | conversions | where the result was written, given or derived |
 | `ok` | always | whether the run produced a result |
 | `level` | always | the target |
 | `engine` | always | name and version |

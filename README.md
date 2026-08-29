@@ -122,6 +122,8 @@ To build the engine yourself, see [BUILDING.md](https://github.com/alam00000/ben
 ```bash
 kura --level 2b in.pdf out.pdf                     # PDF/A-2b, the usual archival choice
 
+kura --level 2b in.pdf                             # same, written next to the input as in.2b.pdf
+
 kura --level 2a --ua in.pdf out.pdf                # add PDF/UA accessibility
 
 kura --level x1a in.pdf out.pdf                    # PDF/X-1a, real ICC-based RGB to CMYK

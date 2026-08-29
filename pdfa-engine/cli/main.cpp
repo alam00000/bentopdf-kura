@@ -71,9 +71,10 @@ std::string jsonEscape(const std::string& in) {
 }
 
 void printReport(const pdfa::Options& opt, const pdfa::Result& res,
-                 const std::string& source) {
+                 const std::string& source, const std::string& output = "") {
   std::string json = "{";
   if (!source.empty()) json += "\"file\":\"" + jsonEscape(source) + "\",";
+  if (!output.empty()) json += "\"output\":\"" + jsonEscape(output) + "\",";
   json += "\"ok\":" + std::string(res.ok ? "true" : "false");
   json += ",\"level\":\"" + pdfa::levelToString(opt.level) + "\"";
   json += ",\"engine\":\"" + std::string(pdfa::kEngineName) + " " +
@@ -123,6 +124,19 @@ std::string lowerOf(std::string s) {
   std::transform(s.begin(), s.end(), s.begin(),
                  [](unsigned char c) { return std::tolower(c); });
   return s;
+}
+
+std::string defaultOutputPath(const std::string& input, const pdfa::Options& opt) {
+  std::string base = input;
+  const std::string lower = lowerOf(input);
+  for (const char* ext : {".pdf", ".jpeg", ".jpg"}) {
+    const std::string e = ext;
+    if (lower.size() > e.size() && lower.compare(lower.size() - e.size(), e.size(), e) == 0) {
+      base = input.substr(0, input.size() - e.size());
+      break;
+    }
+  }
+  return base + "." + pdfa::levelToString(opt.level) + (opt.ua ? "-ua" : "") + ".pdf";
 }
 
 bool loadFontFromFolder(const std::string& folder, const std::string& wanted,
@@ -271,7 +285,7 @@ int runOne(pdfa::Options opt, bool embedSource, const std::string& input,
     out.write(reinterpret_cast<const char*>(res.pdf.data()),
               static_cast<std::streamsize>(res.pdf.size()));
   }
-  printReport(opt, res, input);
+  printReport(opt, res, input, (res.ok && !opt.verifyOnly) ? output : "");
   if (!res.ok) return kExitRejected;
   return (opt.verifyOnly && !res.compliant) ? kExitFindings : kExitOk;
 }
@@ -395,9 +409,9 @@ void printUsage(std::ostream& out) {
                "(check only: x4p,x5g,x5n,x5pg,x6n,x6p,vt2) "
                "[--output-condition <name>] [--output-condition-info <text>] "
                "[--registry <url>] [--vt-records <ranges>] [--allow-visual-risk] "
-               "[--password <pw>] <input.pdf> <output.pdf>\n"
+               "[--password <pw>] <input.pdf> [output.pdf]\n"
                "       kura --check --level <level> [options] <input.pdf>\n"
-               "       kura --einvoice <invoice.xml> [--level 3b|3u|3a] <input.pdf> <output.pdf>\n"
+               "       kura --einvoice <invoice.xml> [--level 3b|3u|3a] <input.pdf> [output.pdf]\n"
                "       kura --extract-invoice <input.pdf> [out.xml]\n"
                "       kura --check-invoice <input.pdf>\n"
                "       kura --verify-password [--password <pw>] <input.pdf>\n"
@@ -687,8 +701,10 @@ int main(int argc, char** argv) {
     if (!opt.verifyOnly && batch.outDir.empty() && batch.suffix.empty() && !batch.overwrite) {
       batch.suffix = "_pdfa";
     }
-  } else if (opt.verifyOnly ? !output.empty() : output.empty()) {
-    return usage();
+  } else if (opt.verifyOnly) {
+    if (!output.empty()) return usage();
+  } else if (output.empty()) {
+    output = defaultOutputPath(input, opt);
   }
 
   if (ocr) {

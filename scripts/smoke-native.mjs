@@ -86,6 +86,10 @@ try {
   assert(p.status === 0 && /Kura Engine/.test(p.stdout), `cli --version -> ${p.stdout.trim()}`);
   p = run('--level', '2b', inPath, outPath);
   assert(p.status === 0 && JSON.parse(p.stdout).ok === true && (await readFile(outPath)).length > 0, `cli convert -> exit ${p.status}`);
+  p = run('--level', '2b', inPath);
+  const dflt = inPath.replace(/\.pdf$/, '.2b.pdf');
+  assert(p.status === 0 && JSON.parse(p.stdout).output === dflt && (await readFile(dflt)).length > 0, 'cli writes <input>.<level>.pdf when no output path is given');
+
   p = run('--check', '--level', '2b', inPath);
   assert(p.status === 1 && JSON.parse(p.stdout).compliant === false, `cli check on non-conforming -> exit ${p.status}`);
   p = run('--level', '9z', inPath, outPath);

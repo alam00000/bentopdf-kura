@@ -10,9 +10,9 @@ const EXIT_FINDINGS = 1;
 const EXIT_REJECTED = 2;
 const EXIT_USAGE = 64;
 
-const USAGE = `usage: kura --level {1b,1a,2b,2u,2a,3b,3u,3a,4,4f,4e,x1a,x3,x4,x6,e1,vt1,vt3} [--ua] [--lang <tag>] (check only: x4p,x5g,x5n,x5pg,x6n,x6p,vt2) [--output-condition <name>] [--output-condition-info <text>] [--registry <url>] [--vt-records <ranges>] [--allow-visual-risk] [--password <pw>] <input.pdf> <output.pdf>
+const USAGE = `usage: kura --level {1b,1a,2b,2u,2a,3b,3u,3a,4,4f,4e,x1a,x3,x4,x6,e1,vt1,vt3} [--ua] [--lang <tag>] (check only: x4p,x5g,x5n,x5pg,x6n,x6p,vt2) [--output-condition <name>] [--output-condition-info <text>] [--registry <url>] [--vt-records <ranges>] [--allow-visual-risk] [--password <pw>] <input.pdf> [output.pdf]
        kura --check --level <level> [options] <input.pdf>
-       kura --einvoice <invoice.xml> [--level 3b|3u|3a] <input.pdf> <output.pdf>
+       kura --einvoice <invoice.xml> [--level 3b|3u|3a] <input.pdf> [output.pdf]
        kura --level <level> --batch [-r] [-d <dir>] [-s <suffix>] [-w] <folder>
 
 exit status: 0 ok, 1 check found findings, 2 input rejected, 64 usage error`;
@@ -50,8 +50,15 @@ function usage() {
   return EXIT_USAGE;
 }
 
-function report(file, r, opts, level) {
+function defaultOutput(input, level, ua) {
+  const m = input.match(/\.(pdf|jpe?g)$/i);
+  const base = m ? input.slice(0, -m[0].length) : input;
+  return `${base}.${level}${ua ? '-ua' : ''}.pdf`;
+}
+
+function report(file, r, opts, level, output) {
   const out = { file, ok: r.ok };
+  if (output) out.output = output;
   if (r.level) out.level = r.level;
   else if (level) out.level = level;
   if (r.engine) out.engine = r.engine;
@@ -92,7 +99,7 @@ async function runOne(input, output, level, opts, embedSource) {
       console.error(`cannot write ${output}`);
       return EXIT_REJECTED;
     }
-    console.log(report(input, { ok: true, ...r }, opts, level));
+    console.log(report(input, { ok: true, ...r }, opts, level, output));
     return EXIT_OK;
   } catch (e) {
     if (!(e instanceof KuraError)) throw e;
@@ -201,8 +208,10 @@ async function main(argv) {
   if (batch.active) {
     if (output !== null) return usage();
     if (!opts.check && !batch.outDir && !batch.suffix && !batch.overwrite) batch.suffix = '_pdfa';
-  } else if (opts.check ? output !== null : output === null) {
-    return usage();
+  } else if (opts.check) {
+    if (output !== null) return usage();
+  } else if (output === null) {
+    output = defaultOutput(input, level, !!opts.ua);
   }
 
   if (!batch.active) return runOne(input, output, level, opts, embedSource);
