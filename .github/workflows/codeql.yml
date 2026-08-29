@@ -27,13 +27,13 @@ jobs:
       actions: read
       contents: read
     steps:
-      - uses: actions/checkout@v4
-      - uses: github/codeql-action/init@v3
+      - uses: actions/checkout@v7
+      - uses: github/codeql-action/init@v4
         with:
           languages: javascript-typescript
           queries: security-extended
           config-file: ./.github/codeql-config.yml
-      - uses: github/codeql-action/analyze@v3
+      - uses: github/codeql-action/analyze@v4
         with:
           category: /language:javascript-typescript
 
@@ -45,7 +45,7 @@ jobs:
       actions: read
       contents: read
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Install dependencies
         run: |
           sudo apt-get update
@@ -54,7 +54,7 @@ jobs:
             libfreetype-dev libpng-dev libopenjp2-7-dev liblcms2-dev libssl-dev
       - name: Cache qpdf
         id: qpdf-cache
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: ~/qpdf-install
           key: qpdf-openssl-${{ env.QPDF_VERSION }}-${{ runner.os }}
@@ -72,7 +72,7 @@ jobs:
           cmake --build /tmp/qpdf-build --target libqpdf
           cmake --install /tmp/qpdf-build --component dev
           cmake --install /tmp/qpdf-build --component lib
-      - uses: github/codeql-action/init@v3
+      - uses: github/codeql-action/init@v4
         with:
           languages: c-cpp
           build-mode: manual
@@ -83,6 +83,6 @@ jobs:
           cmake -S pdfa-engine -B build -G Ninja -DCMAKE_BUILD_TYPE=Release \
             -DPDFA_WITH_PDFIUM=OFF -DCMAKE_PREFIX_PATH="$HOME/qpdf-install"
           cmake --build build --target kura kura_sdk
-      - uses: github/codeql-action/analyze@v3
+      - uses: github/codeql-action/analyze@v4
         with:
           category: /language:c-cpp

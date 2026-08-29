@@ -28,9 +28,9 @@
     "node": ">=22"
   },
   "devDependencies": {
-    "@eslint/js": "^9.20.0",
-    "eslint": "^9.20.0",
-    "globals": "^15.14.0",
+    "@eslint/js": "^10.0.1",
+    "eslint": "^10.9.1",
+    "globals": "^17.11.0",
     "vitepress": "^1.6.3"
   }
 }

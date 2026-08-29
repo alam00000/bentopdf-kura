@@ -20,7 +20,7 @@ jobs:
     name: Linux x86-64 self-contained binary
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Free disk space
         run: |
@@ -33,7 +33,7 @@ jobs:
 
       - name: Cache qpdf
         id: qpdf-cache
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@v6
         with:
           path: ~/qpdf-install
           key: qpdf-static-${{ env.QPDF_VERSION }}-${{ runner.os }}
@@ -45,14 +45,14 @@ jobs:
 
       - name: Save qpdf
         if: steps.qpdf-cache.outputs.cache-hit != 'true'
-        uses: actions/cache/save@v4
+        uses: actions/cache/save@v6
         with:
           path: ~/qpdf-install
           key: qpdf-static-${{ env.QPDF_VERSION }}-${{ runner.os }}
 
       - name: Cache FreeType, Little CMS and OpenJPEG
         id: deps-cache
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@v6
         with:
           path: ~/deps-install
           key: static-deps-lcms2-2.16-openjpeg-2.5.4-freetype-2.13.2-${{ runner.os }}
@@ -64,14 +64,14 @@ jobs:
 
       - name: Save FreeType, Little CMS and OpenJPEG
         if: steps.deps-cache.outputs.cache-hit != 'true'
-        uses: actions/cache/save@v4
+        uses: actions/cache/save@v6
         with:
           path: ~/deps-install
           key: static-deps-lcms2-2.16-openjpeg-2.5.4-freetype-2.13.2-${{ runner.os }}
 
       - name: Cache built PDFium
         id: pdfium-cache
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@v6
         with:
           path: pdfa-engine/third_party/pdfium-build/dist
           key: pdfium-linux-x64-${{ env.PDFIUM_BRANCH }}-${{ hashFiles('pdfa-engine/scripts/pdfium/*') }}-qpdf${{ env.QPDF_VERSION }}-deps-2.13.2-2.16-2.5.4
@@ -83,7 +83,7 @@ jobs:
 
       - name: Save built PDFium
         if: steps.pdfium-cache.outputs.cache-hit != 'true'
-        uses: actions/cache/save@v4
+        uses: actions/cache/save@v6
         with:
           path: pdfa-engine/third_party/pdfium-build/dist
           key: pdfium-linux-x64-${{ env.PDFIUM_BRANCH }}-${{ hashFiles('pdfa-engine/scripts/pdfium/*') }}-qpdf${{ env.QPDF_VERSION }}-deps-2.13.2-2.16-2.5.4
@@ -97,7 +97,7 @@ jobs:
 
       - name: Upload the crashing binary for local debugging
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: kura-linux-x64-crash
           path: |
@@ -107,7 +107,7 @@ jobs:
           if-no-files-found: ignore
 
       - name: Upload artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: kura-linux-x64
           path: |
