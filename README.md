@@ -12,7 +12,7 @@ It is also a full print preflight engine: 396 bundled profiles check and repair 
 
 The name comes from the 蔵 (*kura*), the traditional Japanese storehouse where a family kept the things meant to outlast them.
 
-Kura is part of the [BentoPDF](https://github.com/alam00000/bentopdf) suite. The same engine is available as a CLI, a C library, an npm package, a Docker image and a WebAssembly build that runs entirely in the browser.
+Kura is made by the [BentoPDF](https://github.com/alam00000/bentopdf) team. The same engine is available as a CLI, a C library, an npm package, a Docker image and a WebAssembly build that runs entirely in the browser.
 
 Try the converter and preflight at [kura.bentopdf.com](https://kura.bentopdf.com). Full documentation lives at [kura.bentopdf.com/docs](https://kura.bentopdf.com/docs/).
 
