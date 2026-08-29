@@ -22,7 +22,8 @@ const server = http.createServer((req, res) => {
   const url = new URL(req.url, `http://${req.headers.host}`);
   let rel = decodeURIComponent(url.pathname);
   if (rel === '/') rel = '/index.html';
-  const filePath = path.join(ROOT, rel);
+  let filePath = path.join(ROOT, rel);
+  if (!path.extname(filePath) && fs.existsSync(`${filePath}.html`)) filePath = `${filePath}.html`;
   if (!filePath.startsWith(ROOT + path.sep)) {
     res.writeHead(403).end('forbidden');
     return;

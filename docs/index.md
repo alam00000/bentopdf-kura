@@ -44,7 +44,7 @@ It validates against every public conformance suite: the veraPDF corpus, Isartor
 |---|---|
 | See how it holds up on real files | [Benchmark](/benchmark) |
 | Convert or check a PDF right now, in the browser | [kura.bentopdf.com](https://kura.bentopdf.com) |
-| Run print preflight on a PDF, in the browser | [kura.bentopdf.com/preflight.html](https://kura.bentopdf.com/preflight.html) |
+| Run print preflight on a PDF, in the browser | [kura.bentopdf.com](https://kura.bentopdf.com), Preflight in the top bar |
 | Convert PDFs from the terminal | the [CLI](/cli) |
 | Convert PDFs from Node.js, or in your own web app | the [npm packages](/npm) |
 | Run it as a service on your own server, web interface included | [Self-hosting](/self-hosting) |
