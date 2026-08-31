@@ -8,6 +8,9 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- Building or checking a MINIMUM or BASIC WL hybrid invoice now reports
+  `EINVOICE_PROFILE_LIMITED`: the file is valid, but the German mandate does
+  not accept those profiles as e-invoices.
 - The CLI's output path is optional: left out, the result is written next to
   the input as `<input>.<level>.pdf` (`-ua` appended with `--ua`), and the
   report carries an `output` field with the path.

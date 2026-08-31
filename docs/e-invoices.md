@@ -24,7 +24,7 @@ One flag. The engine reads the guideline identifier out of the XML and derives e
 
 The guideline is read from `GuidelineSpecifiedDocumentContextParameter/ID` in a CII payload, or `cbc:CustomizationID` in a UBL one. Order-X, the same mechanism for purchase orders, sets the document type from the payload's `TypeCode`: `220` is an order, `230` an order change, `231` an order response.
 
-`/Data` on the two header-only Factur-X profiles is required by the standard because the page carries more invoice detail than the XML does. `/Source` is never emitted, because it would assert the page was rendered from the XML, which a converter cannot know.
+`/Data` on the two header-only Factur-X profiles is required by the standard because the page carries more invoice detail than the XML does. That is also why the German mandate does not accept MINIMUM or BASIC WL as e-invoices: the structured part does not carry the full invoice. Kura still builds and validates them, and reports `EINVOICE_PROFILE_LIMITED` so nobody finds out from a rejected invoice; for the mandate, use BASIC, EN 16931 or EXTENDED. `/Source` is never emitted, because it would assert the page was rendered from the XML, which a converter cannot know.
 
 ### Container level
 
@@ -44,6 +44,7 @@ The payload is checked structurally before anything is embedded:
 | `EINVOICE_PROFILE_UNKNOWN` | a recognised document declares no guideline; Kura will not embed it as a guessed EN 16931 invoice |
 | `EINVOICE_PROFILE_INVALID` | the declared conformance level is outside the hybrid code list |
 | `FACTURX_REQUIRES_PDFA3` | the chosen level cannot carry attachments |
+| `EINVOICE_PROFILE_LIMITED` | a note, not a rejection: MINIMUM and BASIC WL are valid profiles, but the German mandate only accepts profiles whose XML carries the full invoice |
 
 This is container-level validation. Kura does not run the XSD or the EN 16931 business rules over the payload; that is what Mustang and similar validators are for, and the project tests its output against Mustang.
 

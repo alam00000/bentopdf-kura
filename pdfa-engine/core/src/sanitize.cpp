@@ -690,6 +690,14 @@ void passStructure(Ctx& ctx) {
                     "BASIC WL, BASIC, EN 16931, EXTENDED, XRECHNUNG)");
     } else if (ctx.isA() && (ctx.part == 3 || ctx.conf == 'F')) {
       attachInvoiceXml(ctx, root);
+      if (ctx.inv.profile == "MINIMUM" || ctx.inv.profile == "BASIC WL") {
+        ctx.issue("EINVOICE_PROFILE_LIMITED",
+                  ctx.inv.standard + " " + ctx.inv.profile +
+                      " is a valid hybrid profile, but its structured part does not carry "
+                      "the full invoice, so the German mandate does not accept it as an "
+                      "e-invoice; use BASIC, EN 16931 or EXTENDED for that",
+                  false);
+      }
       if (ctx.part == 4) {
         ctx.issue("EINVOICE_PDFA4_CONTAINER",
                   "PDF/A-4f container is permitted by Factur-X 1.07 BR-HYBRID-02, but "

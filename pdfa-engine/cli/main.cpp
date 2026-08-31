@@ -348,6 +348,12 @@ int einvoiceValidate(const std::string& input, const std::string& password) {
   }
   pdfa::InvoiceProfile want = pdfa::detectInvoice(r.xml, "", "");
   if (!want.detected) problems.push_back("payload declares no recognised guideline URN");
+  if (want.profile == "MINIMUM" || want.profile == "BASIC WL") {
+    warnings.push_back("valid " + want.standard + " " + want.profile +
+                       ", but its structured part does not carry the full invoice, so the "
+                       "German mandate does not accept this profile as an e-invoice; a "
+                       "compliant one needs BASIC, EN 16931 or EXTENDED");
+  }
   if (r.filename != want.filename) {
     problems.push_back("attachment is named \"" + r.filename + "\" but " + want.standard +
                        " " + want.profile + " requires \"" + want.filename + "\"");
