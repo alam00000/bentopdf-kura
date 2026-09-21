@@ -73,7 +73,7 @@ struct Issue {
   std::string detail;
   bool fixed = false;
   int severity = 0;        // 1 info, 2 warning, 3 error; 0 not yet classified
-  std::vector<int> pages;  // 1-based page numbers the finding refers to; empty = whole document
+  std::vector<int> pages{};  // 1-based page numbers the finding refers to; empty = whole document
 };
 
 struct Result {
