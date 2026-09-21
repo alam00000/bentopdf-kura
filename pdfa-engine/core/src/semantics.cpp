@@ -427,7 +427,9 @@ std::set<std::string> taggedFormNames(QPDFObjectHandle res) {
 int artifactMarkUntagged(Ctx& ctx) {
   int wrapped = 0;
   QPDFPageDocumentHelper dh(ctx.pdf);
+  int kuraPage1 = 0;
   for (auto& ph : dh.getAllPages()) {
+    PageScope kuraScope1(ctx, ++kuraPage1);
     QPDFObjectHandle page = ph.getObjectHandle();
     QPDFObjectHandle contents = page.getKey("/Contents");
     bool decodable = true;

@@ -834,7 +834,9 @@ void passLimits(Ctx& ctx) {
   QPDFPageDocumentHelper dh(ctx.pdf);
   Visited streamVisited;
   int boxFixed = 0;
+  int kuraPage1 = 0;
   for (auto& ph : dh.getAllPages()) {
+    PageScope kuraScope1(ctx, ++kuraPage1);
     QPDFObjectHandle page = ph.getObjectHandle();
     if (ctx.isA()) {
       for (const char* bk : {"/MediaBox", "/CropBox", "/BleedBox", "/TrimBox", "/ArtBox"}) {

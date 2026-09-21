@@ -233,6 +233,18 @@ bool issueIsNormalization(const std::string& code) {
          code == "OUTPUT_INTENT_PRESENT";
 }
 
+int issueSeverity(const std::string& code) {
+  if (issueIsNormalization(code) || code == "IMAGE_INPUT_WRAPPED" ||
+      code.rfind("ANALYZE_", 0) == 0) {
+    return 1;
+  }
+  if (code == "SCAN_INCOMPLETE" || code == "FONT_SUBSTITUTED" ||
+      code == "STRUCT_TREE_SYNTHESIZED") {
+    return 2;
+  }
+  return 3;
+}
+
 Result convert(const unsigned char* data, std::size_t size, const Options& optIn) {
   Result res;
   Options opt = optIn;
@@ -418,6 +430,12 @@ Result convert(const unsigned char* data, std::size_t size, const Options& optIn
         ctx.issue("DOCUMENT_SIGNED",
                   "applied a PKCS#7 detached signature over the whole file", true);
       }
+    }
+    for (Issue& i : res.issues) {
+      if (!i.severity) i.severity = issueSeverity(i.code);
+    }
+    for (Issue& i : res.analysis) {
+      if (!i.severity) i.severity = issueSeverity(i.code);
     }
     res.ok = res.errorCode.empty();
     if (opt.verifyOnly && res.ok) {

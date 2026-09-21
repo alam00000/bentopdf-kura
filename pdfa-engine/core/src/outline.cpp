@@ -923,7 +923,9 @@ void passOutlineFonts(Ctx& ctx) {
   std::set<QPDFObjGen> flaggedSet;
   int runs = 0, fontsFlagged = 0;
   QPDFPageDocumentHelper dh(ctx.pdf);
+  int kuraPage1 = 0;
   for (auto& ph : dh.getAllPages()) {
+    PageScope kuraScope1(ctx, ++kuraPage1);
     QPDFObjectHandle page = ph.getObjectHandle();
     outlineHolder(ctx, lib, page, ph.getAttribute("/Resources", false), cache, visited,
                   runs, fontsFlagged, flaggedSet);

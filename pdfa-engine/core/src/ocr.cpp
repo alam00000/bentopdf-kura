@@ -73,6 +73,7 @@ void passOcr(Ctx& ctx) {
   int totalWords = 0, ocredPages = 0;
 
   for (size_t i = 0; i < pages.size(); ++i) {
+    PageScope kuraScope(ctx, static_cast<int>(i) + 1);
     int w = 0, h = 0;
     std::string rgb;
     if (!ctx.opt.rasterizePage(static_cast<int>(i), ctx.opt.rasterDpi, w, h, rgb)) continue;

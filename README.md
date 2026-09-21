@@ -205,7 +205,7 @@ else       report(r->error_code, r->error);
 kura_result_free(r);
 ```
 
-Four functions, no exceptions across the boundary, additive only within a major version.
+Six functions, no exceptions across the boundary, additive only within a major version. Results carry every finding with a severity and the pages it concerns; the options reach preflight profiles, the analysis census, font folders, OCR words, image limits and rasterization.
 
 ---
 

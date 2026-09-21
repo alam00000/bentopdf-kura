@@ -104,14 +104,13 @@ bool scanJp2Boxes(const unsigned char* d, size_t n, int& colrCount, bool& colrOk
     } else if (type == "colr" && plen >= 3) {
       ++colrCount;
       int meth = p[0];
-      int approx = p[2];
-      bool ok = approx == 0;
+      bool ok = true;
       if (meth == 1) {
         if (plen < 7) {
           ok = false;
         } else {
           uint32_t enumCs = be32(p + 3);
-          ok = ok && (enumCs == 16 || enumCs == 17 || enumCs == 18);
+          ok = enumCs >= 12 && enumCs <= 43;
         }
       } else if (meth != 2) {
         ok = false;

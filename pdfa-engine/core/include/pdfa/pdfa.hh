@@ -72,6 +72,8 @@ struct Issue {
   std::string code;
   std::string detail;
   bool fixed = false;
+  int severity = 0;        // 1 info, 2 warning, 3 error; 0 not yet classified
+  std::vector<int> pages;  // 1-based page numbers the finding refers to; empty = whole document
 };
 
 struct Result {
@@ -90,6 +92,15 @@ Result convert(const unsigned char* data, std::size_t size, const Options& optio
 bool verifyPassword(const unsigned char* data, std::size_t size, const std::string& password);
 
 bool issueIsNormalization(const std::string& code);
+
+// Default severity for an issue code: normalizations and analysis facts are
+// info, repairs with a visual or semantic risk are warnings, deviations are errors.
+int issueSeverity(const std::string& code);
+
+// Look up a font file (ttf/ttc/otf) whose file name matches `wanted`, ignoring
+// case, spaces, dashes and underscores; fills the PostScript-style name and bytes.
+bool loadFontFromFolder(const std::string& folder, const std::string& wanted,
+                        std::string& psName, std::string& bytes);
 
 bool levelFromString(const std::string& s, Level& out);
 std::string levelToString(Level level);
