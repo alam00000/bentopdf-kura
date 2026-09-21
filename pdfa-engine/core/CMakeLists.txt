@@ -25,6 +25,8 @@ add_library(pdfa_core STATIC
   src/semantics.cpp
   src/einvoice.cpp
   src/einvoice_read.cpp
+  src/einvoice_check.cpp
+  src/fontfolder.cpp
   src/sign.cpp
   src/ocr.cpp
   src/sanitize.cpp

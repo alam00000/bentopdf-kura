@@ -24,6 +24,7 @@
 #include "pdfa/pdfa.hh"
 #include "../core/src/einvoice.hh"
 #include "signer.hh"
+
 #ifdef KURA_WITH_PDFIUM
 #include "kura/raster.hh"
 #endif
@@ -70,6 +71,14 @@ std::string jsonEscape(const std::string& in) {
   return out;
 }
 
+std::string issueMetaJson(const pdfa::Issue& is) {
+  std::string out = ",\"severity\":" + std::to_string(is.severity) + ",\"pages\":[";
+  for (size_t i = 0; i < is.pages.size(); ++i) {
+    out += (i ? "," : "") + std::to_string(is.pages[i]);
+  }
+  return out + "]";
+}
+
 void printReport(const pdfa::Options& opt, const pdfa::Result& res,
                  const std::string& source, const std::string& output = "") {
   std::string json = "{";
@@ -102,7 +111,7 @@ void printReport(const pdfa::Options& opt, const pdfa::Result& res,
     if (!first) json += ",";
     first = false;
     json += "{\"code\":\"" + jsonEscape(is.code) + "\",\"detail\":\"" + jsonEscape(is.detail) +
-            "\",\"fixed\":" + (is.fixed ? "true" : "false") + "}";
+            "\",\"fixed\":" + (is.fixed ? "true" : "false") + issueMetaJson(is) + "}";
   }
   json += "]";
   if (opt.analyze || !opt.preflightProfile.empty()) {
@@ -112,13 +121,14 @@ void printReport(const pdfa::Options& opt, const pdfa::Result& res,
       if (!firstA) json += ",";
       firstA = false;
       json += "{\"code\":\"" + jsonEscape(is.code) + "\",\"detail\":\"" +
-              jsonEscape(is.detail) + "\"}";
+              jsonEscape(is.detail) + "\"" + issueMetaJson(is) + "}";
     }
     json += "]";
   }
   json += "}";
   std::cout << json << std::endl;
 }
+
 
 std::string lowerOf(std::string s) {
   std::transform(s.begin(), s.end(), s.begin(),
@@ -137,32 +147,6 @@ std::string defaultOutputPath(const std::string& input, const pdfa::Options& opt
     }
   }
   return base + "." + pdfa::levelToString(opt.level) + (opt.ua ? "-ua" : "") + ".pdf";
-}
-
-bool loadFontFromFolder(const std::string& folder, const std::string& wanted,
-                        std::string& psName, std::string& bytes) {
-  std::error_code ec;
-  std::string want = lowerOf(wanted);
-  want.erase(std::remove_if(want.begin(), want.end(),
-                            [](unsigned char c) { return c == ' ' || c == '-' || c == '_'; }),
-             want.end());
-  for (const auto& e : std::filesystem::recursive_directory_iterator(folder, ec)) {
-    if (ec) break;
-    if (!e.is_regular_file()) continue;
-    std::string ext = lowerOf(e.path().extension().string());
-    if (ext != ".ttf" && ext != ".ttc" && ext != ".otf") continue;
-    std::string stem = lowerOf(e.path().stem().string());
-    stem.erase(std::remove_if(stem.begin(), stem.end(),
-                              [](unsigned char c) { return c == ' ' || c == '-' || c == '_'; }),
-               stem.end());
-    if (stem != want) continue;
-    std::ifstream f(e.path(), std::ios::binary);
-    if (!f) continue;
-    bytes.assign((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
-    psName = e.path().stem().string();
-    return !bytes.empty();
-  }
-  return false;
 }
 
 bool runTesseract(const std::string& exe, int, double, int w, int h, const std::string& rgb,
@@ -334,79 +318,34 @@ int einvoiceValidate(const std::string& input, const std::string& password) {
   }
   std::vector<unsigned char> data((std::istreambuf_iterator<char>(in)),
                                   std::istreambuf_iterator<char>());
-  pdfa::InvoiceRead r = pdfa::readInvoice(data.data(), data.size(), password);
-  std::vector<std::string> problems, warnings;
-  if (!r.ok) {
-    std::cout << "{\"ok\":false,\"errorCode\":\"PARSE_ERROR\",\"error\":\""
-              << jsonEscape(r.error) << "\"}" << std::endl;
+  pdfa::InvoiceCheck c = pdfa::checkInvoice(data.data(), data.size(), password);
+  if (!c.ok) {
+    std::cout << "{\"ok\":false,\"errorCode\":\"" << jsonEscape(c.errorCode) << "\",\"error\":\""
+              << jsonEscape(c.error) << "\"}" << std::endl;
     return 2;
   }
-  if (r.xml.empty()) {
+  if (!c.einvoice) {
     std::cout << "{\"ok\":true,\"einvoice\":false,\"error\":\"no e-invoice attachment\"}"
               << std::endl;
     return 1;
   }
-  pdfa::InvoiceProfile want = pdfa::detectInvoice(r.xml, "", "");
-  if (!want.detected) problems.push_back("payload declares no recognised guideline URN");
-  if (want.profile == "MINIMUM" || want.profile == "BASIC WL") {
-    warnings.push_back("valid " + want.standard + " " + want.profile +
-                       ", but its structured part does not carry the full invoice, so the "
-                       "German mandate does not accept this profile as an e-invoice; a "
-                       "compliant one needs BASIC, EN 16931 or EXTENDED");
-  }
-  if (r.filename != want.filename) {
-    problems.push_back("attachment is named \"" + r.filename + "\" but " + want.standard +
-                       " " + want.profile + " requires \"" + want.filename + "\"");
-  }
-  if (r.relationship != want.relationship) {
-    bool headerOnly = want.profile == "MINIMUM" || want.profile == "BASIC WL";
-    std::string msg = "AFRelationship is " + r.relationship + " but " + want.profile +
-                      " normally uses " + want.relationship;
-    if (headerOnly) {
-      warnings.push_back(msg +
-                         " (Factur-X 6.2.2 ties this to whether the page carries more "
-                         "invoice data than the XML, which a reader cannot verify)");
-    } else {
-      problems.push_back(msg);
-    }
-  }
-  if (!r.hasAf) problems.push_back("catalog has no /AF array");
-  std::string xmpName = pdfa::xmpValue(r.xmp, "DocumentFileName");
-  std::string xmpConf = pdfa::xmpValue(r.xmp, "ConformanceLevel");
-  std::string xmpType = pdfa::xmpValue(r.xmp, "DocumentType");
-  if (xmpName.empty() && xmpConf.empty()) {
-    problems.push_back("XMP carries no e-invoice extension schema");
-  } else {
-    if (xmpName != r.filename) {
-      problems.push_back("XMP DocumentFileName \"" + xmpName +
-                         "\" does not match the attachment \"" + r.filename + "\"");
-    }
-    if (!xmpConf.empty() && xmpConf != want.profile) {
-      problems.push_back("XMP ConformanceLevel \"" + xmpConf + "\" but the payload declares " +
-                         want.profile);
-    }
-    if (!xmpType.empty() && xmpType != want.documentType) {
-      problems.push_back("XMP DocumentType \"" + xmpType + "\" but the payload is a " +
-                         want.documentType);
-    }
-  }
   std::string json = "{\"ok\":true,\"einvoice\":true";
-  json += ",\"standard\":\"" + jsonEscape(want.standard) + "\"";
-  json += ",\"profile\":\"" + jsonEscape(want.profile) + "\"";
-  json += ",\"documentType\":\"" + jsonEscape(want.documentType) + "\"";
-  json += ",\"attachment\":\"" + jsonEscape(r.filename) + "\"";
-  json += ",\"consistent\":" + std::string(problems.empty() ? "true" : "false");
+  json += ",\"standard\":\"" + jsonEscape(c.standard) + "\"";
+  json += ",\"profile\":\"" + jsonEscape(c.profile) + "\"";
+  json += ",\"documentType\":\"" + jsonEscape(c.documentType) + "\"";
+  json += ",\"attachment\":\"" + jsonEscape(c.attachment) + "\"";
+  json += ",\"consistent\":" + std::string(c.consistent ? "true" : "false");
   json += ",\"problems\":[";
-  for (size_t i = 0; i < problems.size(); ++i) {
-    json += (i ? ",\"" : "\"") + jsonEscape(problems[i]) + "\"";
+  for (size_t i = 0; i < c.problems.size(); ++i) {
+    json += (i ? ",\"" : "\"") + jsonEscape(c.problems[i]) + "\"";
   }
   json += "],\"warnings\":[";
-  for (size_t i = 0; i < warnings.size(); ++i) {
-    json += (i ? ",\"" : "\"") + jsonEscape(warnings[i]) + "\"";
+  for (size_t i = 0; i < c.warnings.size(); ++i) {
+    json += (i ? ",\"" : "\"") + jsonEscape(c.warnings[i]) + "\"";
   }
   json += "]}";
   std::cout << json << std::endl;
-  return problems.empty() ? 0 : 1;
+  return c.consistent ? 0 : 1;
 }
 
 void printUsage(std::ostream& out) {
@@ -747,7 +686,7 @@ int main(int argc, char** argv) {
     std::string folder = opt.fontFolder;
     opt.loadFont = [folder](const std::string& wanted, std::string& psName,
                             std::string& bytes) {
-      return loadFontFromFolder(folder, wanted, psName, bytes);
+      return pdfa::loadFontFromFolder(folder, wanted, psName, bytes);
     };
   }
 

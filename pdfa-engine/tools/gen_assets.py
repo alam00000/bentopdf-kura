@@ -34,12 +34,9 @@ def byte_array(data, name):
     return "const unsigned char %s[] = {\n%s\n};" % (name, ",\n".join(lines))
 
 def gen_icc():
-    exe = os.path.join(HERE, "icc_gen_bin")
-    subprocess.run(["cc", os.path.join(HERE, "icc_gen.c"),
-                    "-I/opt/homebrew/opt/lcms2/include",
-                    "-L/opt/homebrew/opt/lcms2/lib", "-llcms2", "-o", exe], check=True)
-    srgb, cmyk = os.path.join(HERE, "srgb.icc"), os.path.join(HERE, "cmyk.icc")
-    subprocess.run([exe, srgb, cmyk], check=True)
+    icc_dir = os.path.join(TP, "icc")
+    srgb = os.path.join(icc_dir, "sRGB_IEC61966-2.1.icc")
+    cmyk = os.path.join(icc_dir, "CoatedGRACoL2006.icc")
     for path, sym, hh in [(srgb, "kSrgbIcc", "srgb_icc"), (cmyk, "kCmykIcc", "cmyk_icc")]:
         data = open(path, "rb").read()
         cpp = '#include "%s.hh"\n\nnamespace pdfa {\n\n%s\n\nconst unsigned int %sLen = %d;\n\n}\n' % (
