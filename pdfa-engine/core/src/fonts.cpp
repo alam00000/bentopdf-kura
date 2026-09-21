@@ -741,66 +741,121 @@ void scrubToUnicode(Ctx& ctx, QPDFObjectHandle font) {
     return;
   }
   bool changed = false;
-  size_t pos = 0;
-  bool inBf = false;
-  while (pos < text.size()) {
-    if (text.compare(pos, 11, "beginbfchar") == 0 ||
-        text.compare(pos, 12, "beginbfrange") == 0) {
-      inBf = true;
-      pos += 11;
-      continue;
-    }
-    if (text.compare(pos, 9, "endbfchar") == 0 || text.compare(pos, 10, "endbfrange") == 0) {
-      inBf = false;
-      pos += 9;
-      continue;
-    }
-    if (inBf && text[pos] == '<') {
-      size_t end = text.find('>', pos);
-      if (end != std::string::npos && end - pos - 1 >= 4) {
-        std::string hex = text.substr(pos + 1, end - pos - 1);
-        bool bad = false;
-        for (size_t i = 0; i + 4 <= hex.size(); i += 4) {
-          std::string quad = hex.substr(i, 4);
-          unsigned v = static_cast<unsigned>(std::strtoul(quad.c_str(), nullptr, 16));
-          if (puaBanned && v >= 0xD800 && v <= 0xDBFF && i + 8 <= hex.size()) {
-            unsigned lo = static_cast<unsigned>(
-                std::strtoul(hex.substr(i + 4, 4).c_str(), nullptr, 16));
-            if (lo >= 0xDC00 && lo <= 0xDFFF) {
-              unsigned cp = 0x10000 + ((v - 0xD800) << 10) + (lo - 0xDC00);
-              if ((cp >= 0xF0000 && cp <= 0xFFFFD) || (cp >= 0x100000 && cp <= 0x10FFFD)) {
-                hex.replace(i, 8, "FFFD");
-                bad = true;
-                continue;
-              }
-              i += 4;
-              continue;
-            }
-          }
-          if (v == 0 || v == 0xFEFF || v == 0xFFFE) {
-            hex.replace(i, 4, "FFFD");
+  std::string out;
+  out.reserve(text.size());
+  size_t copied = 0;
+
+  auto scrubDst = [&](size_t a, size_t b) {
+    std::string hex = text.substr(a + 1, b - a - 2);
+    bool bad = false;
+    for (size_t i = 0; i + 4 <= hex.size(); i += 4) {
+      std::string quad = hex.substr(i, 4);
+      unsigned v = static_cast<unsigned>(std::strtoul(quad.c_str(), nullptr, 16));
+      if (puaBanned && v >= 0xD800 && v <= 0xDBFF && i + 8 <= hex.size()) {
+        unsigned lo = static_cast<unsigned>(
+            std::strtoul(hex.substr(i + 4, 4).c_str(), nullptr, 16));
+        if (lo >= 0xDC00 && lo <= 0xDFFF) {
+          unsigned cp = 0x10000 + ((v - 0xD800) << 10) + (lo - 0xDC00);
+          if ((cp >= 0xF0000 && cp <= 0xFFFFD) || (cp >= 0x100000 && cp <= 0x10FFFD)) {
+            hex.replace(i, 8, "FFFD");
             bad = true;
-          } else if (puaBanned && v >= 0xE000 && v <= 0xF8FF) {
-            uint16_t win = (v & 0xFF00) == 0xF000
-                               ? winAnsiToUnicode(static_cast<int>(v & 0xFF))
-                               : 0;
-            char rep[8];
-            std::snprintf(rep, sizeof(rep), "%04X", win ? win : 0xFFFD);
-            hex.replace(i, 4, rep);
-            bad = true;
+            continue;
           }
+          i += 4;
+          continue;
         }
-        if (bad) {
-          text.replace(pos + 1, end - pos - 1, hex);
-          changed = true;
-        }
-        pos = end + 1;
-        continue;
+      }
+      if (v == 0 || v == 0xFEFF || v == 0xFFFE) {
+        hex.replace(i, 4, "FFFD");
+        bad = true;
+      } else if (puaBanned && v >= 0xE000 && v <= 0xF8FF) {
+        uint16_t win =
+            (v & 0xFF00) == 0xF000 ? winAnsiToUnicode(static_cast<int>(v & 0xFF)) : 0;
+        char rep[8];
+        std::snprintf(rep, sizeof(rep), "%04X", win ? win : 0xFFFD);
+        hex.replace(i, 4, rep);
+        bad = true;
       }
     }
-    ++pos;
+    if (hex.size() < 4 && !hex.empty()) {
+      unsigned v = static_cast<unsigned>(std::strtoul(hex.c_str(), nullptr, 16));
+      if (v == 0 || v == 0xFEFF || v == 0xFFFE) {
+        char rep[8];
+        std::snprintf(rep, sizeof(rep), "%0*X", static_cast<int>(hex.size()), 0xFFFD & ((1u << (hex.size() * 4)) - 1));
+        hex = rep;
+        bad = true;
+      }
+    }
+    if (bad) {
+      out += '<';
+      out += hex;
+      out += '>';
+      changed = true;
+      return true;
+    }
+    return false;
+  };
+
+  size_t pos = 0;
+  while (pos < text.size()) {
+    size_t c1 = text.find("beginbfchar", pos);
+    size_t c2 = text.find("beginbfrange", pos);
+    size_t sec;
+    bool range;
+    if (c2 != std::string::npos && (c1 == std::string::npos || c2 < c1)) {
+      sec = c2;
+      range = true;
+    } else if (c1 != std::string::npos) {
+      sec = c1;
+      range = false;
+    } else {
+      break;
+    }
+    const char* endMark = range ? "endbfrange" : "endbfchar";
+    size_t e = text.find(endMark, sec);
+    if (e == std::string::npos) break;
+    out.append(text, copied, sec - copied);
+
+    size_t p = sec;
+    int phase = 0;
+    bool inArray = false;
+    while (p < e) {
+      size_t a = text.find('<', p);
+      if (a == std::string::npos || a >= e) break;
+      size_t b = text.find('>', a + 1);
+      if (b == std::string::npos || b >= e) break;
+      ++b;
+      for (size_t g = p; g < a; ++g) {
+        if (text[g] == '[') inArray = true;
+        if (text[g] == ']') {
+          inArray = false;
+          phase = 0;
+        }
+      }
+      out.append(text, copied, a - copied);
+      bool isDst = range ? (phase == 2) : (phase == 1);
+      if (isDst) {
+        if (!scrubDst(a, b)) out.append(text, a, b - a);
+      } else {
+        out.append(text, a, b - a);
+      }
+      copied = b;
+      p = b;
+      if (range) {
+        if (phase < 2) {
+          ++phase;
+        } else if (!inArray) {
+          phase = 0;
+        }
+      } else {
+        phase ^= 1;
+      }
+    }
+    pos = e;
   }
+  out.append(text, copied, text.size() - copied);
   if (changed) {
+    text = out;
     tu.replaceStreamData(text, QPDFObjectHandle::newNull(), QPDFObjectHandle::newNull());
     tu.getDict().removeKey("/Filter");
     tu.getDict().removeKey("/DecodeParms");
@@ -1951,7 +2006,9 @@ void passFonts(Ctx& ctx) {
   QPDFPageDocumentHelper dh(ctx.pdf);
   std::vector<QPDFObjectHandle> fonts;
   Visited visited;
+  int kuraPage1 = 0;
   for (auto& ph : dh.getAllPages()) {
+    PageScope kuraScope1(ctx, ++kuraPage1);
     QPDFObjectHandle page = ph.getObjectHandle();
     collectFonts(ctx, page.getKey("/Resources"), visited, fonts);
     QPDFObjectHandle annots = page.getKey("/Annots");
@@ -2120,6 +2177,7 @@ void passFonts(Ctx& ctx) {
     QPDFPageDocumentHelper dh2(ctx.pdf);
     std::vector<QPDFPageObjectHelper> pages = dh2.getAllPages();
     for (size_t i = 0; i < pages.size(); ++i) {
+      PageScope kuraScope(ctx, static_cast<int>(i) + 1);
       QPDFObjectHandle page = pages[i].getObjectHandle();
       std::vector<QPDFObjectHandle> pageFonts;
       {

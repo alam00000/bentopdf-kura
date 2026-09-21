@@ -483,7 +483,9 @@ void uaTagging(Ctx& ctx) {
 
   QPDFPageDocumentHelper dh(ctx.pdf);
   std::vector<QPDFPageObjectHelper> pages = dh.getAllPages();
+  int kuraPageNo = 0;
   for (auto& ph : pages) {
+    PageScope kuraScope(ctx, ++kuraPageNo);
     QPDFObjectHandle page = ph.getObjectHandle();
     std::vector<Segment> segments;
     {
@@ -820,6 +822,6 @@ void passTagging(Ctx& ctx) {
     }
   }
   fixRoleMap(ctx);
-  if (hadTree) passSemanticRepair(ctx);
+  if (root.getKey("/StructTreeRoot").isDictionary()) passSemanticRepair(ctx);
 }
 }

@@ -418,6 +418,7 @@ void passAnalyze(Ctx& ctx) {
     int pageNum = 0;
     for (auto& ph : pages) {
       ++pageNum;
+      PageScope kuraScope(ctx, pageNum);
       QPDFObjectHandle page = ph.getObjectHandle();
       QPDFObjectHandle res = ph.getAttribute("/Resources", false);
       Visited seen;
@@ -449,56 +450,62 @@ void passAnalyze(Ctx& ctx) {
   } catch (...) {
     return;
   }
-  auto finding = [&](const std::string& code, const std::string& detail) {
-    ctx.res.analysis.push_back({code, detail, false});
+  auto finding = [&](const std::string& code, const std::string& detail,
+                     const std::set<int>& pages = {}) {
+    Issue i;
+    i.code = code;
+    i.detail = detail;
+    i.severity = 1;
+    i.pages.assign(pages.begin(), pages.end());
+    ctx.res.analysis.push_back(std::move(i));
   };
   if (tally.hairlines) {
     finding("ANALYZE_HAIRLINE",
             std::to_string(tally.hairlines) + " stroke(s) thinner than 0.125 pt at their "
-            "rendered size (" + pageRangeList(tally.hairlinePages) + ")");
+            "rendered size (" + pageRangeList(tally.hairlinePages) + ")", tally.hairlinePages);
   }
   if (tally.richBlack) {
     finding("ANALYZE_RICH_BLACK",
             std::to_string(tally.richBlack) + " object(s) painted in rich black (CMYK "
             "black over 90% with additional C/M/Y ink) (" + pageRangeList(tally.richPages) +
-            ")");
+            ")", tally.richPages);
   }
   if (tally.invisibleText) {
     finding("ANALYZE_INVISIBLE_TEXT",
             std::to_string(tally.invisibleText) + " text run(s) in rendering mode 3, "
-            "invisible and not used for clipping (" + pageRangeList(tally.invisPages) + ")");
+            "invisible and not used for clipping (" + pageRangeList(tally.invisPages) + ")", tally.invisPages);
   }
   if (tally.lowRes) {
     finding("ANALYZE_IMAGE_LOWRES",
             std::to_string(tally.lowRes) + " image(s) below the minimum analysis "
             "resolution at their placed size, 250 ppi contone or 550 ppi bitonal; "
             "lowest is " + std::to_string(static_cast<int>(tally.minPpi)) + " ppi (" +
-            pageRangeList(tally.lowPages) + ")");
+            pageRangeList(tally.lowPages) + ")", tally.lowPages);
   }
   if (tally.highRes) {
     finding("ANALYZE_IMAGE_HIGHRES",
             std::to_string(tally.highRes) + " image(s) above the maximum analysis "
             "resolution at their placed size, 450 ppi contone or 3600 ppi bitonal; "
             "highest is " + std::to_string(static_cast<int>(tally.maxPpi)) + " ppi (" +
-            pageRangeList(tally.highPages) + ")");
+            pageRangeList(tally.highPages) + ")", tally.highPages);
   }
   if (tally.smallText) {
     char minBuf[24];
     std::snprintf(minBuf, sizeof(minBuf), "%.1f", tally.minTextPt);
     finding("ANALYZE_SMALL_TEXT",
             std::to_string(tally.smallText) + " text run(s) below 4 pt at rendered size; "
-            "smallest is " + minBuf + " pt (" + pageRangeList(tally.smallTextPages) + ")");
+            "smallest is " + minBuf + " pt (" + pageRangeList(tally.smallTextPages) + ")", tally.smallTextPages);
   }
   if (tally.transparency) {
     finding("ANALYZE_TRANSPARENCY",
             std::to_string(tally.transparency) + " use(s) of transparency (soft masks, "
             "constant alpha below 1, non-normal blend modes or transparency groups) (" +
-            pageRangeList(tally.transparencyPages) + ")");
+            pageRangeList(tally.transparencyPages) + ")", tally.transparencyPages);
   }
   if (tally.overprint) {
     finding("ANALYZE_OVERPRINT",
             std::to_string(tally.overprint) + " graphics state(s) enabling overprint (" +
-            pageRangeList(tally.overprintPages) + ")");
+            pageRangeList(tally.overprintPages) + ")", tally.overprintPages);
   }
   if (tally.rgbOps || tally.cmykOps || tally.grayOps || !tally.colorants.empty()) {
     std::string detail = "colour usage: " + std::to_string(tally.rgbOps) + " RGB, " +

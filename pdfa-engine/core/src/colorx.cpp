@@ -765,7 +765,7 @@ class RgbOpFilter : public QPDFObjectHandle::TokenFilter {
 };
 
 void rewriteContent(Ctx& ctx, ConvertState& st, QPDFObjectHandle holder,
-                    const std::map<std::string, int>& fixNames) {
+                    const std::map<std::string, int>& fixNames, const char* where = "") {
   if (!st.streamsDone.enter(holder)) return;
   try {
     RgbOpFilter filter(st, fixNames);
@@ -794,6 +794,15 @@ void rewriteContent(Ctx& ctx, ConvertState& st, QPDFObjectHandle holder,
           "/Contents",
           ctx.pdf.makeIndirectObject(QPDFObjectHandle::newStream(&ctx.pdf, rewritten)));
     }
+  } catch (std::exception const& ex) {
+    st.failed = true;
+    st.failReason = std::string("content stream rewrite failed: ") + ex.what() +
+                    (holder.isStream()
+                         ? " (object " + std::to_string(holder.getObjectID()) + " " +
+                               nameOf(holder.getDict().getKey("/Type")) + " " +
+                               nameOf(holder.getDict().getKey("/Subtype")) + " " +
+                               holder.getDict().getKey("/Filter").unparse() + ") " + where
+                         : "");
   } catch (...) {
     st.failed = true;
     st.failReason = "content stream rewrite failed";
@@ -842,7 +851,7 @@ void processResources(Ctx& ctx, ConvertState& st, QPDFObjectHandle res, Visited&
         }
         processResources(ctx, st, formRes, visited, inner, depth + 1);
         if (st.failed) return;
-        rewriteContent(ctx, st, xo, inner);
+        rewriteContent(ctx, st, xo, inner, "form-xobject");
         if (st.failed) return;
       }
     }
@@ -862,7 +871,7 @@ void processResources(Ctx& ctx, ConvertState& st, QPDFObjectHandle res, Visited&
         std::map<std::string, int> inner;
         processResources(ctx, st, p.getDict().getKey("/Resources"), visited, inner, depth + 1);
         if (st.failed) return;
-        rewriteContent(ctx, st, p, inner);
+        rewriteContent(ctx, st, p, inner, "pattern");
         if (st.failed) return;
       } else if (p.isDictionary()) {
         QPDFObjectHandle sh = p.getKey("/Shading");
@@ -885,7 +894,7 @@ void processResources(Ctx& ctx, ConvertState& st, QPDFObjectHandle res, Visited&
         for (const std::string& g : cp.getKeys()) {
           QPDFObjectHandle glyph = cp.getKey(g);
           if (glyph.isStream() && visited.enter(glyph)) {
-            rewriteContent(ctx, st, glyph, inner);
+            rewriteContent(ctx, st, glyph, inner, "type3-glyph");
             if (st.failed) return;
           }
         }
@@ -903,7 +912,9 @@ void convertColorsX1a(Ctx& ctx) {
   }
   QPDFPageDocumentHelper dh(ctx.pdf);
   Visited visited;
+  int kuraPage1 = 0;
   for (auto& ph : dh.getAllPages()) {
+    PageScope kuraScope1(ctx, ++kuraPage1);
     QPDFObjectHandle page = ph.getObjectHandle();
     std::map<std::string, int> fixNames;
     QPDFObjectHandle pres = ph.getAttribute("/Resources", false);
@@ -914,7 +925,7 @@ void convertColorsX1a(Ctx& ctx) {
     if (group.isDictionary() && group.hasKey("/CS")) {
       convertSpaceObject(ctx, st, group, "/CS", group.getKey("/CS"), nullptr);
     }
-    rewriteContent(ctx, st, page, fixNames);
+    rewriteContent(ctx, st, page, fixNames, "page");
     if (st.failed) break;
     QPDFObjectHandle annots = page.getKey("/Annots");
     if (annots.isArray()) {
@@ -927,7 +938,7 @@ void convertColorsX1a(Ctx& ctx) {
           std::map<std::string, int> inner;
           processResources(ctx, st, s.getDict().getKey("/Resources"), visited, inner);
           if (st.failed) break;
-          rewriteContent(ctx, st, s, inner);
+          rewriteContent(ctx, st, s, inner, "annot-ap");
         }
       }
     }

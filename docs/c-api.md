@@ -1,6 +1,6 @@
 # C API
 
-`libkura` exposes the engine as a small, stable C ABI for embedding in any language that can call C. Four functions, no exceptions across the boundary, additive only within a major version. Every release attaches `libkura.a` for Linux, Windows and macOS alongside `kura.h`.
+`libkura` exposes the engine as a small, stable C ABI for embedding in any language that can call C. Six functions, no exceptions across the boundary, additive only within a major version. Every release attaches `libkura.a` for Linux, Windows and macOS alongside `kura.h`.
 
 ## The surface
 
@@ -20,7 +20,34 @@ typedef struct {
   size_t invoice_xml_len;
   const char* invoice_profile;
   const char* invoice_filename;
+  /* Added in 1.2; zero means off or unset. */
+  const char* output_condition_info;
+  const char* output_condition_registry;
+  const char* vt_records;
+  int analyze;
+  int outline_fonts;
+  int linearize;
+  double image_max_ppi;
+  double raster_dpi;
+  int rasterize_all_pages;
+  const char* preflight_profile;      /* profile JSON text */
+  const unsigned char* embed_source;  /* attached as the source file, PDF/A-3 */
+  size_t embed_source_len;
+  const char* embed_source_name;
+  const char* embed_source_mime;
+  const char* font_folders;           /* newline-separated folders */
+  const kura_ocr_page* ocr_pages;     /* words to lay down as invisible text */
+  size_t ocr_page_count;
 } kura_options;
+
+typedef struct {
+  const char* code;
+  const char* detail;
+  int severity;      /* 1 info, 2 warning, 3 error */
+  int fixed;
+  const int* pages;  /* 1-based; empty = whole document */
+  size_t page_count;
+} kura_issue;
 
 typedef struct {
   int ok;
@@ -31,12 +58,37 @@ typedef struct {
   const char* suggested_level;
   int compliant;
   size_t findings;
+  const kura_issue* issues;
+  size_t issue_count;
+  const kura_issue* analysis;
+  size_t analysis_count;
 } kura_result;
+
+typedef struct {
+  int ok;
+  const char* error_code;
+  const char* error;
+  int einvoice;
+  const char* standard;
+  const char* profile;
+  const char* document_type;
+  const char* attachment;
+  const unsigned char* xml;
+  size_t xml_len;
+  int consistent;
+  const char* const* problems;
+  size_t problem_count;
+  const char* const* warnings;
+  size_t warning_count;
+} kura_invoice;
 
 kura_result* kura_convert(const unsigned char* data, size_t size, const char* level,
                           const kura_options* options);
 void kura_result_free(kura_result* result);
 const char* kura_version(void);
+int kura_verify_password(const unsigned char* data, size_t size, const char* password);
+kura_invoice* kura_read_invoice(const unsigned char* data, size_t size, const char* password);
+void kura_invoice_free(kura_invoice* invoice);
 const char* kura_engine_name(void);
 ```
 
@@ -45,6 +97,11 @@ const char* kura_engine_name(void);
 - `verify_only` runs [check mode](/check-mode): `pdf` stays empty and `compliant` and `findings` are filled in.
 - The `pdf` buffer is owned by the result. Copy it out before `kura_result_free`, which releases everything the result points at.
 - `error_code` values are listed on [Rejection codes](/rejections); `suggested_level` is set for the rejections that have one.
+- `issues` lists every finding of the run, `analysis` the census and profile hits when `analyze` or `preflight_profile` is set. Each entry carries its severity and the 1-based pages it concerns; an empty page list means the whole document.
+- `preflight_profile` takes the JSON text of a profile; its fix steps apply unless `verify_only` is set.
+- `font_folders` names folders searched, recursively, for a font file whose name matches a non-embedded font before a substitute is used.
+- `ocr_pages` hands the engine recognized words in PDF points from the top-left corner of the page; they become an invisible text layer.
+- `kura_verify_password` answers whether a password opens the document. `kura_read_invoice` extracts and checks an e-invoice payload; `consistent` is 0 when `problems` is non-empty.
 
 ## A complete example
 
@@ -100,4 +157,4 @@ A `kura_result` is not shared between threads. Independent calls producing indep
 
 ## What the C API does not expose
 
-Signing, OCR and custom font folders are host callbacks in the C++ interface; the C ABI does not carry function pointers yet. Preflight profiles and the document census are likewise C++-only for now. The ABI grows additively; fields are appended to the option struct, never reordered.
+Signing is a host callback in the C++ interface; the C ABI does not carry function pointers, so sign the output with your own PKCS#7 tooling. Two-document compare is a CLI feature. The ABI grows additively; fields are appended to the option struct, never reordered.

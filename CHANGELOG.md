@@ -8,6 +8,20 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- Every finding now carries a severity (info, warning, error) and the pages it
+  concerns, in the CLI JSON, the WebAssembly result and the C API. Passes that
+  work page by page attribute their findings to that page; profile hits and the
+  analysis census carry their page lists.
+- The C API reaches the rest of the engine: `issues` and `analysis` on the
+  result, `preflight_profile`, `analyze`, `font_folders`, `ocr_pages`,
+  `image_max_ppi`, `raster_dpi`, `rasterize_all_pages`, `outline_fonts`,
+  `linearize`, `embed_source`, the output-condition info and registry and
+  `vt_records` on the options, plus `kura_verify_password` and
+  `kura_read_invoice`. A C smoke test (`-DPDFA_BUILD_SDK_SMOKE=ON`) exercises
+  every entry point.
+- `checkInvoice` and `loadFontFromFolder` moved into the core so the CLI, the
+  C API and the WebAssembly build share one implementation.
+
 - Building or checking a MINIMUM or BASIC WL hybrid invoice now reports
   `EINVOICE_PROFILE_LIMITED`: the file is valid, but the German mandate does
   not accept those profiles as e-invoices.

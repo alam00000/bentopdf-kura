@@ -294,7 +294,9 @@ ColorUsage scanUsage(Ctx& ctx) {
   ColorUsage usage;
   Visited visited;
   QPDFPageDocumentHelper dh(ctx.pdf);
+  int kuraPage1 = 0;
   for (auto& ph : dh.getAllPages()) {
+    PageScope kuraScope1(ctx, ++kuraPage1);
     QPDFObjectHandle page = ph.getObjectHandle();
     QPDFObjectHandle res = ph.getAttribute("/Resources", false);
     QPDFObjectHandle group = page.getKey("/Group");
@@ -795,7 +797,9 @@ void replaceIccUses(QPDFObjectHandle o, const std::set<QPDFObjGen>& identical,
 void fixIccIdenticalToGroups(Ctx& ctx) {
   QPDFPageDocumentHelper dh(ctx.pdf);
   int replaced = 0;
+  int kuraPage2 = 0;
   for (auto& ph : dh.getAllPages()) {
+    PageScope kuraScope2(ctx, ++kuraPage2);
     QPDFObjectHandle page = ph.getObjectHandle();
     std::set<std::string> profiles;
     Visited gseen;
@@ -1002,7 +1006,7 @@ void passColorPrint(Ctx& ctx, ColorUsage& usage) {
                             ? std::string("Custom")
                             : ctx.opt.outputConditionIdentifier;
     std::string info = ctx.opt.outputConditionInfo.empty()
-                           ? (wantCmyk ? "In-house CMYK output condition"
+                           ? (wantCmyk ? "Coated GRACoL 2006"
                                        : "sRGB IEC61966-2.1")
                            : ctx.opt.outputConditionInfo;
     oi.replaceKey("/OutputConditionIdentifier", QPDFObjectHandle::newString(ident));
@@ -1033,7 +1037,9 @@ void passColorPrint(Ctx& ctx, ColorUsage& usage) {
   }
   {
     QPDFPageDocumentHelper dh(ctx.pdf);
+    int kuraPage3 = 0;
     for (auto& ph : dh.getAllPages()) {
+      PageScope kuraScope3(ctx, ++kuraPage3);
       QPDFObjectHandle page = ph.getObjectHandle();
       if (page.hasKey("/OutputIntents")) page.removeKey("/OutputIntents");
     }
@@ -1174,7 +1180,7 @@ void passColor(Ctx& ctx) {
     QPDFObjectHandle oi = QPDFObjectHandle::newDictionary();
     oi.replaceKey("/Type", QPDFObjectHandle::newName("/OutputIntent"));
     oi.replaceKey("/S", QPDFObjectHandle::newName("/GTS_PDFA1"));
-    std::string ident = wantCmyk ? "Naive CMYK (composite over sRGB)" : "sRGB IEC61966-2.1";
+    std::string ident = wantCmyk ? "Coated GRACoL 2006" : "sRGB IEC61966-2.1";
     oi.replaceKey("/OutputConditionIdentifier", QPDFObjectHandle::newString(ident));
     oi.replaceKey("/RegistryName", QPDFObjectHandle::newString("http://www.color.org"));
     oi.replaceKey("/Info", QPDFObjectHandle::newString(ident));
@@ -1204,7 +1210,9 @@ void passColor(Ctx& ctx) {
     }
     QPDFPageDocumentHelper dh(ctx.pdf);
     int pageIntents = 0;
+    int kuraPage4 = 0;
     for (auto& ph : dh.getAllPages()) {
+      PageScope kuraScope4(ctx, ++kuraPage4);
       QPDFObjectHandle page = ph.getObjectHandle();
       if (page.hasKey("/OutputIntents")) {
         page.removeKey("/OutputIntents");
@@ -1227,7 +1235,9 @@ void passColor(Ctx& ctx) {
   if (ctx.part == 1 && anchor != "RGB ") {
     QPDFPageDocumentHelper dh(ctx.pdf);
     int stripped = 0;
+    int kuraPage5 = 0;
     for (auto& ph : dh.getAllPages()) {
+      PageScope kuraScope5(ctx, ++kuraPage5);
       QPDFObjectHandle annots = ph.getObjectHandle().getKey("/Annots");
       if (!annots.isArray()) continue;
       for (int i = 0; i < annots.getArrayNItems(); ++i) {

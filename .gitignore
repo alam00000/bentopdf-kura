@@ -10,7 +10,8 @@ cert/
 corpus/
 
 pdfa-engine/build*/
-pdfa-engine/third_party/
+pdfa-engine/third_party/*
+!pdfa-engine/third_party/icc/
 
 dist/
 cert/mustang.jar

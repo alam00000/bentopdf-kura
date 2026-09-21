@@ -1024,7 +1024,12 @@ void reportBuiltinHits(Ctx& ctx, const PfProfile& prof, const unsigned char* inp
                            std::to_string(n) + " hit(s)";
       if (!pages.empty()) detail += ", page " + std::to_string(*pages.begin());
       detail += ")";
-      ctx.res.analysis.push_back({"PROFILE_HIT", detail, false});
+      Issue hit;
+      hit.code = "PROFILE_HIT";
+      hit.detail = detail;
+      hit.severity = b.severity >= 3 ? 3 : (b.severity == 2 ? 2 : 1);
+      hit.pages.assign(pages.begin(), pages.end());
+      ctx.res.analysis.push_back(std::move(hit));
     };
     auto isDevIndep = [](const ColorInfo& ci) {
       return ci.cls == "icc" || ci.cls == "cal" || ci.cls == "lab";
@@ -1693,7 +1698,12 @@ void reportRuleHits(Ctx& ctx, const PfProfile& prof, const Events& ev) {
                            " hit(s)";
       if (!pages.empty()) detail += ", " + pageRangeList(pages);
       detail += ")";
-      ctx.res.analysis.push_back({"PROFILE_HIT", detail, false});
+      Issue hit;
+      hit.code = "PROFILE_HIT";
+      hit.detail = detail;
+      hit.severity = rule.severity < 4 && rule.severity > 0 ? rule.severity : 1;
+      hit.pages.assign(pages.begin(), pages.end());
+      ctx.res.analysis.push_back(std::move(hit));
     }
   }
 }

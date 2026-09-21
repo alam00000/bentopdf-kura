@@ -32,6 +32,12 @@ std::string optBytes(emscripten::val opts, const char* key) {
   return std::string(bytes.begin(), bytes.end());
 }
 
+emscripten::val pagesVal(const pdfa::Issue& is) {
+  emscripten::val arr = emscripten::val::array();
+  for (size_t i = 0; i < is.pages.size(); ++i) arr.set(i, is.pages[i]);
+  return arr;
+}
+
 emscripten::val convertJs(emscripten::val data, const std::string& level,
                           emscripten::val opts) {
   emscripten::val result = emscripten::val::object();
@@ -96,6 +102,8 @@ emscripten::val convertJs(emscripten::val data, const std::string& level,
     item.set("code", is.code);
     item.set("detail", is.detail);
     item.set("fixed", is.fixed);
+    item.set("severity", is.severity);
+    item.set("pages", pagesVal(is));
     issues.set(n++, item);
   }
   result.set("issues", issues);
@@ -106,6 +114,8 @@ emscripten::val convertJs(emscripten::val data, const std::string& level,
       emscripten::val item = emscripten::val::object();
       item.set("code", is.code);
       item.set("detail", is.detail);
+      item.set("severity", is.severity);
+      item.set("pages", pagesVal(is));
       analysis.set(an++, item);
     }
     result.set("analysis", analysis);

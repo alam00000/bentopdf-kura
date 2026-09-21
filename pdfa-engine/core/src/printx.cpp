@@ -270,7 +270,9 @@ void passPrint(Ctx& ctx) {
   unifySeparations(ctx);
   QPDFPageDocumentHelper dh(ctx.pdf);
   bool boxAdded = false, boxFixed = false;
+  int kuraPage1 = 0;
   for (auto& ph : dh.getAllPages()) {
+    PageScope kuraScope1(ctx, ++kuraPage1);
     fixPageBoxes(ctx, ph, boxAdded, boxFixed);
   }
   if (boxAdded) {

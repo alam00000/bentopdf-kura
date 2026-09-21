@@ -22,6 +22,7 @@ struct Ctx {
   int inlineImagesFixed = 0;
   int contentPuaFixed = 0;
   std::set<std::string> incompleteScans{};
+  int currentPage = 0;  // 1-based page a pass is working on; 0 = document level
 
   bool isA() const { return fam == Family::PDFA; }
   bool isX() const { return fam == Family::PDFX || fam == Family::PDFVT; }
@@ -60,7 +61,13 @@ struct Ctx {
   bool allow3D() const { return conf == 'E' || isE(); }
 
   void issue(const std::string& code, const std::string& detail, bool fixed) {
-    res.issues.push_back({code, detail, fixed});
+    Issue i;
+    i.code = code;
+    i.detail = detail;
+    i.fixed = fixed;
+    i.severity = issueSeverity(code);
+    if (currentPage > 0) i.pages.push_back(currentPage);
+    res.issues.push_back(std::move(i));
   }
 
   void scanIncomplete(const std::string& what) {
@@ -77,5 +84,15 @@ struct Ctx {
   }
 
   bool failed() const { return !res.errorCode.empty(); }
+};
+
+// Marks the page a pass is working on so every issue raised inside carries it.
+struct PageScope {
+  Ctx& ctx;
+  int previous;
+  PageScope(Ctx& c, int page) : ctx(c), previous(c.currentPage) { ctx.currentPage = page; }
+  ~PageScope() { ctx.currentPage = previous; }
+  PageScope(const PageScope&) = delete;
+  PageScope& operator=(const PageScope&) = delete;
 };
 }

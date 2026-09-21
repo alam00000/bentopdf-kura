@@ -117,7 +117,9 @@ void stripSignatures(Ctx& ctx, QPDFObjectHandle root) {
   }
   try {
     QPDFPageDocumentHelper dh(ctx.pdf);
+    int kuraPage1 = 0;
     for (auto& ph : dh.getAllPages()) {
+      PageScope kuraScope1(ctx, ++kuraPage1);
       QPDFObjectHandle annots = ph.getObjectHandle().getKey("/Annots");
       if (!annots.isArray()) continue;
       for (int i = 0; i < annots.getArrayNItems(); ++i) {

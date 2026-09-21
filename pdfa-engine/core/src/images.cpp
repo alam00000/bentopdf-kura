@@ -601,7 +601,9 @@ void passImageResolution(Ctx& ctx) {
   std::vector<QPDFPageObjectHelper> pages = dh.getAllPages();
   std::map<std::string, ImageUse> uses;
 
+  int kuraPageNo = 0;
   for (auto& ph : pages) {
+    PageScope kuraScope(ctx, ++kuraPageNo);
     QPDFObjectHandle res = ph.getAttribute("/Resources", true);
     if (!res.isDictionary()) continue;
     Visited seen;

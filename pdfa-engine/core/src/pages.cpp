@@ -292,7 +292,9 @@ void passCompleteResources(Ctx& ctx) {
   QPDFPageDocumentHelper dh(ctx.pdf);
   Visited visited;
   int fixedEntries = 0;
+  int kuraPage1 = 0;
   for (auto& ph : dh.getAllPages()) {
+    PageScope kuraScope1(ctx, ++kuraPage1);
     QPDFObjectHandle page = ph.getObjectHandle();
     QPDFObjectHandle eff = ph.getAttribute("/Resources", true);
     if (!page.getKey("/Resources").isDictionary() && eff.isDictionary()) {
@@ -1238,6 +1240,7 @@ void passPages(Ctx& ctx) {
     }
     int rastered = 0;
     for (size_t i = 0; i < pages.size(); ++i) {
+      PageScope kuraScope(ctx, static_cast<int>(i) + 1);
       if (rasterFlattenPage(ctx, pages[i], static_cast<int>(i), true)) ++rastered;
     }
     if (rastered != static_cast<int>(pages.size())) {
@@ -1260,6 +1263,7 @@ void passPages(Ctx& ctx) {
       int rastered = 0;
       bool allOk = true;
       for (size_t i = 0; i < pages.size(); ++i) {
+        PageScope kuraScope(ctx, static_cast<int>(i) + 1);
         if (i < rep.pages.size() && rep.pages[i]) {
           if (regionFlattenPage(ctx, pages[i], static_cast<int>(i)) ||
               rasterFlattenPage(ctx, pages[i], static_cast<int>(i), true)) {
@@ -1301,7 +1305,9 @@ void passPages(Ctx& ctx) {
   }
 
   Visited visited;
+  int kuraPageNoA = 0;
   for (auto& ph : pages) {
+    PageScope kuraScopeA(ctx, ++kuraPageNoA);
     QPDFObjectHandle page = ph.getObjectHandle();
     if (page.hasKey("/AA")) {
       page.removeKey("/AA");

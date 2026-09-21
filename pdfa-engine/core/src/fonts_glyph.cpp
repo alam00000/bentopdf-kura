@@ -647,7 +647,9 @@ void passGlyphClean(Ctx& ctx) {
   std::map<QPDFObjGen, FontGlyphInfo> cache;
   int dropped = 0, refDropped = 0, langFixed = 0;
   QPDFPageDocumentHelper dh(ctx.pdf);
+  int kuraPage1 = 0;
   for (auto& ph : dh.getAllPages()) {
+    PageScope kuraScope1(ctx, ++kuraPage1);
     QPDFObjectHandle page = ph.getObjectHandle();
     QPDFObjectHandle res = ph.getAttribute("/Resources", false);
     glyphCleanHolder(ctx, lib, page, res, visited, cache, dropped, refDropped, langFixed);
