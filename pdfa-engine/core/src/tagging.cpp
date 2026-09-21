@@ -784,8 +784,6 @@ void passTagging(Ctx& ctx) {
   }
   if (ctx.conf != 'A') return;
   QPDFObjectHandle root = ctx.pdf.getRoot();
-  bool hadTree = root.getKey("/StructTreeRoot").isDictionary();
-
   QPDFObjectHandle markInfo = root.getKey("/MarkInfo");
   if (!markInfo.isDictionary()) {
     markInfo = QPDFObjectHandle::newDictionary();
