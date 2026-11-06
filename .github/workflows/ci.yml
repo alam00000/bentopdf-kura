@@ -26,6 +26,32 @@ jobs:
       - run: npm ci
       - run: make check
 
+  server:
+    name: HTTP service (Rust) build, lint, tests, licences
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: server
+    steps:
+      - uses: actions/checkout@v7
+      - name: Toolchain
+        run: rustup toolchain install stable --profile minimal --component clippy,rustfmt && rustup default stable
+      - uses: actions/cache@v6
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            server/target
+          key: cargo-${{ runner.os }}-${{ hashFiles('server/Cargo.lock') }}
+      - run: cargo fmt --check
+      - run: cargo clippy --locked --all-targets -- -D warnings
+      - run: cargo test --locked
+      - name: Licence, ban and source check
+        run: |
+          curl -sSL https://github.com/EmbarkStudios/cargo-deny/releases/download/0.20.2/cargo-deny-0.20.2-x86_64-unknown-linux-musl.tar.gz \
+            | sudo tar -xz --strip-components=1 -C /usr/local/bin cargo-deny-0.20.2-x86_64-unknown-linux-musl/cargo-deny
+          cargo deny check licenses bans sources
+
   asan:
     name: ASan + UBSan (memory-safety & recursion guard)
     runs-on: ubuntu-latest
@@ -77,10 +103,16 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version: 22
+      - name: Build the HTTP service
+        run: cargo build --release --locked --manifest-path server/Cargo.toml
       - name: HTTP service smoke against the sanitizer build
         env:
           ASAN_OPTIONS: detect_leaks=0
         run: node scripts/server-smoke.mjs pdfa-engine/build-asan/cli/kura
+      - name: HTTP API compatibility with the previous Node.js service
+        env:
+          ASAN_OPTIONS: detect_leaks=0
+        run: node server/compat/compat.mjs pdfa-engine/build-asan/cli/kura
       - name: native npm package smoke against the sanitizer build
         env:
           ASAN_OPTIONS: detect_leaks=0

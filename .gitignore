@@ -18,10 +18,12 @@ cert/mustang.jar
 __pycache__/
 
 tests/
+!server/tests/
 corpus-synth/
 TODO.md
 
 node_modules/
+server/target/
 docs/.vitepress/cache/
 docs/.vitepress/dist/
 bench/work/

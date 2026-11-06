@@ -73,3 +73,23 @@ jobs:
           head -c 4 work/out.pdf | grep -q '%PDF'
           docker run --rm kura:test --version
           docker run --rm kura:test --check --level 2b in.pdf 2>/dev/null || true
+
+      - name: Coordinator, worker and serve --coordinator modes
+        run: |
+          set -e
+          docker network create kura-net
+          test "$(docker run --rm -e KURA_CLUSTER_TOKEN=t kura:test coordinator >/dev/null 2>&1; echo $?)" != 0
+          docker run -d --name coord --network kura-net -e KURA_CLUSTER_TOKEN=t -e KURA_INSECURE_HTTP=1 -p 8082:8080 kura:test coordinator
+          docker run -d --name worker1 --network kura-net -e KURA_CLUSTER_TOKEN=t -e KURA_INSECURE_HTTP=1 kura:test worker --coordinator http://coord:8080 --slots 2
+          docker run -d --name front --network kura-net -e KURA_CLUSTER_TOKEN=t -e KURA_INSECURE_HTTP=1 -p 8083:8080 kura:test serve --coordinator http://coord:8080
+          for i in $(seq 1 60); do curl -sf http://localhost:8082/healthz >/dev/null && curl -sf http://localhost:8083/healthz >/dev/null && break; sleep 1; done
+          test "$(curl -s -o c1.pdf -w '%{http_code}' --data-binary @in.pdf 'http://localhost:8082/api/convert?level=2b')" = 200
+          test "$(curl -s -o c2.pdf -w '%{http_code}' --data-binary @in.pdf 'http://localhost:8083/api/convert?level=2b')" = 200
+          head -c 4 c1.pdf | grep -q '%PDF'
+          head -c 4 c2.pdf | grep -q '%PDF'
+          curl -s http://localhost:8082/status.json | tee status.json
+          grep -q '"done":2' status.json
+          test "$(curl -s -o /dev/null -w '%{http_code}' -X POST http://localhost:8082/internal/lease)" = 401
+          docker logs coord 2>&1 | tail -5
+          docker rm -f coord worker1 front
+          docker network rm kura-net

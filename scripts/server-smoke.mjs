@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const BIN = process.argv[2] ?? process.env.KURA_BIN ?? path.join(ROOT, 'pdfa-engine', 'build', 'cli', 'kura');
+const SERVER = process.argv[3] ?? process.env.KURA_SERVER_BIN ?? path.join(ROOT, 'server', 'target', 'release', 'kura-server');
 const PORT = 18000 + Math.floor(Math.random() * 1000);
 const BASE = `http://127.0.0.1:${PORT}`;
 
@@ -42,8 +43,11 @@ function minimalPdf(text) {
 }
 
 function startServer(env) {
-  const child = spawn(process.execPath, [path.join(ROOT, 'server', 'server.mjs')], {
-    env: { ...process.env, KURA_BIN: BIN, KURA_PORT: String(PORT), KURA_HOST: '127.0.0.1', ...env },
+  const child = spawn(SERVER, ['serve'], {
+    env: {
+      ...process.env, KURA_BIN: BIN, KURA_PORT: String(PORT), KURA_HOST: '127.0.0.1',
+      KURA_SITE: path.join(ROOT, 'site'), KURA_PROFILES: path.join(ROOT, 'pdfa-engine', 'profiles'), ...env,
+    },
     stdio: ['ignore', 'pipe', 'pipe'],
   });
   let log = '';
@@ -72,7 +76,7 @@ const input = minimalPdf('Server smoke');
 const dir = await mkdtemp(path.join(tmpdir(), 'kura-server-smoke-'));
 const profile = JSON.stringify({
   'kura-profile': 1, name: 'Smoke', description: 'smoke profile',
-  checks: [{ name: 'Any page over letter size', severity: 'warning', scope: 'page', all: [{ prop: 'page.width', op: '>', value: 700 }] }],
+  checks: [{ name: 'Any page over letter size', severity: 'warning', scope: 'page', all: [{ check: 'page.box_size', box: 'media', dimension: 'width', op: '>', value: '700pt' }] }],
 });
 await writeFile(path.join(dir, 'profile.json'), profile);
 
@@ -107,7 +111,7 @@ try {
   fd2.append('profile', profile);
   r = await fetch(`${BASE}/api/check?level=2b`, { method: 'POST', body: fd2 });
   j = await r.json();
-  assert(r.status === 200 && Array.isArray(j.analysis), `check with a custom profile -> ${(j.analysis || []).length} analysis line(s)`);
+  assert(r.status === 200 && Array.isArray(j.analysis) && !j.analysis.some((a) => a.code === 'PROFILE_INVALID'), `check with a custom profile -> ${(j.analysis || []).length} analysis line(s)`);
 
   r = await fetch(`${BASE}/api/profiles`);
   const list = await r.json();

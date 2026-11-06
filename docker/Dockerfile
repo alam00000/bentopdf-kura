@@ -10,19 +10,25 @@ RUN scripts/linux-static.sh pdfium
 COPY pdfa-engine pdfa-engine
 RUN scripts/linux-static.sh engine && scripts/linux-static.sh verify
 
+FROM rust:1.92-bookworm AS server
+WORKDIR /src
+COPY server/Cargo.toml server/Cargo.lock ./
+COPY server/src src
+RUN cargo build --release --locked
+
 FROM ubuntu:24.04
-COPY --from=node:22-bookworm-slim /usr/local/bin/node /usr/local/bin/node
-RUN useradd --system --uid 10001 --no-create-home kura && mkdir -p /work && chown kura /work
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates && rm -rf /var/lib/apt/lists/*
+RUN useradd --system --uid 10001 --no-create-home kura && mkdir -p /work /data && chown kura /work /data
 WORKDIR /kura
 COPY --from=native /kura/pdfa-engine/build/cli/kura /usr/local/bin/kura
-COPY server server
+COPY --from=server /src/target/release/kura-server /usr/local/bin/kura-server
 COPY site/index.html site/preflight.html site/app.js site/preflight.js site/ui.js site/pdf.js \
      site/profiles.js site/engine-http.js site/app.css site/logo.svg site/
 COPY site/icons site/icons
 COPY site/fonts site/fonts
 COPY pdfa-engine/profiles pdfa-engine/profiles
 COPY docker/entrypoint.sh /entrypoint.sh
-ENV KURA_BIN=/usr/local/bin/kura KURA_PROFILES=/kura/pdfa-engine/profiles
+ENV KURA_BIN=/usr/local/bin/kura KURA_PROFILES=/kura/pdfa-engine/profiles KURA_SITE=/kura/site KURA_DATA=/data
 USER kura
 EXPOSE 8080
 WORKDIR /work

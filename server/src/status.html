@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Kura cluster</title>
+<style>
+body{font:14px/1.4 system-ui,sans-serif;margin:24px;color:#1d1d1f;background:#fafafa}
+h1{font-size:20px}h2{font-size:15px;margin-top:24px}
+.cards{display:flex;gap:12px;flex-wrap:wrap}.card{background:#fff;border:1px solid #ddd;border-radius:8px;padding:10px 16px;min-width:90px}
+.card b{display:block;font-size:22px}table{border-collapse:collapse;width:100%;background:#fff}
+td,th{border-bottom:1px solid #eee;padding:4px 8px;text-align:left}.failed{color:#b00020}.done{color:#0a7d32}.running{color:#0057b8}
+#err{color:#b00020}
+</style></head><body>
+<h1>Kura cluster <small id="ver"></small></h1><div id="err"></div>
+<div class="cards" id="cards"></div>
+<h2>Workers</h2><table id="workers"></table>
+<h2>Recent jobs</h2><table id="jobs"></table>
+<script>
+const token = new URLSearchParams(location.hash.slice(1)).get('token');
+function cell(tag, text, cls) {
+  const el = document.createElement(tag);
+  el.textContent = text ?? '';
+  if (cls) el.className = cls;
+  return el;
+}
+function table(id, head, rows) {
+  const el = document.getElementById(id);
+  const tr = document.createElement('tr');
+  head.forEach((h) => tr.append(cell('th', h)));
+  el.replaceChildren(tr, ...rows.map((r) => {
+    const row = document.createElement('tr');
+    r.forEach(([v, cls]) => row.append(cell('td', v, cls)));
+    return row;
+  }));
+}
+async function tick() {
+  try {
+    const r = await fetch('/status.json', { headers: token ? { authorization: 'Bearer ' + token } : {} });
+    if (!r.ok) throw new Error('status ' + r.status + (r.status === 401 ? ' (open /status#token=...)' : ''));
+    const s = await r.json();
+    document.getElementById('err').textContent = '';
+    document.getElementById('ver').textContent = s.version;
+    document.getElementById('cards').replaceChildren(...['queued', 'running', 'done', 'failed'].map((k) => {
+      const card = cell('div', k, 'card');
+      card.append(cell('b', String(s[k])));
+      return card;
+    }));
+    table('workers', ['worker', 'slots', 'running', 'last seen', 'alive'], s.workers.map((w) =>
+      [[w.id], [w.slots], [w.running], [Math.round(w.lastSeenMs / 1000) + ' s ago'], [w.alive ? 'yes' : 'no']]));
+    table('jobs', ['id', 'name', 'kind', 'state', 'attempts', 'worker', 'exit'], s.jobs.map((j) =>
+      [[j.id], [j.name], [j.kind], [j.state, j.state], [j.attempts], [j.worker], [j.exitCode]]));
+  } catch (e) {
+    document.getElementById('err').textContent = e.message;
+  }
+}
+tick();
+setInterval(tick, 2000);
+</script></body></html>

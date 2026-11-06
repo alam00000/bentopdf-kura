@@ -25,3 +25,4 @@ site/worker.js
 site/engine.js
 site/serve.mjs
 *.md
+server/target

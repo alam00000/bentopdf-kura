@@ -1,4 +1,4 @@
-.PHONY: bench build wasm npm-pack site-sync check lint smoke smoke-native server-smoke serve docker version-check shell-check yaml-check docs docs-dev fuzz clean
+.PHONY: bench build wasm npm-pack site-sync check lint smoke smoke-native server server-smoke server-compat server-e2e serve docker version-check shell-check yaml-check docs docs-dev fuzz clean
 
 build:
 	cmake -S pdfa-engine -B pdfa-engine/build -DCMAKE_BUILD_TYPE=Release
@@ -26,11 +26,20 @@ smoke:
 	@test -f packages/npm/kura-pdf-wasm/engine/kura.wasm || scripts/pack-wasm-npm.sh site >/dev/null
 	node scripts/smoke.mjs
 
-server-smoke:
+server:
+	cargo build --release --locked --manifest-path server/Cargo.toml
+
+server-smoke: server
 	node scripts/server-smoke.mjs
 
-serve:
-	KURA_BIN=$${KURA_BIN:-pdfa-engine/build/cli/kura} node server/server.mjs
+server-compat: server
+	node server/compat/compat.mjs
+
+server-e2e: server
+	server/compat/cluster-e2e.sh
+
+serve: server
+	KURA_BIN=$${KURA_BIN:-pdfa-engine/build/cli/kura} server/target/release/kura-server serve
 
 docker:
 	docker build -f docker/Dockerfile -t kura .
@@ -39,7 +48,7 @@ version-check:
 	@node scripts/version-check.mjs
 
 shell-check:
-	@for f in scripts/*.sh docker/entrypoint.sh pdfa-engine/scripts/*.sh pdfa-engine/scripts/pdfium/*.sh .clusterfuzzlite/build.sh; do bash -n "$$f" || exit 1; done
+	@for f in scripts/*.sh server/compat/*.sh docker/entrypoint.sh pdfa-engine/scripts/*.sh pdfa-engine/scripts/pdfium/*.sh .clusterfuzzlite/build.sh; do bash -n "$$f" || exit 1; done
 	@echo "shell syntax ok"
 
 yaml-check:
