@@ -44,7 +44,15 @@ jobs:
           key: pdfium-mac-arm64-${{ env.PDFIUM_BRANCH }}-${{ hashFiles('pdfa-engine/scripts/pdfium/*') }}
 
       - name: Install engine dependencies
-        run: brew install cmake ninja qpdf freetype openjpeg jpeg-turbo libpng little-cms2 openssl@3
+        run: brew install cmake ninja qpdf openjpeg jpeg-turbo libpng little-cms2 openssl@3
+
+      - name: Build static FreeType
+        run: |
+          curl -fsSL https://download.savannah.gnu.org/releases/freetype/freetype-2.14.3.tar.xz | tar xJ -C "$RUNNER_TEMP"
+          cd "$RUNNER_TEMP/freetype-2.14.3"
+          ./configure --prefix="$RUNNER_TEMP/ft" --disable-shared --enable-static \
+            --without-brotli --without-harfbuzz --without-bzip2 --with-png=yes --with-zlib=yes
+          make -j"$(sysctl -n hw.ncpu)" && make install
 
       - name: Configure and build
         working-directory: pdfa-engine
@@ -52,7 +60,7 @@ jobs:
           cmake -B build -G Ninja \
             -DCMAKE_BUILD_TYPE=Release \
             -DPDFA_STATIC_DEPS=ON \
-            -DCMAKE_PREFIX_PATH="$(brew --prefix)"
+            -DCMAKE_PREFIX_PATH="$RUNNER_TEMP/ft;$(brew --prefix)"
           cmake --build build --target kura kura_sdk
 
       - name: Assert the binary is self-contained
