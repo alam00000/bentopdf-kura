@@ -253,7 +253,7 @@ class Walker : public QPDFObjectHandle::TokenFilter {
     } else if (op == "cm" && nums(6)) {
       gs.ctm = mul({n[0], n[1], n[2], n[3], n[4], n[5]}, gs.ctm);
     } else if (op == "BT") {
-      tm = tlm = Mat();
+      tmat = tlm = Mat();
     } else if (op == "Tf" && operands.size() >= 2) {
       gs.size = std::strtod(operands.back().getValue().c_str(), nullptr);
       std::string nm = operands[operands.size() - 2].getValue();
@@ -281,13 +281,13 @@ class Walker : public QPDFObjectHandle::TokenFilter {
       gs.rise = n[0];
     } else if (op == "Td" && nums(2)) {
       tlm = mul({1, 0, 0, 1, n[0], n[1]}, tlm);
-      tm = tlm;
+      tmat = tlm;
     } else if (op == "TD" && nums(2)) {
       gs.tl = -n[1];
       tlm = mul({1, 0, 0, 1, n[0], n[1]}, tlm);
-      tm = tlm;
+      tmat = tlm;
     } else if (op == "Tm" && nums(6)) {
-      tlm = tm = {n[0], n[1], n[2], n[3], n[4], n[5]};
+      tlm = tmat = {n[0], n[1], n[2], n[3], n[4], n[5]};
     } else if (op == "T*") {
       nextLine();
     } else if (op == "Tj" || op == "'" || op == "\"" || op == "TJ") {
@@ -370,7 +370,7 @@ class Walker : public QPDFObjectHandle::TokenFilter {
 
   void nextLine() {
     tlm = mul({1, 0, 0, 1, 0, -gs.tl}, tlm);
-    tm = tlm;
+    tmat = tlm;
   }
 
   int currentMcid() const {
@@ -401,10 +401,10 @@ class Walker : public QPDFObjectHandle::TokenFilter {
       for (size_t i = 0; i + step - 1 < s.size(); i += step) {
         uint32_t code = static_cast<unsigned char>(s[i]);
         if (step == 2) code = (code << 8) | static_cast<unsigned char>(s[i + 1]);
-        Mat trm = mul(mul({gs.size * gs.th, 0, 0, gs.size, 0, gs.rise}, tm), gs.ctm);
+        Mat trm = mul(mul({gs.size * gs.th, 0, 0, gs.size, 0, gs.rise}, tmat), gs.ctm);
         double w0 = gs.font->width(code);
         double tx = (w0 * gs.size + gs.tc + (step == 1 && code == 32 ? gs.tw : 0)) * gs.th;
-        Mat after = mul(mul({1, 0, 0, 1, tx, 0}, tm), gs.ctm);
+        Mat after = mul(mul({1, 0, 0, 1, tx, 0}, tmat), gs.ctm);
         double eff = std::sqrt(trm.c * trm.c + trm.d * trm.d);
         run.size = std::max(run.size, eff);
         run.charX.push_back(trm.e);
@@ -415,7 +415,7 @@ class Walker : public QPDFObjectHandle::TokenFilter {
         xmax = std::max({xmax, trm.e, after.e});
         ymin = std::min(ymin, trm.f - desc);
         ymax = std::max(ymax, trm.f + asc);
-        tm = mul({1, 0, 0, 1, tx, 0}, tm);
+        tmat = mul({1, 0, 0, 1, tx, 0}, tmat);
       }
     };
     for (const auto& tk : operands) {
@@ -425,7 +425,7 @@ class Walker : public QPDFObjectHandle::TokenFilter {
         double adj = std::strtod(tk.getValue().c_str(), nullptr);
         double tx = -adj / 1000.0 * gs.size * gs.th;
         if (adj < -200 && !run.text.empty() && run.text.back() != ' ') run.text += ' ';
-        tm = mul({1, 0, 0, 1, tx, 0}, tm);
+        tmat = mul({1, 0, 0, 1, tx, 0}, tmat);
       }
     }
     if (run.charX.empty()) return;
@@ -443,7 +443,7 @@ class Walker : public QPDFObjectHandle::TokenFilter {
   int depth;
   Gs gs;
   std::vector<Gs> stack;
-  Mat tm, tlm;
+  Mat tmat, tlm;
   std::vector<Mark> marks;
   std::vector<QPDFTokenizer::Token> operands;
   std::vector<double> n;

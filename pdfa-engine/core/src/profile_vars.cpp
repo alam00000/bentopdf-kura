@@ -39,12 +39,12 @@ bool numeric(const std::string& v) {
   return end && *end == 0;
 }
 
+#ifdef KURA_WITH_QUICKJS
 std::string jsonValue(const std::string& v) {
   if (v == "true" || v == "false" || numeric(v)) return v;
   return jsonStr(v);
 }
 
-#ifdef KURA_WITH_QUICKJS
 const char* kPrelude = R"js(
 kura.variable = function (name, dflt) {
   name = String(name);

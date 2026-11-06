@@ -898,21 +898,50 @@ struct Parsed {
     fields: HashMap<String, Field>,
 }
 
+const DRAIN_BYTES: u64 = 64 << 20;
+const DRAIN_TIME: Duration = Duration::from_secs(10);
+
+async fn drain<S, E>(s: &mut S)
+where
+    S: Stream<Item = Result<bytes::Bytes, E>> + Unpin,
+{
+    let _ = tokio::time::timeout(DRAIN_TIME, async {
+        let mut left = DRAIN_BYTES;
+        while let Some(Ok(c)) = s.next().await {
+            match left.checked_sub(c.len() as u64) {
+                Some(l) => left = l,
+                None => break,
+            }
+        }
+    })
+    .await;
+}
+
 fn limited(
     body: Body,
     limit: u64,
     over: Arc<AtomicBool>,
 ) -> impl Stream<Item = Result<bytes::Bytes, io::Error>> + Send + Unpin + 'static {
-    let mut seen = 0u64;
-    body.into_data_stream().map(move |chunk| {
-        let chunk = chunk.map_err(io::Error::other)?;
-        seen += chunk.len() as u64;
-        if seen > limit {
-            over.store(true, Ordering::SeqCst);
-            return Err(io::Error::other("upload limit exceeded"));
-        }
-        Ok(chunk)
-    })
+    let state = (body.into_data_stream(), 0u64, over);
+    Box::pin(futures_util::stream::unfold(
+        state,
+        move |(mut s, mut seen, over)| async move {
+            let chunk = match s.next().await? {
+                Ok(c) => c,
+                Err(e) => return Some((Err(io::Error::other(e)), (s, seen, over))),
+            };
+            seen += chunk.len() as u64;
+            if seen > limit {
+                over.store(true, Ordering::SeqCst);
+                drain(&mut s).await;
+                return Some((
+                    Err(io::Error::other("upload limit exceeded")),
+                    (s, seen, over),
+                ));
+            }
+            Some((Ok(chunk), (s, seen, over)))
+        },
+    ))
 }
 
 async fn save<S, E>(mut s: S, path: &Path) -> io::Result<()>
@@ -940,6 +969,7 @@ async fn read_request(
         .and_then(|v| v.to_str().ok())
         .and_then(|v| v.trim().parse::<u64>().ok());
     if declared.is_some_and(|d| d > limit) {
+        drain(&mut body.into_data_stream()).await;
         return Err(ReadError::TooLarge);
     }
     let over = Arc::new(AtomicBool::new(false));
@@ -1092,7 +1122,8 @@ async fn handle_job(app: Arc<App>, req: Request, kind: Kind, q: Query) -> Respon
         }
     };
     match job(&app, req, kind, &q, dir.path()).await {
-        Ok(r) | Err(r) => r,
+        Ok(r) => r,
+        Err(r) => *r,
     }
 }
 
@@ -1102,15 +1133,15 @@ async fn job(
     kind: Kind,
     q: &Query,
     dir: &Path,
-) -> Result<Response, Response> {
+) -> Result<Response, Box<Response>> {
     let (parts, body) = req.into_parts();
     let limit = app.cfg.max_upload;
     let parsed = match read_request(&parts.headers, body, dir, limit, kind != Kind::Verify).await {
         Ok(p) => p,
-        Err(ReadError::TooLarge) => return Err(too_large(limit)),
+        Err(ReadError::TooLarge) => return Err(too_large(limit).into()),
         Err(ReadError::Internal(e)) => {
             tracing::error!(error = %e, "could not read the request");
-            return Err(unexpected());
+            return Err(unexpected().into());
         }
     };
     let password = parts.headers.get("x-password").map(latin1);
@@ -1132,14 +1163,16 @@ async fn job(
                 StatusCode::BAD_REQUEST,
                 "BAD_REQUEST",
                 "send the document as the request body or as the \"file\" field",
-            ));
+            )
+            .into());
         };
         let Some(ext) = sniff_file(&upload).await.map_err(|_| unexpected())? else {
             return Err(fail(
                 StatusCode::BAD_REQUEST,
                 "NOT_A_PDF",
                 "the body is neither a PDF nor a JPEG",
-            ));
+            )
+            .into());
         };
         let mut args = build_args(q, password, &parsed.fields, dir, kind, &app.cfg.profiles)
             .map_err(|e| e.response())?;
@@ -1154,7 +1187,7 @@ async fn job(
         args
     };
     if let Err(e) = validate_job(kind, &args, Some(dir), &app.cfg.profiles) {
-        return Err(fail(StatusCode::BAD_REQUEST, "BAD_REQUEST", &e));
+        return Err(fail(StatusCode::BAD_REQUEST, "BAD_REQUEST", &e).into());
     }
     let dedupe = is_true(q.get("dedupe"));
     let name = format!(
@@ -1171,11 +1204,12 @@ async fn job(
                 StatusCode::TOO_MANY_REQUESTS,
                 "BUSY",
                 "queue full, retry later",
-            ))
+            )
+            .into())
         }
         Err(ExecError::Failed(e)) => {
             tracing::error!(error = %e, "job could not run");
-            return Err(unexpected());
+            return Err(unexpected().into());
         }
     };
     let res = respond(app, kind, &ran, q.get("report") == Some("json")).await;
@@ -1184,7 +1218,7 @@ async fn job(
     }
     res.map_err(|e| {
         tracing::error!(error = %e, "could not build the response");
-        unexpected()
+        Box::new(unexpected())
     })
 }
 

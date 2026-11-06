@@ -5,6 +5,7 @@
 #include <qpdf/QPDFPageObjectHelper.hh>
 #include <qpdf/QPDFTokenizer.hh>
 
+#include <algorithm>
 #include <cctype>
 #include <cmath>
 #include <cstdio>
@@ -1251,6 +1252,11 @@ size_t eolLen(const unsigned char* d, size_t n, size_t i) {
   return 0;
 }
 
+const unsigned char* findBytes(const unsigned char* d, size_t n, const char* pat) {
+  const unsigned char* e = std::search(d, d + n, pat, pat + std::strlen(pat));
+  return e == d + n ? nullptr : e;
+}
+
 bool pdfWs(unsigned char c) { return c == 0 || c == 9 || c == 10 || c == 12 || c == 13 || c == 32; }
 bool pdfDelim(unsigned char c) { return pdfWs(c) || std::strchr("()<>[]{}/%", c) != nullptr; }
 
@@ -1469,8 +1475,7 @@ void checkFileSyntax(Ctx& ctx, const unsigned char* d, size_t n, bool encrypted)
             lenOk = e + el + 9 <= n && std::memcmp(d + e + el, "endstream", 9) == 0;
           }
           if (!kwOk || !lenOk) ++badStream;
-          const unsigned char* es = static_cast<const unsigned char*>(
-              memmem(d + s, n - s, "endstream", 9));
+          const unsigned char* es = findBytes(d + s, n - s, "endstream");
           if (!es) break;
           endObj = static_cast<size_t>(es - d) + 9;
           continue;
@@ -1540,7 +1545,7 @@ void checkFileSyntax(Ctx& ctx, const unsigned char* d, size_t n, bool encrypted)
   } catch (...) {
   }
   for (const char* pat : {"/Type/XRef", "/Type /XRef"}) {
-    xrefStream = xrefStream || memmem(d, n, pat, std::strlen(pat)) != nullptr;
+    xrefStream = xrefStream || findBytes(d, n, pat) != nullptr;
   }
   if (xrefStream && ctx.part == 1) add("cross-reference streams or object streams are used");
   if (lzw) add("LZWDecode filter used by " + std::to_string(lzw) + " stream(s)");

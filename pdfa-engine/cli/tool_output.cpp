@@ -358,6 +358,7 @@ Box pageBox(QPDFPageObjectHelper& ph) {
   return b;
 }
 
+#ifdef KURA_WITH_PDFIUM
 std::string pngEncode(int w, int h, int comps, const std::string& px) {
   int ct = comps == 1 ? 0 : comps == 2 ? 4 : comps == 3 ? 2 : 6;
   std::string raw;
@@ -392,6 +393,7 @@ std::string pngEncode(int w, int h, int comps, const std::string& px) {
   chunk("IEND", "");
   return out;
 }
+#endif
 
 std::string boxJs(const Box& b) { return nums({b.x0, b.y0, b.x1, b.y1}); }
 
@@ -461,11 +463,13 @@ std::string safeName(std::string s) {
   return s;
 }
 
+#ifdef KURA_WITH_PDFIUM
 std::string pageImageName(int page, const std::string& suffix, const std::string& ext) {
   char b[32];
   std::snprintf(b, sizeof b, "page-%04d", page + 1);
   return b + suffix + "." + ext;
 }
+#endif
 
 std::string toolExtractIcc(const Args& a) {
   auto q = openPdf(a.pos[0], a.get("password"));

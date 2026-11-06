@@ -155,7 +155,6 @@ function readBody(req, res, limit) {
       if (size > limit) {
         over = true;
         chunks.length = 0;
-        res.once('finish', () => req.destroy());
         resolve(null);
         return;
       }

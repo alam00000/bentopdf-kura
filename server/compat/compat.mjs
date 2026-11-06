@@ -2,6 +2,7 @@ import * as http from 'node:http';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
+import * as zlib from 'node:zlib';
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
@@ -135,6 +136,25 @@ function send(s, { method = 'GET', path: p, headers = {}, body, chunked = false,
   });
 }
 
+function pdfText(s) {
+  return s
+    .replace(/stream\r?\n([\s\S]*?)endstream/g, (m, data) => {
+      try {
+        return `stream\n${zlib.inflateSync(Buffer.from(data, 'latin1')).toString('latin1')}endstream`;
+      } catch {
+        return m;
+      }
+    })
+    .replace(/D:\d{14}/g, 'D:00000000000000')
+    .replace(/\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d/g, '0000-00-00T00:00:00')
+    .replace(/uuid:[0-9a-fA-F-]{36}/g, 'uuid:0')
+    .replace(/<[0-9a-fA-F]{32}>/g, '<0>')
+    .replace(/(\/Type \/XRef[^]*?stream\n)[^]*?endstream/g, '$1endstream')
+    .replace(/\/(Length|First) \d+/g, '/$1 0')
+    .replace(/startxref\s+\d+/g, 'startxref 0')
+    .replace(/\d{10} \d{5} ([nf])/g, '0 0 $1');
+}
+
 function normalize(r) {
   const headers = {};
   for (const k of Object.keys(r.headers).sort()) if (!IGNORED.has(k)) headers[k] = r.headers[k];
@@ -144,11 +164,12 @@ function normalize(r) {
     try {
       const j = JSON.parse(Buffer.from(body, 'latin1').toString('utf8'));
       if (typeof j.pdf === 'string') {
-        j.pdf = Buffer.from(j.pdf, 'base64').toString('latin1').replace(/kura-[A-Za-z0-9]{6}/g, 'kura-XXXXXX');
+        j.pdf = pdfText(Buffer.from(j.pdf, 'base64').toString('latin1').replace(/kura-[A-Za-z0-9]{6}/g, 'kura-XXXXXX'));
         body = `json-with-pdf:${JSON.stringify(j)}`;
       }
     } catch {}
   }
+  if (body.startsWith('%PDF-')) body = pdfText(body);
   if (body.length > 400 && !type.includes('json')) {
     body = `${body.length} bytes, sha=${hash(body)}`;
   }

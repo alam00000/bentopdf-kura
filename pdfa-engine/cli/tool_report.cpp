@@ -1405,6 +1405,7 @@ Args parseArgs(const std::vector<std::string>& args, std::initializer_list<const
   return a;
 }
 
+#ifdef KURA_WITH_PDFIUM
 void putPng(std::string& out, const char* type, const std::string& data) {
   static unsigned table[256];
   if (!table[1])
@@ -1439,6 +1440,7 @@ std::string encodePng(int w, int h, const std::string& rgb) {
   putPng(png, "IEND", "");
   return png;
 }
+#endif
 
 int toolInventory(const std::vector<std::string>& args) {
   Args a = parseArgs(args, {"--password", "--report-lang", "--report-dict"});
