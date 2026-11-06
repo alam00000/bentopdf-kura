@@ -5,7 +5,7 @@ Kura parses untrusted input, so it is fuzzed continuously. Five harnesses under 
 | Harness | Input |
 |---|---|
 | `fuzz_convert` | the PDF byte stream, across every conformance level |
-| `fuzz_profile` | preflight profiles, both the JSON and XML dialects |
+| `fuzz_profile` | preflight profiles |
 | `fuzz_invoice` | e-invoice XML attached at PDF/A-3 |
 | `fuzz_icc` | a caller-supplied destination ICC profile |
 | `fuzz_password` | the open password plus the encrypted document |

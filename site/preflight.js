@@ -213,8 +213,8 @@ async function run(fix) {
     return;
   }
   const analysis = m.analysis || [];
-  const hits = analysis.filter((a) => a.code === 'PROFILE_HIT');
-  const unsupported = analysis.filter((a) => a.code === 'PROFILE_RULE_UNSUPPORTED');
+  const hits = analysis.filter((a) => a.code === 'CHECK_HIT');
+  const unsupported = analysis.filter((a) => ['CHECK_NOT_EVALUATED', 'PROFILE_INVALID', 'FIX_UNKNOWN', 'ICC_PROFILE_MISSING'].includes(a.code));
   const list = el('div', 'hits');
   if (fix) {
     const steps = m.issues || [];

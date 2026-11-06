@@ -6,7 +6,19 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Changed
+
+- The self-hosted HTTP service is now a single native program, `kura-server`,
+  instead of a Node.js script. The API, its responses and its settings are
+  unchanged; the Docker image no longer contains Node.js.
+
 ### Added
+
+- The self-hosted service can spread work over several machines: `coordinator`
+  keeps a queue on disk that survives restarts, takes jobs from the HTTP API and
+  from watched folders, hands them to `worker` machines, retries jobs whose
+  worker drops out, can reuse identical results (`dedupe=true`), and shows a
+  status page at `/status`. `serve --coordinator` forwards a front end's jobs.
 
 - Every finding now carries a severity (info, warning, error) and the pages it
   concerns, in the CLI JSON, the WebAssembly result and the C API. Passes that
@@ -28,6 +40,25 @@ All notable changes to this project are documented here. The format follows
 - The CLI's output path is optional: left out, the result is written next to
   the input as `<input>.<level>.pdf` (`-ua` appended with `--ua`), and the
   report carries an `output` field with the path.
+
+### Changed
+
+- Preflight profiles are JSON documents built from a published catalogue of
+  checks and fixes, each with named settings; the catalogue is listed in full
+  in `pdfa-engine/docs/profile-checks.md` and on the docs site. Profiles can
+  also carry variables (`--var name=value`), a `convert` section that picks the
+  target standard, and a plan that runs checks and fixes step by step.
+- Profile results report `CHECK_HIT` for findings, `CHECK_NOT_EVALUATED` for
+  conditions that could not be answered for a file, `PROFILE_INVALID` and
+  `PROFILE_EMPTY` for profile problems, `PROFILE_TARGET` and `VARIABLE_SET`
+  for the convert section and variables, `FIX_SCHEDULED`, `FIX_DONE`,
+  `FIX_NOT_NEEDED` and `FIX_UNKNOWN` for repairs, and `ICC_PROFILE_MISSING`
+  for a named ICC profile that was not found. Plans report `PLAN_STEP`,
+  `PLAN_STEP_FAILED` and `PLAN_NO_CONVERSION`.
+- HTML stamps read the document and its pages from `window.kura` and stamp
+  each page through `kura.onPages` and `kura.printPages`.
+- Bookmarks come from JSON or from the document's headings
+  (`--bookmarks <json|headings>`).
 
 ## [1.2.0] - 2026-08-29
 

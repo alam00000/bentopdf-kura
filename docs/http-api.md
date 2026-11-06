@@ -53,6 +53,7 @@ The names match the [npm package](/npm) options; every one maps to a [CLI](/cli)
 | `attachXmlName`, `facturxProfile` | e-invoice attachment name and profile |
 | `profile` | a bundled preflight profile to apply, by name from `/api/profiles` |
 | `report=json` | return the JSON report with the PDF inside instead of raw bytes |
+| `dedupe=true` | through a [coordinator](/self-hosting#several-machines): reuse the result of an identical recent job instead of converting again |
 
 ### Body
 
@@ -61,7 +62,7 @@ Either the document itself as the raw body, or `multipart/form-data` with these 
 | Field | Meaning |
 |---|---|
 | `file` | the document (required) |
-| `profile` | a [preflight profile](/preflight) in JSON or XML, when it is not one of the bundled ones |
+| `profile` | a [preflight profile](/preflight) in JSON, when it is not one of the bundled ones |
 | `xml` | an e-invoice XML to attach |
 | `destProfile` | an ICC profile for the output intent |
 | `defaultRgb`, `defaultCmyk`, `defaultGray` | ICC profiles for uncalibrated colour |
@@ -130,7 +131,7 @@ Add `analyze=true` for the document analysis lines, or `profile=<name>` (or a `p
 
 ```bash
 curl -s -F file=@in.pdf 'http://localhost:8080/api/check?level=x4&profile=press/book-text-pages-check' \
-  | jq '.analysis[] | select(.code=="PROFILE_HIT") | .detail'
+  | jq '.analysis[] | select(.code=="CHECK_HIT") | .detail'
 ```
 
 The HTTP status is 200 whether or not the file conforms; read `compliant` and `findings`.
@@ -176,3 +177,12 @@ Every error is a JSON body with `ok: false`, an `errorCode` and a plain-language
 ## Limits and tuning
 
 Concurrency, queue depth, upload size and the time limit are environment variables on the container. Defaults: 2 parallel jobs, a queue of 8, 500 MB uploads, 10 minutes per job. See [Self-hosting](/self-hosting#configuration).
+
+## Several machines
+
+A [coordinator](/self-hosting#several-machines) answers this same API, with the work spread over its workers. Everything above applies unchanged; `/healthz` then counts the jobs running and waiting across all workers, and the coordinator adds:
+
+| Route | Meaning |
+|---|---|
+| `GET /status` | a status page: workers, queue, recent jobs |
+| `GET /status.json` | the same as JSON: `queued`, `running`, `done`, `failed`, `workers[]`, `jobs[]` (needs the API token when one is set) |

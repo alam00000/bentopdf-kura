@@ -1,24 +1,24 @@
 # Preflight profiles
 
-A preflight profile is a set of checks to run against a document, optionally with repairs to apply. Kura ships 396 of them under `pdfa-engine/profiles/`, every one written by BentoPDF from public sources and generated from one script, and it accepts your own.
+A preflight profile is a set of checks to run against a document, optionally with repairs to apply. Kura ships 397 of them under `pdfa-engine/profiles/`, every one written by BentoPDF from public sources and generated from one script, and it accepts your own.
 
 ```bash
-kura --check --level 2b --profile pdfa-engine/profiles/report/report-hairlines.json in.pdf
+kura --check --profile pdfa-engine/profiles/report/report-hairlines.json in.pdf
 ```
 
 ```json
 {"ok":true,"level":"2b","mode":"check","compliant":true,"findings":0,"issues":[],
  "analysis":[
-  {"code":"PROFILE_HIT","detail":"Error: Stroke thinner than 0.125 pt (11 hit(s), pages 1-8, 10-12)"}]}
+  {"code":"CHECK_HIT","detail":"Error: Stroke thinner than 0.125 pt (11 hit(s), pages 1-8, 10-12)","severity":3,"pages":[1,2,3,4,5,6,7,8,10,11,12]}]}
 ```
 
-Profile results come back under `analysis`, separate from the conformance `issues`, because a profile hit is an observation about the document rather than a standards violation. Each `PROFILE_HIT` carries the severity, the check name, the hit count and every page it hit, with consecutive pages shown as ranges. A profile with repairs is applied during a conversion:
+Profile results come back under `analysis`, separate from the conformance `issues`, because a profile hit is an observation about the document rather than a standards violation. Each `CHECK_HIT` carries the severity, the check name, the hit count and every page it hit, with consecutive pages shown as ranges. A profile with repairs is applied during a conversion:
 
 ```bash
 kura --level x4 --profile pdfa-engine/profiles/press/sheetfed-offset-cmyk-check-and-fix.json in.pdf out.pdf
 ```
 
-Each repair that ran is reported as a `PROFILE_FIX_DONE` issue; one the engine could not run is reported as `PROFILE_FIX_UNSUPPORTED` and skipped, never silently.
+Each repair that changed the file is reported as a `FIX_DONE` issue. A profile the engine cannot read is reported as `PROFILE_INVALID` with the field at fault, and nothing in it runs.
 
 ## The bundled library
 
@@ -42,342 +42,214 @@ The browser preflight tool shows a curated 45 of them plus the conversion target
 
 ## Writing your own
 
-A profile is JSON:
+A profile is one JSON document:
 
 ```json
 {
   "kura-profile": 1,
-  "name": "Report hairlines",
-  "description": "Finds strokes too thin to print reliably.",
+  "name": "Sheetfed check",
+  "description": "Hairlines, small text, low-resolution images and missing fonts.",
   "checks": [
     {
       "name": "Stroke thinner than 0.125 pt",
       "severity": "error",
       "all": [
-        { "prop": "stroke.width", "op": "<=", "value": 0.125 }
+        { "check": "content.stroke_width", "op": "<=", "value": 0.125 }
+      ]
+    },
+    {
+      "name": "Text smaller than 5 pt",
+      "severity": "warning",
+      "scope": "trim",
+      "all": [
+        { "check": "text.size", "op": "<", "value": "5pt" }
+      ]
+    },
+    {
+      "name": "Image below 150 ppi",
+      "severity": "error",
+      "all": [
+        { "check": "image.resolution", "op": "<", "value": 150, "kind": "colour_or_grey" }
+      ]
+    },
+    {
+      "name": "Font not embedded",
+      "severity": "error",
+      "all": [
+        { "check": "font.embedding", "op": "==", "value": "not_embedded" }
+      ]
+    },
+    {
+      "name": "Page is not A4",
+      "severity": "warning",
+      "any": [
+        { "all": [{ "check": "page.box_size", "box": "trim", "dimension": "width", "op": "!=", "value": "210mm", "tolerance": 1 }] },
+        { "all": [{ "check": "page.box_size", "box": "trim", "dimension": "height", "op": "!=", "value": "297mm", "tolerance": 1 }] }
       ]
     }
   ],
-  "builtins": [
-    { "name": "imageResolutionBelow", "severity": "warning", "params": { "ppi": 300 } },
-    { "name": "conformsTo", "severity": "error", "level": "x4" }
-  ],
   "fixes": [
-    { "op": "increaselinewidth", "params": ["0.25", "", "pt"] }
+    { "fix": "ink.min_line_width", "width": "0.25pt", "only_where": ["Stroke thinner than 0.125 pt"] },
+    { "fix": "page.set_box", "box": "trim", "from": "crop", "when": "missing" }
   ]
 }
 ```
 
-A check fires when every condition under `all` holds, or when any group under `any` holds (`"any": [{"all": [...]}, {"all": [...]}]`). Conditions compare a property with `op` against a value: `<`, `<=`, `==`, `!=`, `>=`, `>`, `contains`, `begins`, `ends`. Booleans compare with `true` or `false`; lengths are in points unless the value is a string with a unit, such as `"3mm"`, `"1cm"` or `"0.5in"`. `severity` is `error`, `warning` or `info`, and an optional `scope` of `page`, `trim` or `bleed` limits a check to objects inside that box.
+The top-level fields are `kura-profile` (always 1), `name`, `description`, `variables`, `shapes`, `checks`, `fixes`, `convert` and `plan`. Only `kura-profile` and `name` are required.
 
-Built-in checks look at the document as a whole and take their thresholds under `params`; `conformsTo` and `embeddedFilesConformTo` take a `level` instead. Repairs are operations with positional parameters, applied during a conversion rather than a check.
+### Checks
 
-## Properties
+A check has a unique `name`, a `severity` of `error`, `warning` or `info`, and conditions. It hits an object when every condition under `all` holds for that object, or when one of the groups under `any` holds. Optional fields:
 
-### Graphics state
-
-| Property | Meaning |
+| Field | Meaning |
 |---|---|
-| `stroke.width` | stroke line width in points |
-| `stroke.overprint` | stroke overprint is on |
-| `stroke.transparency` | stroke is drawn with transparency |
-| `stroke.alpha` | stroke constant alpha, 0 to 1 |
-| `stroke.totalInk` | total ink of the stroke colour in percent |
-| `stroke.inkCount` | inks with a non-zero value in the stroke colour |
-| `fill.overprint` | fill overprint is on |
-| `fill.transparency` | fill is drawn with transparency |
-| `fill.alpha` | fill constant alpha, 0 to 1 |
-| `fill.totalInk` | total ink of the fill colour in percent |
-| `fill.processInk` | total process ink of the fill colour in percent |
-| `fill.inkCount` | inks with a non-zero value in the fill colour |
-| `gstate.overprint` | overprint is on in the graphics state |
-| `gstate.overprintModeIllustrator` | overprint mode 1 is set |
-| `gstate.transparency` | the graphics state uses transparency |
-| `gstate.blendMode` | blend mode name, such as Normal or Multiply |
-| `gstate.blendColorspace` | blending colour space of the enclosing group |
-| `gstate.inTransparencyGroup` | object sits inside a transparency group |
-| `gstate.hasSoftMask` | a soft mask is set |
-| `gstate.flatness` | flatness tolerance |
-| `gstate.hasBlackPointCompensation` | black point compensation is set |
+| `description` | text added to each hit |
+| `scope` | `page` (default), `trim` or `bleed`: only look at content inside that box |
+| `report_when` | `{"document_hits": "> 3"}` or `{"page_hits": ">= 2"}`: report only when the count passes the test |
+| `max_hits_per_page` | stop counting after this many hits on one page |
+| `silent` | run the check but do not report it; useful for `only_where` and plans |
 
-### Colour
+### Conditions
 
-| Property | Meaning |
+A condition names a check from the catalogue, an operator and a value, plus any named settings of that check:
+
+```json
+{ "check": "page.box_size", "box": "trim", "dimension": "width", "op": ">=", "value": "210mm" }
+```
+
+The operators are `<`, `<=`, `==`, `!=`, `>=`, `>`, `multiple_of`, `is` (for true or false), `in` and `not_in` (a list of values), `contains`, `starts_with`, `ends_with`, `matches` and `finds` (regular expressions), `occurs_in`, `includes`, `excludes`, `count`, `fits_within` and `exceeds`. Every condition also takes `negate`, `case_sensitive` and `tolerance`. Lengths are in the check's unit unless the value carries one, such as `"3mm"`, `"1cm"`, `"0.5in"` or `"0.25pt"`.
+
+Each check in the catalogue lists the operators and values it accepts and its settings with their defaults. A setting left out takes its default. An unknown check, setting, operator or value makes the whole profile invalid, so a typo never turns into a check that silently passes.
+
+**The full list of checks and fixes is in [Profile checks and fixes](/profile-checks).** It is generated from the same catalogue the engine reads, so it always matches the engine.
+
+### Fixes
+
+A fix names a catalogue fix and its settings. `only_where` limits it to pages where one of the named checks hit:
+
+```json
+{ "fix": "ink.min_line_width", "width": "0.25pt", "only_where": ["Stroke thinner than 0.125 pt"] }
+```
+
+Fixes run during a conversion, never in check mode. Each one is reported as `FIX_SCHEDULED` when the run starts and `FIX_DONE` when it changed the file; `FIX_NOT_NEEDED` means its `only_where` checks found nothing.
+
+### Variables
+
+Any text in a profile can use `{name}` to read a variable. A variable has a `name`, and optionally a `label`, a `type` (`text`, `number`, `bool` or `choice`), `choices`, a `default` and a `script` that works the value out:
+
+```json
+{
+  "kura-profile": 1,
+  "name": "Stamp the job number",
+  "variables": [
+    { "name": "job", "label": "Job number", "type": "text", "default": "0000" }
+  ],
+  "fixes": [
+    { "fix": "place.text", "text": "Job {job}", "size": "8pt", "anchor": "lower_left", "x": "5mm", "y": "5mm" }
+  ],
+  "convert": { "level": "pdfx-4" }
+}
+```
+
+```bash
+kura --list-vars stamp.json
+kura --profile stamp.json --var job=4711 in.pdf out.pdf
+```
+
+`--var-file <json>` reads several values at once. Each value used is reported as `VARIABLE_SET`.
+
+A `script` is a short piece of JavaScript. It can read `kura.variable(name, default)`, `kura.variables`, `kura.document` (the name, page count and page boxes) and, inside a plan, `kura.results` with the hits and pages of earlier steps. Scripts run for at most 5 seconds with 64 MB of memory and cannot reach files or the network.
+
+### Converting
+
+`convert` sets the target standard, so `--level` can be left out:
+
+```json
+"convert": { "level": "pdfx-4", "reconvert": true, "raster_fallback": { "resolution": 300, "pages": "problem_pages" } }
+```
+
+`also` writes a second standard into the same file, such as PDF/A and PDF/X together. `reconvert` runs the conversion once more on the result when it is not yet compliant. `raster_fallback` turns pages that cannot be fixed into images, `all` of them or only the `problem_pages`, keeping the text invisible on top unless `keep_text` is false. The chosen target is reported as `PROFILE_TARGET`.
+
+### Plans
+
+A plan runs checks and fixes in an order you choose, and picks the next step from the result of the last one:
+
+```json
+{
+  "kura-profile": 1,
+  "name": "Check, then fix only what failed",
+  "variables": [{ "name": "min_ppi", "type": "number", "default": 150 }],
+  "checks": [
+    { "name": "Thin strokes", "severity": "error", "all": [{ "check": "content.stroke_width", "op": "<", "value": 0.25 }] },
+    { "name": "Low resolution", "severity": "warning", "all": [{ "check": "image.resolution", "op": "<", "value": "{min_ppi}" }] }
+  ],
+  "plan": {
+    "steps": [
+      { "id": "strokes", "do": "check", "check": "Thin strokes", "next": { "pass": "images", "error": "thicken" } },
+      { "id": "thicken", "do": "fix", "fix": "ink.min_line_width", "next": { "default": "images" } },
+      { "id": "images", "do": "check", "check": "Low resolution", "next": { "default": "end" } }
+    ]
+  }
+}
+```
+
+A step's `do` is `check`, `fix`, `profile` (run another profile file), `variable` or `revert`. `next` names the step to go to after a clean result (`pass`) or after `info`, `warning` or `error` hits, with `default` as the fallback and `end` to stop. Each step is reported as `PLAN_STEP` with its result and the next step. A converting step that fails is reported as `PLAN_STEP_FAILED`, and a plan that never converts reports `PLAN_NO_CONVERSION`.
+
+## HTML stamps
+
+The `place.html` fix draws an HTML page onto every page of the document: slug lines, job tickets, barcodes. `template` is the path of an `.html` file, relative to the profile, or the HTML itself:
+
+```json
+{ "fix": "place.html", "template": "slug.html", "anchor": "bottom", "relative_to": "media", "y": "3mm" }
+```
+
+The page's script sees `window.kura.document` (`name`, `pageCount`, `variables` and the `inks` in use) and `window.kura.pages`, one entry per page with its `number`, `rotation` and the `mediaBox`, `trimBox`, `bleedBox`, `cropBox` and `artBox` as `{left, bottom, right, top}` in points. `kura.onPages(callback)` registers a function that is called once per page with the page and its index; it updates the page and calls `kura.printPages(1)` to stamp it. An `<object type="application/barcode">` with a `type` and a `data` param draws a barcode:
+
+```html
+<!doctype html>
+<html>
+<body style="margin:0;font:7pt sans-serif">
+  <div><span id="name"></span>, page <span id="page"></span> of <span id="count"></span>, job <span id="job"></span></div>
+  <object type="application/barcode" style="width:40mm;height:8mm">
+    <param name="type" value="Code 128">
+    <param name="data" id="code" value="">
+  </object>
+  <script>
+    kura.onPages(function (page) {
+      document.getElementById('name').textContent = kura.document.name;
+      document.getElementById('page').textContent = page.number;
+      document.getElementById('count').textContent = kura.document.pageCount;
+      document.getElementById('job').textContent = kura.document.variables.job;
+      document.getElementById('code').setAttribute('value', kura.document.variables.job + '-' + page.number);
+      kura.printPages(1);
+    });
+  </script>
+</body>
+</html>
+```
+
+## Result codes
+
+| Code | Meaning |
 |---|---|
-| `paint.inkCount` | inks with a non-zero value in the paint colour |
-| `paint.maxInkPercent` | highest single ink value in percent |
-| `paint.isWhite` | paint is white |
-| `paint.isBlackOnly` | paint uses the black plate only |
-| `paint.richBlackCmyPercent` | CMY added under black, in percent |
-| `paint.isRgb` | DeviceRGB |
-| `paint.isCmyk` | DeviceCMYK |
-| `paint.isGray` | DeviceGray |
-| `paint.isIccBased` | ICC-based colour |
-| `paint.isLab` | Lab colour |
-| `paint.isCalibrated` | CalRGB or CalGray |
-| `paint.isDeviceIndependent` | any CIE-based colour space |
-| `paint.isSpot` | a spot colour |
-| `paint.isSeparation` | a Separation colour space |
-| `paint.isPattern` | a pattern |
-| `paint.isRegistration` | the registration colour |
-| `paint.spotName` | spot colour name |
-| `paint.spotNameHasPantoneSuffix` | spot name ends in a Pantone suffix |
-| `paint.colorspaceName` | colour space family name |
-| `paint.altColorspaceName` | alternate colour space of a spot |
-| `paint.componentCount` | number of colour components |
-| `paint.nonZeroCmykCount` | non-zero CMYK components |
-| `paint.is100Black` | exactly 100% black |
-| `paint.blackPercent` | black component in percent |
-| `paint.cmykOnly` | process inks only, no spots |
-| `paint.spotOnly` | spot inks only, no process |
-| `paint.usesIccCmyk` | ICC-based CMYK |
-| `paint.usesIccRgb` | ICC-based RGB |
-| `paint.processColourAsSpot` | a process ink defined as a spot |
-| `paint.processColoursAsDeviceN` | process inks defined through DeviceN |
-| `paint.deviceNColorants` | number of DeviceN colourants |
+| `CHECK_HIT` | a check found something: `<Severity>: <check name> (<n> hit(s), pages <ranges>)` |
+| `CHECK_NOT_EVALUATED` | a condition could not be evaluated for this file |
+| `PROFILE_INVALID` | the profile is not valid; the detail names the field |
+| `PROFILE_EMPTY` | check mode was asked for, but the profile has no checks |
+| `PROFILE_TARGET` | the profile's `convert` section chose the target standard |
+| `VARIABLE_SET` | a variable received a value |
+| `FIX_SCHEDULED` | a fix will run during the conversion |
+| `FIX_DONE` | a fix changed the document |
+| `FIX_NOT_NEEDED` | a fix's `only_where` checks found nothing |
+| `FIX_UNKNOWN` | the fix is not in the catalogue |
+| `ICC_PROFILE_MISSING` | a named ICC profile was not found |
+| `PLAN_STEP`, `PLAN_STEP_FAILED`, `PLAN_NO_CONVERSION` | plan progress, as above |
 
-### Text
-
-| Property | Meaning |
-|---|---|
-| `text.size` | rendered text size in points |
-| `text.isInvisible` | text in invisible render mode that is not a clip |
-| `text.renderMode` | text rendering mode, 0 to 7 |
-| `text.isStroked` | text is stroked |
-| `text.isClippingPath` | text is used as a clipping path |
-| `text.hasUnicode` | the glyph maps to Unicode |
-| `text.glyphUndefined` | the glyph is missing from the font |
-| `text.glyphHasContour` | the glyph has an outline |
-| `text.glyphIsWhitespace` | the glyph is whitespace |
-
-### Fonts
-
-| Property | Meaning |
-|---|---|
-| `font.embedded` | font program is embedded |
-| `font.notEmbedded` | font program is not embedded |
-| `font.name` | base font name |
-| `font.isType3` | Type 3 font |
-| `font.isTrueType` | TrueType font |
-| `font.isCid` | CID-keyed font |
-| `font.subsetComplete` | the subset holds every glyph the text uses |
-| `font.unicodeComplete` | every character maps to Unicode |
-| `font.invalid` | font program does not parse |
-| `font.notdefUsed` | a character falls back to .notdef |
-| `font.bitmapOnly` | bitmap-only embedding |
-| `font.restrictedLicense` | licence forbids embedding |
-| `font.canBeEmbedded` | licence permits embedding |
-| `font.notSubset` | font is embedded whole |
-| `font.widthsMatch` | declared widths match the program |
-| `font.nameUnique` | font name is unique in the file |
-
-### Images
-
-| Property | Meaning |
-|---|---|
-| `image.ppi` | effective resolution in pixels per inch |
-| `image.bitsPerComponent` | bits per colour component |
-| `image.bpc` | same as image.bitsPerComponent |
-| `image.filter` | compression filter name, such as DCTDecode |
-| `image.width` | width in pixels |
-| `image.height` | height in pixels |
-| `image.interpolate` | interpolation flag is true |
-| `image.hasInterpolateEntry` | an interpolation entry is present |
-| `image.hasSoftMask` | a soft mask is attached |
-| `image.invalid` | the image cannot be decoded |
-
-### Content objects
-
-| Property | Meaning |
-|---|---|
-| `content.isImage` | object is an image |
-| `content.isImageMask` | object is a stencil mask |
-| `content.isBitmap` | 1-bit image or mask |
-| `content.isText` | object is text |
-| `content.isLine` | object is a line |
-| `content.isStroked` | object is stroked |
-| `content.isFilled` | object is filled |
-| `content.isFilledAndStroked` | object is both filled and stroked |
-| `content.isStrokedOnly` | stroked but not filled |
-| `content.isShading` | object is a shading |
-| `content.outsideMediaBox` | entirely outside the media box |
-| `content.outsideBleedBox` | entirely outside the bleed box |
-| `content.insideTrimAndArtBox` | inside both trim and art box |
-| `content.distanceFromTrimBox` | distance from the trim box in points |
-| `content.distanceInsideTrimBox` | distance to the trim edge from inside, in points |
-| `content.pathNodes` | number of nodes in the path |
-| `content.unknownOperator` | operator no PDF version defines |
-| `content.emptyVector` | path that neither fills nor strokes |
-
-### Pages
-
-| Property | Meaning |
-|---|---|
-| `page.allHaveMediaBox` | every page has a media box |
-| `page.hasMediaBox` | page has a media box |
-| `page.hasCropBox` | page has a crop box |
-| `page.cropEqualsMedia` | crop box equals media box |
-| `page.isRotated` | page has a rotation |
-| `page.isEmpty` | page paints nothing |
-| `page.number` | page number |
-| `page.inkCoverage` | effective ink coverage of the page in percent |
-| `page.singleImage` | page holds one image only |
-| `page.contentCompressed` | content stream is compressed |
-| `page.hasOutputIntent` | page carries its own output intent |
-| `page.usesPlates` | page uses the named plates |
-| `page.transparencyGroupHasTransparency` | page group actually contains transparency |
-
-### Document
-
-| Property | Meaning |
-|---|---|
-| `doc.pages` | number of pages |
-| `doc.fileSizeBytes` | file size in bytes |
-| `doc.pdfVersion` | PDF version number |
-| `doc.plates` | number of plates |
-| `doc.spotPlates` | number of spot plates |
-| `doc.pagesSameSize` | all pages share size and orientation |
-| `doc.dataAfterEof` | bytes follow the final %%EOF |
-| `doc.spotNamesEquivalent` | two spot names are the same ink |
-| `doc.spotNamesNotIdentical` | equivalent spot names that are not identical |
-| `doc.spotRepresentationsInconsistent` | a spot is defined differently in two places |
-| `doc.xmpIsPlainText` | XMP packet is plain text |
-| `doc.requiresPdf20` | file declares a PDF 2.0 requirement |
-| `doc.namesUtf8` | name objects are valid UTF-8 |
-| `doc.hexStringInvalid` | a hex string has invalid characters |
-| `docinfo.creator` | Creator field |
-| `docinfo.producer` | Producer field |
-| `docinfo.trapped` | Trapped field, True or False |
-| `docinfo.hasPdfxFields` | PDF/X identification fields present |
-
-### Output intents
-
-| Property | Meaning |
-|---|---|
-| `outputIntent.count` | number of output intents |
-| `outputIntent.hasProfile` | output intent embeds an ICC profile |
-| `outputIntent.isPdfx` | a PDF/X output intent |
-| `outputIntent.isPdfa` | a PDF/A output intent |
-| `outputIntent.pdfxEntries` | number of PDF/X output intents |
-| `outputIntent.icc.colorspace` | colour space of the output profile |
-| `outputIntent.icc.version` | ICC version of the output profile |
-
-### Annotations
-
-| Property | Meaning |
-|---|---|
-| `annot.type` | annotation subtype, such as Link |
-| `annot.isType` | annotation is of the given subtype |
-| `annot.prints` | print flag is set |
-| `annot.hasOpacity` | an opacity value is set |
-| `annot.opacity` | opacity value |
-| `annot.insideBleedOrTrim` | annotation lies inside bleed or trim box |
-| `annot.unknownType` | subtype the specification does not define |
-
-### Layers
-
-| Property | Meaning |
-|---|---|
-| `layers.onLayer` | content belongs to a layer |
-| `layers.visible` | the layer is on by default |
-| `layers.hasConfigs` | alternate layer configurations exist |
-| `layers.processingSteps` | processing-steps metadata |
-| `layers.hasProcessingSteps` | processing steps are present |
-
-### Other
-
-| Property | Meaning |
-|---|---|
-| `halftone.hasOrigin` | halftone dictionary fixes an origin |
-| `icc.version` | ICC profile version |
-| `icc.colorspace` | ICC profile colour space |
-| `signature.hasFields` | document has signature fields |
-| `vt.hasDocumentParts` | PDF/VT document-part hierarchy present |
-
-## Built-in checks
-
-| Name | Parameters | Reports |
-|---|---|---|
-| `imageResolutionBelow` | `ppi` | colour and grayscale images below the resolution |
-| `imageResolutionAbove` | `ppi` | colour and grayscale images above the resolution |
-| `bitmapResolutionBelow` | `ppi` | 1-bit images below the resolution |
-| `bitmapResolutionAbove` | `ppi` | 1-bit images above the resolution |
-| `colourPlatesUsed` |  | objects that produce output on the cyan, magenta or yellow plates |
-| `deviceIndependentColour` |  | objects painted in Lab, calibrated or ICC-based colour |
-| `rgbUsed` |  | objects painted in RGB |
-| `spotColoursMoreThan` | `count` | pages using more spot colours than the count |
-| `spotNamesInconsistent` |  | spot colours named inconsistently |
-| `fontsNotEmbedded` |  | fonts without an embedded program |
-| `fontsEmbedded` |  | fonts with an embedded program |
-| `type1CidFonts` |  | CID-keyed Type 1 fonts |
-| `trueTypeCidFonts` |  | CID-keyed TrueType fonts |
-| `openTypeFonts` |  | OpenType fonts |
-| `encrypted` |  | the file is encrypted |
-| `damaged` |  | the file needed repair to parse |
-| `syntaxProblems` |  | structural problems found while parsing |
-| `pdfVersionBelow` | `version` | the file's PDF version is below the value |
-| `uncompressedImages` |  | images stored without compression |
-| `pageCount` |  | the page count, always reported |
-| `pagesDifferInSize` |  | pages differ in size or orientation |
-| `emptyPage` |  | pages with no visible content |
-| `transferCurves` |  | transfer functions in use |
-| `halftones` |  | custom halftones in use |
-| `postscript` |  | PostScript XObjects |
-| `transparencyUsed` |  | transparency anywhere in the file |
-| `hairlinesBelow` | `points` | strokes thinner than the value |
-| `conformsTo` | `level` | the file does not conform to the standard; `level` takes any conformance level Kura converts to or checks, such as `2b` or `x4` |
-| `embeddedFilesConformTo` | `level` | embedded PDFs that do not conform to the archival level |
-
-## Repairs
-
-| Operation | Parameters | Effect |
-|---|---|---|
-| `rotatepages` | angle | rotates every page by 90, 180 or 270 degrees |
-| `removepagescaling` |  | removes the user unit |
-| `scalepagesex` | width, height, unit | scales pages proportionally to fit the size |
-| `setpagebox` | box, `RelativeToCropBox` (or another box), left, bottom, right, top, unit, `Always` | sets a page box from another box with offsets; only where missing unless `Always` |
-| `setpageboxesbasedonmarks` |  | sets the trim box from the crop box |
-| `generatebleed` | Auto or Amount, amount, unit | sets a bleed box around the trim box |
-| `removeobjectsoutofbox` | box | clips content to the box |
-| `removepdfuakeys` |  | removes the PDF/UA marker |
-| `settitle` | IfEmpty or Always, title | sets the document title |
-| `trappedkey` | true or false | sets the trapped flag |
-| `setinitialviewdocumentoptions` | page mode, page layout | sets how the file opens, such as `UseOutlines` and `TwoPageRight` |
-| `setinitialviewuioptions` | hide toolbar, hide menubar, hide window UI | viewer preferences, each true or false |
-| `setinitialviewwindowoptions` | fit window, center window, display title | viewer preferences, each true or false |
-| `settransparencyblendcs` | CMYK or sRGB | sets the page blending colour space |
-| `modifyinterpolateentry` | Remove | removes the image interpolation flag |
-| `removeflatness` |  | removes flatness tolerances |
-| `removesmoothness` |  | removes smoothness tolerances |
-| `transfercurves` |  | removes transfer functions |
-| `removebg` |  | removes black generation |
-| `removeucr` |  | removes undercolour removal |
-| `removerenderingintents` |  | removes rendering intents |
-| `setrenderingintent` | intent | sets the rendering intent on every graphics state |
-| `removeunnecessarytransparencygroups` |  | drops page groups without transparent content |
-| `mergespotcolornames` |  | merges spot names that differ only in spelling |
-| `makecustomspotcolornamesconsistent` |  | gives every use of a spot the same definition |
-| `mapspotcolors` | to, , from | renames one spot colour to another |
-| `convertregistrationcolortoblack` |  | repaints registration colour as black |
-| `convertnchtodevn` |  | converts NChannel to DeviceN |
-| `placetext` | text or Date, , size | places text near the bottom-left of every page |
-| `annotation` | selector, action | selector `All`, a subtype, `AllMultimedia` or `Unknown`; action `Remove`, `SetToNoPrint` or `MoveOutOfBleedBox` |
-| `putobjectsonlayer` | name, label | wraps page content in a layer |
-| `putobjpsteps` | name, label | wraps page content in a processing-steps layer |
-| `dscdhdnlycntfltnvsblyrs` |  | discards hidden layers and flattens the visible ones |
-| `knockoutwhite` | Text or empty | switches overprint off for white objects |
-| `overprintblack` | Text or empty | switches overprint on for 100% black objects |
-| `setoverprintandknockout` |  | black overprint and white knockout together |
-| `increaselinewidth` | width, , unit | raises thinner strokes to the width |
-| `settextrendermode` | mode | forces a text rendering mode |
-
-## The XML dialect
-
-Profiles in the XML preflight dialect, with `<check name="…" check_severity="…">` and `<fixup><fcfg>…</fcfg></fixup>` elements, are accepted as well and mapped onto the same engine, so a shop can bring the profiles it already has. Severity in that dialect is numbered the other way round, 0 for error; Kura normalizes it.
+`kura --list-profiles <dir>` lists every profile in a folder with its name and description.
 
 ## In the other surfaces
 
-The npm package and the browser build take the profile text as `profile` in the options of `convert()` or `check()`. The C API does not currently expose profiles.
+The npm package and the browser build take the profile text as `profile` in the options of `convert()` or `check()`. The C API takes it as `preflight_profile`, with variable values as a JSON object in `profile_vars`. The HTTP API takes a bundled profile's id as `profile=` or your own as a `profile` field.
 
 ## Provenance
 

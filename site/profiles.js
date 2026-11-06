@@ -16,7 +16,7 @@ export const PROFILES = {
         "severity": "error",
         "all": [
          {
-          "prop": "stroke.width",
+          "check": "content.stroke_width",
           "op": "<=",
           "value": 0.125
          }
@@ -27,12 +27,12 @@ export const PROFILES = {
         "severity": "warning",
         "all": [
          {
-          "prop": "stroke.width",
+          "check": "content.stroke_width",
           "op": "<=",
           "value": 0.25
          },
          {
-          "prop": "stroke.width",
+          "check": "content.stroke_width",
           "op": ">",
           "value": 0.125
          }
@@ -43,12 +43,12 @@ export const PROFILES = {
         "severity": "error",
         "all": [
          {
-          "prop": "stroke.width",
+          "check": "content.stroke_width",
           "op": "<=",
           "value": 0.25
          },
          {
-          "prop": "paint.inkCount",
+          "check": "color.inks_used",
           "op": ">",
           "value": 1
          }
@@ -59,12 +59,12 @@ export const PROFILES = {
         "severity": "warning",
         "all": [
          {
-          "prop": "text.size",
+          "check": "text.size",
           "op": "<",
           "value": 4
          },
          {
-          "prop": "text.size",
+          "check": "text.size",
           "op": ">",
           "value": 0.01
          }
@@ -75,17 +75,17 @@ export const PROFILES = {
         "severity": "warning",
         "all": [
          {
-          "prop": "text.size",
+          "check": "text.size",
           "op": "<",
           "value": 8
          },
          {
-          "prop": "text.size",
+          "check": "text.size",
           "op": ">",
           "value": 0.01
          },
          {
-          "prop": "paint.inkCount",
+          "check": "color.inks_used",
           "op": ">",
           "value": 1
          }
@@ -96,19 +96,19 @@ export const PROFILES = {
         "severity": "warning",
         "all": [
          {
-          "prop": "text.size",
+          "check": "text.size",
           "op": "<",
           "value": 8
          },
          {
-          "prop": "text.size",
+          "check": "text.size",
           "op": ">",
           "value": 0.01
          },
          {
-          "prop": "paint.isWhite",
+          "check": "color.ink_mix",
           "op": "==",
-          "value": true
+          "value": "none"
          }
         ]
        },
@@ -117,20 +117,14 @@ export const PROFILES = {
         "severity": "warning",
         "all": [
          {
-          "prop": "image.ppi",
+          "check": "image.resolution",
           "op": "<",
-          "value": 250
-         },
-         {
-          "prop": "image.ppi",
-          "op": ">",
-          "value": 0
+          "value": 250,
+          "kind": "colour_or_grey"
          }
         ]
        }
-      ],
-      "builtins": [],
-      "fixes": []
+      ]
      }
     },
     {
@@ -146,7 +140,7 @@ export const PROFILES = {
         "severity": "error",
         "all": [
          {
-          "prop": "stroke.width",
+          "check": "content.stroke_width",
           "op": "<=",
           "value": 0.125
          }
@@ -157,12 +151,12 @@ export const PROFILES = {
         "severity": "warning",
         "all": [
          {
-          "prop": "stroke.width",
+          "check": "content.stroke_width",
           "op": "<=",
           "value": 0.25
          },
          {
-          "prop": "stroke.width",
+          "check": "content.stroke_width",
           "op": ">",
           "value": 0.125
          }
@@ -173,12 +167,12 @@ export const PROFILES = {
         "severity": "error",
         "all": [
          {
-          "prop": "stroke.width",
+          "check": "content.stroke_width",
           "op": "<=",
           "value": 0.25
          },
          {
-          "prop": "paint.inkCount",
+          "check": "color.inks_used",
           "op": ">",
           "value": 1
          }
@@ -189,9 +183,10 @@ export const PROFILES = {
         "severity": "error",
         "all": [
          {
-          "prop": "fill.totalInk",
+          "check": "color.total_ink",
           "op": ">",
-          "value": 320
+          "value": 320,
+          "paint": "fill"
          }
         ]
        },
@@ -200,9 +195,10 @@ export const PROFILES = {
         "severity": "error",
         "all": [
          {
-          "prop": "stroke.totalInk",
+          "check": "color.total_ink",
           "op": ">",
-          "value": 320
+          "value": 320,
+          "paint": "stroke"
          }
         ]
        },
@@ -211,19 +207,26 @@ export const PROFILES = {
         "severity": "warning",
         "all": [
          {
-          "prop": "content.isText",
+          "check": "content.kind",
           "op": "==",
-          "value": true
+          "value": "text"
          },
          {
-          "prop": "text.size",
+          "check": "text.size",
           "op": "<",
           "value": 12
          },
          {
-          "prop": "paint.richBlackCmyPercent",
+          "check": "color.ink",
+          "op": ">=",
+          "value": 100,
+          "ink": "black"
+         },
+         {
+          "check": "color.ink",
           "op": ">",
-          "value": 0
+          "value": 0,
+          "ink": "cmy_max"
          }
         ]
        },
@@ -232,14 +235,10 @@ export const PROFILES = {
         "severity": "error",
         "all": [
          {
-          "prop": "image.ppi",
+          "check": "image.resolution",
           "op": "<",
-          "value": 200
-         },
-         {
-          "prop": "image.ppi",
-          "op": ">",
-          "value": 0
+          "value": 200,
+          "kind": "colour_or_grey"
          }
         ]
        },
@@ -248,20 +247,18 @@ export const PROFILES = {
         "severity": "warning",
         "all": [
          {
-          "prop": "image.ppi",
+          "check": "image.resolution",
           "op": "<",
           "value": 300
          },
          {
-          "prop": "image.ppi",
+          "check": "image.resolution",
           "op": ">=",
           "value": 200
          }
         ]
        }
-      ],
-      "builtins": [],
-      "fixes": []
+      ]
      }
     },
     {
@@ -277,7 +274,7 @@ export const PROFILES = {
         "severity": "error",
         "all": [
          {
-          "prop": "stroke.width",
+          "check": "content.stroke_width",
           "op": "<=",
           "value": 0.125
          }
@@ -288,12 +285,12 @@ export const PROFILES = {
         "severity": "warning",
         "all": [
          {
-          "prop": "stroke.width",
+          "check": "content.stroke_width",
           "op": "<=",
           "value": 0.25
          },
          {
-          "prop": "stroke.width",
+          "check": "content.stroke_width",
           "op": ">",
           "value": 0.125
          }
@@ -304,12 +301,12 @@ export const PROFILES = {
         "severity": "error",
         "all": [
          {
-          "prop": "stroke.width",
+          "check": "content.stroke_width",
           "op": "<=",
           "value": 0.25
          },
          {
-          "prop": "paint.inkCount",
+          "check": "color.inks_used",
           "op": ">",
           "value": 1
          }
@@ -320,12 +317,12 @@ export const PROFILES = {
         "severity": "warning",
         "all": [
          {
-          "prop": "text.size",
+          "check": "text.size",
           "op": "<",
           "value": 5
          },
          {
-          "prop": "text.size",
+          "check": "text.size",
           "op": ">",
           "value": 0.01
          }
@@ -336,17 +333,17 @@ export const PROFILES = {
         "severity": "warning",
         "all": [
          {
-          "prop": "text.size",
+          "check": "text.size",
           "op": "<",
           "value": 8
          },
          {
-          "prop": "text.size",
+          "check": "text.size",
           "op": ">",
           "value": 0.01
          },
          {
-          "prop": "paint.inkCount",
+          "check": "color.inks_used",
           "op": ">",
           "value": 1
          }
@@ -357,19 +354,19 @@ export const PROFILES = {
         "severity": "warning",
         "all": [
          {
-          "prop": "text.size",
+          "check": "text.size",
           "op": "<",
           "value": 8
          },
          {
-          "prop": "text.size",
+          "check": "text.size",
           "op": ">",
           "value": 0.01
          },
          {
-          "prop": "paint.isWhite",
+          "check": "color.ink_mix",
           "op": "==",
-          "value": true
+          "value": "none"
          }
         ]
        },
@@ -378,9 +375,10 @@ export const PROFILES = {
         "severity": "error",
         "all": [
          {
-          "prop": "fill.totalInk",
+          "check": "color.total_ink",
           "op": ">",
-          "value": 330
+          "value": 330,
+          "paint": "fill"
          }
         ]
        },
@@ -389,9 +387,10 @@ export const PROFILES = {
         "severity": "error",
         "all": [
          {
-          "prop": "stroke.totalInk",
+          "check": "color.total_ink",
           "op": ">",
-          "value": 330
+          "value": 330,
+          "paint": "stroke"
          }
         ]
        },
@@ -400,19 +399,26 @@ export const PROFILES = {
         "severity": "warning",
         "all": [
          {
-          "prop": "content.isText",
+          "check": "content.kind",
           "op": "==",
-          "value": true
+          "value": "text"
          },
          {
-          "prop": "text.size",
+          "check": "text.size",
           "op": "<",
           "value": 12
          },
          {
-          "prop": "paint.richBlackCmyPercent",
+          "check": "color.ink",
+          "op": ">=",
+          "value": 100,
+          "ink": "black"
+         },
+         {
+          "check": "color.ink",
           "op": ">",
-          "value": 0
+          "value": 0,
+          "ink": "cmy_max"
          }
         ]
        },
@@ -421,14 +427,18 @@ export const PROFILES = {
         "severity": "error",
         "all": [
          {
-          "prop": "paint.isWhite",
+          "check": "color.ink_mix",
           "op": "==",
-          "value": true
+          "value": "none"
          },
          {
-          "prop": "fill.overprint",
-          "op": "==",
-          "value": true
+          "check": "color.overprint",
+          "op": "in",
+          "value": [
+           "on",
+           "on_nonzero_mode"
+          ],
+          "paint": "fill"
          }
         ]
        },
@@ -437,19 +447,20 @@ export const PROFILES = {
         "severity": "warning",
         "all": [
          {
-          "prop": "content.isText",
+          "check": "content.kind",
           "op": "==",
-          "value": true
+          "value": "text"
          },
          {
-          "prop": "paint.is100Black",
+          "check": "color.ink_mix",
           "op": "==",
-          "value": true
+          "value": "solid_black"
          },
          {
-          "prop": "fill.overprint",
+          "check": "color.overprint",
           "op": "==",
-          "value": false
+          "value": "off",
+          "paint": "fill"
          }
         ]
        },
@@ -458,8 +469,8 @@ export const PROFILES = {
         "severity": "info",
         "all": [
          {
-          "prop": "gstate.transparency",
-          "op": "==",
+          "check": "transparency.used",
+          "op": "is",
           "value": true
          }
         ]
@@ -469,14 +480,129 @@ export const PROFILES = {
         "severity": "info",
         "all": [
          {
-          "prop": "gstate.blendMode",
+          "check": "transparency.blend_mode",
+          "op": "not_in",
+          "value": [
+           "Normal",
+           "Compatible"
+          ]
+         }
+        ]
+       },
+       {
+        "name": "Image below 300 ppi",
+        "severity": "error",
+        "all": [
+         {
+          "check": "image.resolution",
+          "op": "<",
+          "value": 300,
+          "kind": "colour_or_grey"
+         }
+        ]
+       },
+       {
+        "name": "Bitmap below 1200 ppi",
+        "severity": "warning",
+        "all": [
+         {
+          "check": "image.resolution",
+          "op": "<",
+          "value": 1200,
+          "kind": "bitmap"
+         }
+        ]
+       },
+       {
+        "name": "Image above 450 ppi",
+        "severity": "info",
+        "all": [
+         {
+          "check": "image.resolution",
+          "op": ">",
+          "value": 450,
+          "kind": "colour_or_grey"
+         }
+        ]
+       },
+       {
+        "name": "Document is encrypted",
+        "severity": "error",
+        "all": [
+         {
+          "check": "security.encryption",
           "op": "!=",
-          "value": "Normal"
+          "value": "none"
+         }
+        ]
+       },
+       {
+        "name": "Document is damaged",
+        "severity": "error",
+        "all": [
+         {
+          "check": "document.damaged",
+          "op": "is",
+          "value": true
+         }
+        ]
+       },
+       {
+        "name": "Syntax problem",
+        "severity": "error",
+        "any": [
+         {
+          "all": [
+           {
+            "check": "syntax.content_stream_error",
+            "op": "count",
+            "value": 0,
+            "compare": ">"
+           }
+          ]
          },
          {
-          "prop": "gstate.blendMode",
-          "op": "!=",
-          "value": "Compatible"
+          "all": [
+           {
+            "check": "syntax.xref_layout",
+            "op": "count",
+            "value": 0,
+            "compare": ">"
+           }
+          ]
+         },
+         {
+          "all": [
+           {
+            "check": "syntax.object_layout",
+            "op": "count",
+            "value": 0,
+            "compare": ">"
+           }
+          ]
+         },
+         {
+          "all": [
+           {
+            "check": "syntax.broken_reference",
+            "op": "in",
+            "value": [
+             "object",
+             "external_file"
+            ]
+           }
+          ]
+         }
+        ]
+       },
+       {
+        "name": "PDF version below 1.6",
+        "severity": "warning",
+        "all": [
+         {
+          "check": "document.pdf_version",
+          "op": "<",
+          "value": 1.6
          }
         ]
        },
@@ -485,9 +611,74 @@ export const PROFILES = {
         "severity": "error",
         "all": [
          {
-          "prop": "paint.isRegistration",
+          "check": "color.ink_mix",
           "op": "==",
-          "value": true
+          "value": "registration"
+         }
+        ]
+       },
+       {
+        "name": "RGB colour",
+        "severity": "error",
+        "any": [
+         {
+          "all": [
+           {
+            "check": "color.space",
+            "op": "in",
+            "value": [
+             "DeviceRGB",
+             "CalRGB"
+            ]
+           }
+          ]
+         },
+         {
+          "all": [
+           {
+            "check": "color.space",
+            "op": "==",
+            "value": "ICCBased",
+            "icc_components": 3
+           }
+          ]
+         }
+        ]
+       },
+       {
+        "name": "Device-independent colour",
+        "severity": "warning",
+        "all": [
+         {
+          "check": "color.space",
+          "op": "in",
+          "value": [
+           "device_independent"
+          ]
+         }
+        ]
+       },
+       {
+        "name": "More than 0 spot colours on a page",
+        "severity": "error",
+        "all": [
+         {
+          "check": "print.plates",
+          "op": "count",
+          "value": 0,
+          "compare": ">",
+          "kind": "spot"
+         }
+        ]
+       },
+       {
+        "name": "Font not embedded",
+        "severity": "error",
+        "all": [
+         {
+          "check": "font.embedding",
+          "op": "==",
+          "value": "not_embedded"
          }
         ]
        },
@@ -496,9 +687,9 @@ export const PROFILES = {
         "severity": "warning",
         "all": [
          {
-          "prop": "font.isType3",
+          "check": "font.type",
           "op": "==",
-          "value": true
+          "value": "type3"
          }
         ]
        },
@@ -507,9 +698,9 @@ export const PROFILES = {
         "severity": "error",
         "all": [
          {
-          "prop": "font.notdefUsed",
+          "check": "text.glyph",
           "op": "==",
-          "value": true
+          "value": "notdef"
          }
         ]
        },
@@ -518,9 +709,42 @@ export const PROFILES = {
         "severity": "error",
         "all": [
          {
-          "prop": "font.invalid",
-          "op": "==",
+          "check": "font.problem",
+          "op": "includes",
+          "value": "invalid_program"
+         }
+        ]
+       },
+       {
+        "name": "Pages differ in size or orientation",
+        "severity": "warning",
+        "all": [
+         {
+          "check": "document.pages_uniform",
+          "op": "is",
+          "value": false
+         }
+        ]
+       },
+       {
+        "name": "Empty page",
+        "severity": "warning",
+        "all": [
+         {
+          "check": "page.empty",
+          "op": "is",
           "value": true
+         }
+        ]
+       },
+       {
+        "name": "Page scaling in use",
+        "severity": "error",
+        "all": [
+         {
+          "check": "page.user_unit",
+          "op": "!=",
+          "value": 1
          }
         ]
        },
@@ -529,9 +753,12 @@ export const PROFILES = {
         "severity": "info",
         "all": [
          {
-          "prop": "content.distanceInsideTrimBox",
+          "check": "content.distance_to_box",
           "op": "<",
-          "value": 8.5
+          "value": 3,
+          "box": "trim",
+          "side": "inside",
+          "unit": "mm"
          }
         ],
         "scope": "trim"
@@ -541,9 +768,9 @@ export const PROFILES = {
         "severity": "warning",
         "all": [
          {
-          "prop": "annot.prints",
-          "op": "==",
-          "value": true
+          "check": "annotation.flags",
+          "op": "includes",
+          "value": "print"
          }
         ]
        },
@@ -552,83 +779,14 @@ export const PROFILES = {
         "severity": "info",
         "all": [
          {
-          "prop": "layers.onLayer",
-          "op": "==",
-          "value": true
+          "check": "layer.membership",
+          "op": "count",
+          "value": 0,
+          "compare": ">"
          }
         ]
        }
-      ],
-      "builtins": [
-       {
-        "name": "imageResolutionBelow",
-        "severity": "error",
-        "params": {
-         "ppi": 300
-        }
-       },
-       {
-        "name": "bitmapResolutionBelow",
-        "severity": "warning",
-        "params": {
-         "ppi": 1200
-        }
-       },
-       {
-        "name": "imageResolutionAbove",
-        "severity": "info",
-        "params": {
-         "ppi": 450
-        }
-       },
-       {
-        "name": "encrypted",
-        "severity": "error"
-       },
-       {
-        "name": "damaged",
-        "severity": "error"
-       },
-       {
-        "name": "syntaxProblems",
-        "severity": "error"
-       },
-       {
-        "name": "pdfVersionBelow",
-        "severity": "warning",
-        "params": {
-         "version": 1.6
-        }
-       },
-       {
-        "name": "rgbUsed",
-        "severity": "error"
-       },
-       {
-        "name": "deviceIndependentColour",
-        "severity": "warning"
-       },
-       {
-        "name": "spotColoursMoreThan",
-        "severity": "error",
-        "params": {
-         "count": 0
-        }
-       },
-       {
-        "name": "fontsNotEmbedded",
-        "severity": "error"
-       },
-       {
-        "name": "pagesDifferInSize",
-        "severity": "warning"
-       },
-       {
-        "name": "emptyPage",
-        "severity": "warning"
-       }
-      ],
-      "fixes": []
+      ]
      }
     },
     {
@@ -644,7 +802,7 @@ export const PROFILES = {
         "severity": "error",
         "all": [
          {
-          "prop": "stroke.width",
+          "check": "content.stroke_width",
           "op": "<=",
           "value": 0.125
          }
@@ -655,12 +813,12 @@ export const PROFILES = {
         "severity": "warning",
         "all": [
          {
-          "prop": "stroke.width",
+          "check": "content.stroke_width",
           "op": "<=",
           "value": 0.25
          },
          {
-          "prop": "stroke.width",
+          "check": "content.stroke_width",
           "op": ">",
           "value": 0.125
          }
@@ -671,12 +829,12 @@ export const PROFILES = {
         "severity": "error",
         "all": [
          {
-          "prop": "stroke.width",
+          "check": "content.stroke_width",
           "op": "<=",
           "value": 0.25
          },
          {
-          "prop": "paint.inkCount",
+          "check": "color.inks_used",
           "op": ">",
           "value": 1
          }
@@ -687,12 +845,12 @@ export const PROFILES = {
         "severity": "warning",
         "all": [
          {
-          "prop": "text.size",
+          "check": "text.size",
           "op": "<",
           "value": 5
          },
          {
-          "prop": "text.size",
+          "check": "text.size",
           "op": ">",
           "value": 0.01
          }
@@ -703,17 +861,17 @@ export const PROFILES = {
         "severity": "warning",
         "all": [
          {
-          "prop": "text.size",
+          "check": "text.size",
           "op": "<",
           "value": 8
          },
          {
-          "prop": "text.size",
+          "check": "text.size",
           "op": ">",
           "value": 0.01
          },
          {
-          "prop": "paint.inkCount",
+          "check": "color.inks_used",
           "op": ">",
           "value": 1
          }
@@ -724,19 +882,19 @@ export const PROFILES = {
         "severity": "warning",
         "all": [
          {
-          "prop": "text.size",
+          "check": "text.size",
           "op": "<",
           "value": 8
          },
          {
-          "prop": "text.size",
+          "check": "text.size",
           "op": ">",
           "value": 0.01
          },
          {
-          "prop": "paint.isWhite",
+          "check": "color.ink_mix",
           "op": "==",
-          "value": true
+          "value": "none"
          }
         ]
        },
@@ -745,9 +903,10 @@ export const PROFILES = {
         "severity": "error",
         "all": [
          {
-          "prop": "fill.totalInk",
+          "check": "color.total_ink",
           "op": ">",
-          "value": 330
+          "value": 330,
+          "paint": "fill"
          }
         ]
        },
@@ -756,9 +915,10 @@ export const PROFILES = {
         "severity": "error",
         "all": [
          {
-          "prop": "stroke.totalInk",
+          "check": "color.total_ink",
           "op": ">",
-          "value": 330
+          "value": 330,
+          "paint": "stroke"
          }
         ]
        },
@@ -767,19 +927,26 @@ export const PROFILES = {
         "severity": "warning",
         "all": [
          {
-          "prop": "content.isText",
+          "check": "content.kind",
           "op": "==",
-          "value": true
+          "value": "text"
          },
          {
-          "prop": "text.size",
+          "check": "text.size",
           "op": "<",
           "value": 12
          },
          {
-          "prop": "paint.richBlackCmyPercent",
+          "check": "color.ink",
+          "op": ">=",
+          "value": 100,
+          "ink": "black"
+         },
+         {
+          "check": "color.ink",
           "op": ">",
-          "value": 0
+          "value": 0,
+          "ink": "cmy_max"
          }
         ]
        },
@@ -788,14 +955,18 @@ export const PROFILES = {
         "severity": "error",
         "all": [
          {
-          "prop": "paint.isWhite",
+          "check": "color.ink_mix",
           "op": "==",
-          "value": true
+          "value": "none"
          },
          {
-          "prop": "fill.overprint",
-          "op": "==",
-          "value": true
+          "check": "color.overprint",
+          "op": "in",
+          "value": [
+           "on",
+           "on_nonzero_mode"
+          ],
+          "paint": "fill"
          }
         ]
        },
@@ -804,19 +975,20 @@ export const PROFILES = {
         "severity": "warning",
         "all": [
          {
-          "prop": "content.isText",
+          "check": "content.kind",
           "op": "==",
-          "value": true
+          "value": "text"
          },
          {
-          "prop": "paint.is100Black",
+          "check": "color.ink_mix",
           "op": "==",
-          "value": true
+          "value": "solid_black"
          },
          {
-          "prop": "fill.overprint",
+          "check": "color.overprint",
           "op": "==",
-          "value": false
+          "value": "off",
+          "paint": "fill"
          }
         ]
        },
@@ -825,8 +997,8 @@ export const PROFILES = {
         "severity": "info",
         "all": [
          {
-          "prop": "gstate.transparency",
-          "op": "==",
+          "check": "transparency.used",
+          "op": "is",
           "value": true
          }
         ]
@@ -836,14 +1008,129 @@ export const PROFILES = {
         "severity": "info",
         "all": [
          {
-          "prop": "gstate.blendMode",
+          "check": "transparency.blend_mode",
+          "op": "not_in",
+          "value": [
+           "Normal",
+           "Compatible"
+          ]
+         }
+        ]
+       },
+       {
+        "name": "Image below 300 ppi",
+        "severity": "error",
+        "all": [
+         {
+          "check": "image.resolution",
+          "op": "<",
+          "value": 300,
+          "kind": "colour_or_grey"
+         }
+        ]
+       },
+       {
+        "name": "Bitmap below 1200 ppi",
+        "severity": "warning",
+        "all": [
+         {
+          "check": "image.resolution",
+          "op": "<",
+          "value": 1200,
+          "kind": "bitmap"
+         }
+        ]
+       },
+       {
+        "name": "Image above 450 ppi",
+        "severity": "info",
+        "all": [
+         {
+          "check": "image.resolution",
+          "op": ">",
+          "value": 450,
+          "kind": "colour_or_grey"
+         }
+        ]
+       },
+       {
+        "name": "Document is encrypted",
+        "severity": "error",
+        "all": [
+         {
+          "check": "security.encryption",
           "op": "!=",
-          "value": "Normal"
+          "value": "none"
+         }
+        ]
+       },
+       {
+        "name": "Document is damaged",
+        "severity": "error",
+        "all": [
+         {
+          "check": "document.damaged",
+          "op": "is",
+          "value": true
+         }
+        ]
+       },
+       {
+        "name": "Syntax problem",
+        "severity": "error",
+        "any": [
+         {
+          "all": [
+           {
+            "check": "syntax.content_stream_error",
+            "op": "count",
+            "value": 0,
+            "compare": ">"
+           }
+          ]
          },
          {
-          "prop": "gstate.blendMode",
-          "op": "!=",
-          "value": "Compatible"
+          "all": [
+           {
+            "check": "syntax.xref_layout",
+            "op": "count",
+            "value": 0,
+            "compare": ">"
+           }
+          ]
+         },
+         {
+          "all": [
+           {
+            "check": "syntax.object_layout",
+            "op": "count",
+            "value": 0,
+            "compare": ">"
+           }
+          ]
+         },
+         {
+          "all": [
+           {
+            "check": "syntax.broken_reference",
+            "op": "in",
+            "value": [
+             "object",
+             "external_file"
+            ]
+           }
+          ]
+         }
+        ]
+       },
+       {
+        "name": "PDF version below 1.6",
+        "severity": "warning",
+        "all": [
+         {
+          "check": "document.pdf_version",
+          "op": "<",
+          "value": 1.6
          }
         ]
        },
@@ -852,9 +1139,85 @@ export const PROFILES = {
         "severity": "error",
         "all": [
          {
-          "prop": "paint.isRegistration",
+          "check": "color.ink_mix",
           "op": "==",
-          "value": true
+          "value": "registration"
+         }
+        ]
+       },
+       {
+        "name": "RGB colour",
+        "severity": "error",
+        "any": [
+         {
+          "all": [
+           {
+            "check": "color.space",
+            "op": "in",
+            "value": [
+             "DeviceRGB",
+             "CalRGB"
+            ]
+           }
+          ]
+         },
+         {
+          "all": [
+           {
+            "check": "color.space",
+            "op": "==",
+            "value": "ICCBased",
+            "icc_components": 3
+           }
+          ]
+         }
+        ]
+       },
+       {
+        "name": "Device-independent colour",
+        "severity": "warning",
+        "all": [
+         {
+          "check": "color.space",
+          "op": "in",
+          "value": [
+           "device_independent"
+          ]
+         }
+        ]
+       },
+       {
+        "name": "More than 2 spot colours on a page",
+        "severity": "warning",
+        "all": [
+         {
+          "check": "print.plates",
+          "op": "count",
+          "value": 2,
+          "compare": ">",
+          "kind": "spot"
+         }
+        ]
+       },
+       {
+        "name": "Spot colour names that differ only in spelling",
+        "severity": "warning",
+        "all": [
+         {
+          "check": "print.spot_naming",
+          "op": "includes",
+          "value": "similar_names"
+         }
+        ]
+       },
+       {
+        "name": "Font not embedded",
+        "severity": "error",
+        "all": [
+         {
+          "check": "font.embedding",
+          "op": "==",
+          "value": "not_embedded"
          }
         ]
        },
@@ -863,9 +1226,9 @@ export const PROFILES = {
         "severity": "warning",
         "all": [
          {
-          "prop": "font.isType3",
+          "check": "font.type",
           "op": "==",
-          "value": true
+          "value": "type3"
          }
         ]
        },
@@ -874,9 +1237,9 @@ export const PROFILES = {
         "severity": "error",
         "all": [
          {
-          "prop": "font.notdefUsed",
+          "check": "text.glyph",
           "op": "==",
-          "value": true
+          "value": "notdef"
          }
         ]
        },
@@ -885,9 +1248,42 @@ export const PROFILES = {
         "severity": "error",
         "all": [
          {
-          "prop": "font.invalid",
-          "op": "==",
+          "check": "font.problem",
+          "op": "includes",
+          "value": "invalid_program"
+         }
+        ]
+       },
+       {
+        "name": "Pages differ in size or orientation",
+        "severity": "warning",
+        "all": [
+         {
+          "check": "document.pages_uniform",
+          "op": "is",
+          "value": false
+         }
+        ]
+       },
+       {
+        "name": "Empty page",
+        "severity": "warning",
+        "all": [
+         {
+          "check": "page.empty",
+          "op": "is",
           "value": true
+         }
+        ]
+       },
+       {
+        "name": "Page scaling in use",
+        "severity": "error",
+        "all": [
+         {
+          "check": "page.user_unit",
+          "op": "!=",
+          "value": 1
          }
         ]
        },
@@ -896,9 +1292,12 @@ export const PROFILES = {
         "severity": "info",
         "all": [
          {
-          "prop": "content.distanceInsideTrimBox",
+          "check": "content.distance_to_box",
           "op": "<",
-          "value": 8.5
+          "value": 3,
+          "box": "trim",
+          "side": "inside",
+          "unit": "mm"
          }
         ],
         "scope": "trim"
@@ -908,9 +1307,9 @@ export const PROFILES = {
         "severity": "warning",
         "all": [
          {
-          "prop": "annot.prints",
-          "op": "==",
-          "value": true
+          "check": "annotation.flags",
+          "op": "includes",
+          "value": "print"
          }
         ]
        },
@@ -919,87 +1318,14 @@ export const PROFILES = {
         "severity": "info",
         "all": [
          {
-          "prop": "layers.onLayer",
-          "op": "==",
-          "value": true
+          "check": "layer.membership",
+          "op": "count",
+          "value": 0,
+          "compare": ">"
          }
         ]
        }
-      ],
-      "builtins": [
-       {
-        "name": "imageResolutionBelow",
-        "severity": "error",
-        "params": {
-         "ppi": 300
-        }
-       },
-       {
-        "name": "bitmapResolutionBelow",
-        "severity": "warning",
-        "params": {
-         "ppi": 1200
-        }
-       },
-       {
-        "name": "imageResolutionAbove",
-        "severity": "info",
-        "params": {
-         "ppi": 450
-        }
-       },
-       {
-        "name": "encrypted",
-        "severity": "error"
-       },
-       {
-        "name": "damaged",
-        "severity": "error"
-       },
-       {
-        "name": "syntaxProblems",
-        "severity": "error"
-       },
-       {
-        "name": "pdfVersionBelow",
-        "severity": "warning",
-        "params": {
-         "version": 1.6
-        }
-       },
-       {
-        "name": "rgbUsed",
-        "severity": "error"
-       },
-       {
-        "name": "deviceIndependentColour",
-        "severity": "warning"
-       },
-       {
-        "name": "spotColoursMoreThan",
-        "severity": "warning",
-        "params": {
-         "count": 2
-        }
-       },
-       {
-        "name": "spotNamesInconsistent",
-        "severity": "warning"
-       },
-       {
-        "name": "fontsNotEmbedded",
-        "severity": "error"
-       },
-       {
-        "name": "pagesDifferInSize",
-        "severity": "warning"
-       },
-       {
-        "name": "emptyPage",
-        "severity": "warning"
-       }
-      ],
-      "fixes": []
+      ]
      }
     },
     {
@@ -1015,7 +1341,7 @@ export const PROFILES = {
         "severity": "error",
         "all": [
          {
-          "prop": "stroke.width",
+          "check": "content.stroke_width",
           "op": "<=",
           "value": 0.125
          }
@@ -1026,12 +1352,12 @@ export const PROFILES = {
         "severity": "warning",
         "all": [
          {
-          "prop": "stroke.width",
+          "check": "content.stroke_width",
           "op": "<=",
           "value": 0.25
          },
          {
-          "prop": "stroke.width",
+          "check": "content.stroke_width",
           "op": ">",
           "value": 0.125
          }
@@ -1042,12 +1368,12 @@ export const PROFILES = {
         "severity": "error",
         "all": [
          {
-          "prop": "stroke.width",
+          "check": "content.stroke_width",
           "op": "<=",
           "value": 0.25
          },
          {
-          "prop": "paint.inkCount",
+          "check": "color.inks_used",
           "op": ">",
           "value": 1
          }
@@ -1058,12 +1384,12 @@ export const PROFILES = {
         "severity": "warning",
         "all": [
          {
-          "prop": "text.size",
+          "check": "text.size",
           "op": "<",
           "value": 5
          },
          {
-          "prop": "text.size",
+          "check": "text.size",
           "op": ">",
           "value": 0.01
          }
@@ -1074,17 +1400,17 @@ export const PROFILES = {
         "severity": "warning",
         "all": [
          {
-          "prop": "text.size",
+          "check": "text.size",
           "op": "<",
           "value": 8
          },
          {
-          "prop": "text.size",
+          "check": "text.size",
           "op": ">",
           "value": 0.01
          },
          {
-          "prop": "paint.inkCount",
+          "check": "color.inks_used",
           "op": ">",
           "value": 1
          }
@@ -1095,19 +1421,19 @@ export const PROFILES = {
         "severity": "warning",
         "all": [
          {
-          "prop": "text.size",
+          "check": "text.size",
           "op": "<",
           "value": 8
          },
          {
-          "prop": "text.size",
+          "check": "text.size",
           "op": ">",
           "value": 0.01
          },
          {
-          "prop": "paint.isWhite",
+          "check": "color.ink_mix",
           "op": "==",
-          "value": true
+          "value": "none"
          }
         ]
        },
@@ -1116,9 +1442,10 @@ export const PROFILES = {
         "severity": "error",
         "all": [
          {
-          "prop": "fill.totalInk",
+          "check": "color.total_ink",
           "op": ">",
-          "value": 300
+          "value": 300,
+          "paint": "fill"
          }
         ]
        },
@@ -1127,9 +1454,10 @@ export const PROFILES = {
         "severity": "error",
         "all": [
          {
-          "prop": "stroke.totalInk",
+          "check": "color.total_ink",
           "op": ">",
-          "value": 300
+          "value": 300,
+          "paint": "stroke"
          }
         ]
        },
@@ -1138,19 +1466,26 @@ export const PROFILES = {
         "severity": "warning",
         "all": [
          {
-          "prop": "content.isText",
+          "check": "content.kind",
           "op": "==",
-          "value": true
+          "value": "text"
          },
          {
-          "prop": "text.size",
+          "check": "text.size",
           "op": "<",
           "value": 12
          },
          {
-          "prop": "paint.richBlackCmyPercent",
+          "check": "color.ink",
+          "op": ">=",
+          "value": 100,
+          "ink": "black"
+         },
+         {
+          "check": "color.ink",
           "op": ">",
-          "value": 0
+          "value": 0,
+          "ink": "cmy_max"
          }
         ]
        },
@@ -1159,14 +1494,18 @@ export const PROFILES = {
         "severity": "error",
         "all": [
          {
-          "prop": "paint.isWhite",
+          "check": "color.ink_mix",
           "op": "==",
-          "value": true
+          "value": "none"
          },
          {
-          "prop": "fill.overprint",
-          "op": "==",
-          "value": true
+          "check": "color.overprint",
+          "op": "in",
+          "value": [
+           "on",
+           "on_nonzero_mode"
+          ],
+          "paint": "fill"
          }
         ]
        },
@@ -1175,19 +1514,20 @@ export const PROFILES = {
         "severity": "warning",
         "all": [
          {
-          "prop": "content.isText",
+          "check": "content.kind",
           "op": "==",
-          "value": true
+          "value": "text"
          },
          {
-          "prop": "paint.is100Black",
+          "check": "color.ink_mix",
           "op": "==",
-          "value": true
+          "value": "solid_black"
          },
          {
-          "prop": "fill.overprint",
+          "check": "color.overprint",
           "op": "==",
-          "value": false
+          "value": "off",
+          "paint": "fill"
          }
         ]
        },
@@ -1196,8 +1536,8 @@ export const PROFILES = {
         "severity": "info",
         "all": [
          {
-          "prop": "gstate.transparency",
-          "op": "==",
+          "check": "transparency.used",
+          "op": "is",
           "value": true
          }
         ]
@@ -1207,14 +1547,129 @@ export const PROFILES = {
         "severity": "info",
         "all": [
          {
-          "prop": "gstate.blendMode",
+          "check": "transparency.blend_mode",
+          "op": "not_in",
+          "value": [
+           "Normal",
+           "Compatible"
+          ]
+         }
+        ]
+       },
+       {
+        "name": "Image below 300 ppi",
+        "severity": "error",
+        "all": [
+         {
+          "check": "image.resolution",
+          "op": "<",
+          "value": 300,
+          "kind": "colour_or_grey"
+         }
+        ]
+       },
+       {
+        "name": "Bitmap below 1200 ppi",
+        "severity": "warning",
+        "all": [
+         {
+          "check": "image.resolution",
+          "op": "<",
+          "value": 1200,
+          "kind": "bitmap"
+         }
+        ]
+       },
+       {
+        "name": "Image above 450 ppi",
+        "severity": "info",
+        "all": [
+         {
+          "check": "image.resolution",
+          "op": ">",
+          "value": 450,
+          "kind": "colour_or_grey"
+         }
+        ]
+       },
+       {
+        "name": "Document is encrypted",
+        "severity": "error",
+        "all": [
+         {
+          "check": "security.encryption",
           "op": "!=",
-          "value": "Normal"
+          "value": "none"
+         }
+        ]
+       },
+       {
+        "name": "Document is damaged",
+        "severity": "error",
+        "all": [
+         {
+          "check": "document.damaged",
+          "op": "is",
+          "value": true
+         }
+        ]
+       },
+       {
+        "name": "Syntax problem",
+        "severity": "error",
+        "any": [
+         {
+          "all": [
+           {
+            "check": "syntax.content_stream_error",
+            "op": "count",
+            "value": 0,
+            "compare": ">"
+           }
+          ]
          },
          {
-          "prop": "gstate.blendMode",
-          "op": "!=",
-          "value": "Compatible"
+          "all": [
+           {
+            "check": "syntax.xref_layout",
+            "op": "count",
+            "value": 0,
+            "compare": ">"
+           }
+          ]
+         },
+         {
+          "all": [
+           {
+            "check": "syntax.object_layout",
+            "op": "count",
+            "value": 0,
+            "compare": ">"
+           }
+          ]
+         },
+         {
+          "all": [
+           {
+            "check": "syntax.broken_reference",
+            "op": "in",
+            "value": [
+             "object",
+             "external_file"
+            ]
+           }
+          ]
+         }
+        ]
+       },
+       {
+        "name": "PDF version below 1.6",
+        "severity": "warning",
+        "all": [
+         {
+          "check": "document.pdf_version",
+          "op": "<",
+          "value": 1.6
          }
         ]
        },
@@ -1223,9 +1678,74 @@ export const PROFILES = {
         "severity": "error",
         "all": [
          {
-          "prop": "paint.isRegistration",
+          "check": "color.ink_mix",
           "op": "==",
-          "value": true
+          "value": "registration"
+         }
+        ]
+       },
+       {
+        "name": "RGB colour",
+        "severity": "error",
+        "any": [
+         {
+          "all": [
+           {
+            "check": "color.space",
+            "op": "in",
+            "value": [
+             "DeviceRGB",
+             "CalRGB"
+            ]
+           }
+          ]
+         },
+         {
+          "all": [
+           {
+            "check": "color.space",
+            "op": "==",
+            "value": "ICCBased",
+            "icc_components": 3
+           }
+          ]
+         }
+        ]
+       },
+       {
+        "name": "Device-independent colour",
+        "severity": "warning",
+        "all": [
+         {
+          "check": "color.space",
+          "op": "in",
+          "value": [
+           "device_independent"
+          ]
+         }
+        ]
+       },
+       {
+        "name": "More than 0 spot colours on a page",
+        "severity": "error",
+        "all": [
+         {
+          "check": "print.plates",
+          "op": "count",
+          "value": 0,
+          "compare": ">",
+          "kind": "spot"
+         }
+        ]
+       },
+       {
+        "name": "Font not embedded",
+        "severity": "error",
+        "all": [
+         {
+          "check": "font.embedding",
+          "op": "==",
+          "value": "not_embedded"
          }
         ]
        },
@@ -1234,9 +1754,9 @@ export const PROFILES = {
         "severity": "warning",
         "all": [
          {
-          "prop": "font.isType3",
+          "check": "font.type",
           "op": "==",
-          "value": true
+          "value": "type3"
          }
         ]
        },
@@ -1245,9 +1765,9 @@ export const PROFILES = {
         "severity": "error",
         "all": [
          {
-          "prop": "font.notdefUsed",
+          "check": "text.glyph",
           "op": "==",
-          "value": true
+          "value": "notdef"
          }
         ]
        },
@@ -1256,9 +1776,42 @@ export const PROFILES = {
         "severity": "error",
         "all": [
          {
-          "prop": "font.invalid",
-          "op": "==",
+          "check": "font.problem",
+          "op": "includes",
+          "value": "invalid_program"
+         }
+        ]
+       },
+       {
+        "name": "Pages differ in size or orientation",
+        "severity": "warning",
+        "all": [
+         {
+          "check": "document.pages_uniform",
+          "op": "is",
+          "value": false
+         }
+        ]
+       },
+       {
+        "name": "Empty page",
+        "severity": "warning",
+        "all": [
+         {
+          "check": "page.empty",
+          "op": "is",
           "value": true
+         }
+        ]
+       },
+       {
+        "name": "Page scaling in use",
+        "severity": "error",
+        "all": [
+         {
+          "check": "page.user_unit",
+          "op": "!=",
+          "value": 1
          }
         ]
        },
@@ -1267,9 +1820,12 @@ export const PROFILES = {
         "severity": "info",
         "all": [
          {
-          "prop": "content.distanceInsideTrimBox",
+          "check": "content.distance_to_box",
           "op": "<",
-          "value": 8.5
+          "value": 3,
+          "box": "trim",
+          "side": "inside",
+          "unit": "mm"
          }
         ],
         "scope": "trim"
@@ -1279,9 +1835,9 @@ export const PROFILES = {
         "severity": "warning",
         "all": [
          {
-          "prop": "annot.prints",
-          "op": "==",
-          "value": true
+          "check": "annotation.flags",
+          "op": "includes",
+          "value": "print"
          }
         ]
        },
@@ -1290,83 +1846,14 @@ export const PROFILES = {
         "severity": "info",
         "all": [
          {
-          "prop": "layers.onLayer",
-          "op": "==",
-          "value": true
+          "check": "layer.membership",
+          "op": "count",
+          "value": 0,
+          "compare": ">"
          }
         ]
        }
-      ],
-      "builtins": [
-       {
-        "name": "imageResolutionBelow",
-        "severity": "error",
-        "params": {
-         "ppi": 300
-        }
-       },
-       {
-        "name": "bitmapResolutionBelow",
-        "severity": "warning",
-        "params": {
-         "ppi": 1200
-        }
-       },
-       {
-        "name": "imageResolutionAbove",
-        "severity": "info",
-        "params": {
-         "ppi": 450
-        }
-       },
-       {
-        "name": "encrypted",
-        "severity": "error"
-       },
-       {
-        "name": "damaged",
-        "severity": "error"
-       },
-       {
-        "name": "syntaxProblems",
-        "severity": "error"
-       },
-       {
-        "name": "pdfVersionBelow",
-        "severity": "warning",
-        "params": {
-         "version": 1.6
-        }
-       },
-       {
-        "name": "rgbUsed",
-        "severity": "error"
-       },
-       {
-        "name": "deviceIndependentColour",
-        "severity": "warning"
-       },
-       {
-        "name": "spotColoursMoreThan",
-        "severity": "error",
-        "params": {
-         "count": 0
-        }
-       },
-       {
-        "name": "fontsNotEmbedded",
-        "severity": "error"
-       },
-       {
-        "name": "pagesDifferInSize",
-        "severity": "warning"
-       },
-       {
-        "name": "emptyPage",
-        "severity": "warning"
-       }
-      ],
-      "fixes": []
+      ]
      }
     },
     {
@@ -1382,7 +1869,7 @@ export const PROFILES = {
         "severity": "error",
         "all": [
          {
-          "prop": "stroke.width",
+          "check": "content.stroke_width",
           "op": "<=",
           "value": 0.125
          }
@@ -1393,12 +1880,12 @@ export const PROFILES = {
         "severity": "warning",
         "all": [
          {
-          "prop": "stroke.width",
+          "check": "content.stroke_width",
           "op": "<=",
           "value": 0.25
          },
          {
-          "prop": "stroke.width",
+          "check": "content.stroke_width",
           "op": ">",
           "value": 0.125
          }
@@ -1409,12 +1896,12 @@ export const PROFILES = {
         "severity": "error",
         "all": [
          {
-          "prop": "stroke.width",
+          "check": "content.stroke_width",
           "op": "<=",
           "value": 0.25
          },
          {
-          "prop": "paint.inkCount",
+          "check": "color.inks_used",
           "op": ">",
           "value": 1
          }
@@ -1425,12 +1912,12 @@ export const PROFILES = {
         "severity": "warning",
         "all": [
          {
-          "prop": "text.size",
+          "check": "text.size",
           "op": "<",
           "value": 6
          },
          {
-          "prop": "text.size",
+          "check": "text.size",
           "op": ">",
           "value": 0.01
          }
@@ -1441,17 +1928,17 @@ export const PROFILES = {
         "severity": "warning",
         "all": [
          {
-          "prop": "text.size",
+          "check": "text.size",
           "op": "<",
           "value": 9
          },
          {
-          "prop": "text.size",
+          "check": "text.size",
           "op": ">",
           "value": 0.01
          },
          {
-          "prop": "paint.inkCount",
+          "check": "color.inks_used",
           "op": ">",
           "value": 1
          }
@@ -1462,19 +1949,19 @@ export const PROFILES = {
         "severity": "warning",
         "all": [
          {
-          "prop": "text.size",
+          "check": "text.size",
           "op": "<",
           "value": 9
          },
          {
-          "prop": "text.size",
+          "check": "text.size",
           "op": ">",
           "value": 0.01
          },
          {
-          "prop": "paint.isWhite",
+          "check": "color.ink_mix",
           "op": "==",
-          "value": true
+          "value": "none"
          }
         ]
        },
@@ -1483,9 +1970,10 @@ export const PROFILES = {
         "severity": "error",
         "all": [
          {
-          "prop": "fill.totalInk",
+          "check": "color.total_ink",
           "op": ">",
-          "value": 240
+          "value": 240,
+          "paint": "fill"
          }
         ]
        },
@@ -1494,9 +1982,10 @@ export const PROFILES = {
         "severity": "error",
         "all": [
          {
-          "prop": "stroke.totalInk",
+          "check": "color.total_ink",
           "op": ">",
-          "value": 240
+          "value": 240,
+          "paint": "stroke"
          }
         ]
        },
@@ -1505,19 +1994,26 @@ export const PROFILES = {
         "severity": "warning",
         "all": [
          {
-          "prop": "content.isText",
+          "check": "content.kind",
           "op": "==",
-          "value": true
+          "value": "text"
          },
          {
-          "prop": "text.size",
+          "check": "text.size",
           "op": "<",
           "value": 12
          },
          {
-          "prop": "paint.richBlackCmyPercent",
+          "check": "color.ink",
+          "op": ">=",
+          "value": 100,
+          "ink": "black"
+         },
+         {
+          "check": "color.ink",
           "op": ">",
-          "value": 0
+          "value": 0,
+          "ink": "cmy_max"
          }
         ]
        },
@@ -1526,14 +2022,18 @@ export const PROFILES = {
         "severity": "error",
         "all": [
          {
-          "prop": "paint.isWhite",
+          "check": "color.ink_mix",
           "op": "==",
-          "value": true
+          "value": "none"
          },
          {
-          "prop": "fill.overprint",
-          "op": "==",
-          "value": true
+          "check": "color.overprint",
+          "op": "in",
+          "value": [
+           "on",
+           "on_nonzero_mode"
+          ],
+          "paint": "fill"
          }
         ]
        },
@@ -1542,19 +2042,20 @@ export const PROFILES = {
         "severity": "warning",
         "all": [
          {
-          "prop": "content.isText",
+          "check": "content.kind",
           "op": "==",
-          "value": true
+          "value": "text"
          },
          {
-          "prop": "paint.is100Black",
+          "check": "color.ink_mix",
           "op": "==",
-          "value": true
+          "value": "solid_black"
          },
          {
-          "prop": "fill.overprint",
+          "check": "color.overprint",
           "op": "==",
-          "value": false
+          "value": "off",
+          "paint": "fill"
          }
         ]
        },
@@ -1563,8 +2064,8 @@ export const PROFILES = {
         "severity": "info",
         "all": [
          {
-          "prop": "gstate.transparency",
-          "op": "==",
+          "check": "transparency.used",
+          "op": "is",
           "value": true
          }
         ]
@@ -1574,14 +2075,129 @@ export const PROFILES = {
         "severity": "info",
         "all": [
          {
-          "prop": "gstate.blendMode",
+          "check": "transparency.blend_mode",
+          "op": "not_in",
+          "value": [
+           "Normal",
+           "Compatible"
+          ]
+         }
+        ]
+       },
+       {
+        "name": "Image below 200 ppi",
+        "severity": "error",
+        "all": [
+         {
+          "check": "image.resolution",
+          "op": "<",
+          "value": 200,
+          "kind": "colour_or_grey"
+         }
+        ]
+       },
+       {
+        "name": "Bitmap below 600 ppi",
+        "severity": "warning",
+        "all": [
+         {
+          "check": "image.resolution",
+          "op": "<",
+          "value": 600,
+          "kind": "bitmap"
+         }
+        ]
+       },
+       {
+        "name": "Image above 300 ppi",
+        "severity": "info",
+        "all": [
+         {
+          "check": "image.resolution",
+          "op": ">",
+          "value": 300,
+          "kind": "colour_or_grey"
+         }
+        ]
+       },
+       {
+        "name": "Document is encrypted",
+        "severity": "error",
+        "all": [
+         {
+          "check": "security.encryption",
           "op": "!=",
-          "value": "Normal"
+          "value": "none"
+         }
+        ]
+       },
+       {
+        "name": "Document is damaged",
+        "severity": "error",
+        "all": [
+         {
+          "check": "document.damaged",
+          "op": "is",
+          "value": true
+         }
+        ]
+       },
+       {
+        "name": "Syntax problem",
+        "severity": "error",
+        "any": [
+         {
+          "all": [
+           {
+            "check": "syntax.content_stream_error",
+            "op": "count",
+            "value": 0,
+            "compare": ">"
+           }
+          ]
          },
          {
-          "prop": "gstate.blendMode",
-          "op": "!=",
-          "value": "Compatible"
+          "all": [
+           {
+            "check": "syntax.xref_layout",
+            "op": "count",
+            "value": 0,
+            "compare": ">"
+           }
+          ]
+         },
+         {
+          "all": [
+           {
+            "check": "syntax.object_layout",
+            "op": "count",
+            "value": 0,
+            "compare": ">"
+           }
+          ]
+         },
+         {
+          "all": [
+           {
+            "check": "syntax.broken_reference",
+            "op": "in",
+            "value": [
+             "object",
+             "external_file"
+            ]
+           }
+          ]
+         }
+        ]
+       },
+       {
+        "name": "PDF version below 1.6",
+        "severity": "warning",
+        "all": [
+         {
+          "check": "document.pdf_version",
+          "op": "<",
+          "value": 1.6
          }
         ]
        },
@@ -1590,9 +2206,74 @@ export const PROFILES = {
         "severity": "error",
         "all": [
          {
-          "prop": "paint.isRegistration",
+          "check": "color.ink_mix",
           "op": "==",
-          "value": true
+          "value": "registration"
+         }
+        ]
+       },
+       {
+        "name": "RGB colour",
+        "severity": "error",
+        "any": [
+         {
+          "all": [
+           {
+            "check": "color.space",
+            "op": "in",
+            "value": [
+             "DeviceRGB",
+             "CalRGB"
+            ]
+           }
+          ]
+         },
+         {
+          "all": [
+           {
+            "check": "color.space",
+            "op": "==",
+            "value": "ICCBased",
+            "icc_components": 3
+           }
+          ]
+         }
+        ]
+       },
+       {
+        "name": "Device-independent colour",
+        "severity": "warning",
+        "all": [
+         {
+          "check": "color.space",
+          "op": "in",
+          "value": [
+           "device_independent"
+          ]
+         }
+        ]
+       },
+       {
+        "name": "More than 0 spot colours on a page",
+        "severity": "error",
+        "all": [
+         {
+          "check": "print.plates",
+          "op": "count",
+          "value": 0,
+          "compare": ">",
+          "kind": "spot"
+         }
+        ]
+       },
+       {
+        "name": "Font not embedded",
+        "severity": "error",
+        "all": [
+         {
+          "check": "font.embedding",
+          "op": "==",
+          "value": "not_embedded"
          }
         ]
        },
@@ -1601,9 +2282,9 @@ export const PROFILES = {
         "severity": "warning",
         "all": [
          {
-          "prop": "font.isType3",
+          "check": "font.type",
           "op": "==",
-          "value": true
+          "value": "type3"
          }
         ]
        },
@@ -1612,9 +2293,9 @@ export const PROFILES = {
         "severity": "error",
         "all": [
          {
-          "prop": "font.notdefUsed",
+          "check": "text.glyph",
           "op": "==",
-          "value": true
+          "value": "notdef"
          }
         ]
        },
@@ -1623,9 +2304,42 @@ export const PROFILES = {
         "severity": "error",
         "all": [
          {
-          "prop": "font.invalid",
-          "op": "==",
+          "check": "font.problem",
+          "op": "includes",
+          "value": "invalid_program"
+         }
+        ]
+       },
+       {
+        "name": "Pages differ in size or orientation",
+        "severity": "warning",
+        "all": [
+         {
+          "check": "document.pages_uniform",
+          "op": "is",
+          "value": false
+         }
+        ]
+       },
+       {
+        "name": "Empty page",
+        "severity": "warning",
+        "all": [
+         {
+          "check": "page.empty",
+          "op": "is",
           "value": true
+         }
+        ]
+       },
+       {
+        "name": "Page scaling in use",
+        "severity": "error",
+        "all": [
+         {
+          "check": "page.user_unit",
+          "op": "!=",
+          "value": 1
          }
         ]
        },
@@ -1634,9 +2348,12 @@ export const PROFILES = {
         "severity": "info",
         "all": [
          {
-          "prop": "content.distanceInsideTrimBox",
+          "check": "content.distance_to_box",
           "op": "<",
-          "value": 8.5
+          "value": 3,
+          "box": "trim",
+          "side": "inside",
+          "unit": "mm"
          }
         ],
         "scope": "trim"
@@ -1646,9 +2363,9 @@ export const PROFILES = {
         "severity": "warning",
         "all": [
          {
-          "prop": "annot.prints",
-          "op": "==",
-          "value": true
+          "check": "annotation.flags",
+          "op": "includes",
+          "value": "print"
          }
         ]
        },
@@ -1657,83 +2374,14 @@ export const PROFILES = {
         "severity": "info",
         "all": [
          {
-          "prop": "layers.onLayer",
-          "op": "==",
-          "value": true
+          "check": "layer.membership",
+          "op": "count",
+          "value": 0,
+          "compare": ">"
          }
         ]
        }
-      ],
-      "builtins": [
-       {
-        "name": "imageResolutionBelow",
-        "severity": "error",
-        "params": {
-         "ppi": 200
-        }
-       },
-       {
-        "name": "bitmapResolutionBelow",
-        "severity": "warning",
-        "params": {
-         "ppi": 600
-        }
-       },
-       {
-        "name": "imageResolutionAbove",
-        "severity": "info",
-        "params": {
-         "ppi": 300
-        }
-       },
-       {
-        "name": "encrypted",
-        "severity": "error"
-       },
-       {
-        "name": "damaged",
-        "severity": "error"
-       },
-       {
-        "name": "syntaxProblems",
-        "severity": "error"
-       },
-       {
-        "name": "pdfVersionBelow",
-        "severity": "warning",
-        "params": {
-         "version": 1.6
-        }
-       },
-       {
-        "name": "rgbUsed",
-        "severity": "error"
-       },
-       {
-        "name": "deviceIndependentColour",
-        "severity": "warning"
-       },
-       {
-        "name": "spotColoursMoreThan",
-        "severity": "error",
-        "params": {
-         "count": 0
-        }
-       },
-       {
-        "name": "fontsNotEmbedded",
-        "severity": "error"
-       },
-       {
-        "name": "pagesDifferInSize",
-        "severity": "warning"
-       },
-       {
-        "name": "emptyPage",
-        "severity": "warning"
-       }
-      ],
-      "fixes": []
+      ]
      }
     },
     {
@@ -1749,7 +2397,7 @@ export const PROFILES = {
         "severity": "error",
         "all": [
          {
-          "prop": "stroke.width",
+          "check": "content.stroke_width",
           "op": "<=",
           "value": 0.125
          }
@@ -1760,12 +2408,12 @@ export const PROFILES = {
         "severity": "warning",
         "all": [
          {
-          "prop": "stroke.width",
+          "check": "content.stroke_width",
           "op": "<=",
           "value": 0.25
          },
          {
-          "prop": "stroke.width",
+          "check": "content.stroke_width",
           "op": ">",
           "value": 0.125
          }
@@ -1776,12 +2424,12 @@ export const PROFILES = {
         "severity": "error",
         "all": [
          {
-          "prop": "stroke.width",
+          "check": "content.stroke_width",
           "op": "<=",
           "value": 0.25
          },
          {
-          "prop": "paint.inkCount",
+          "check": "color.inks_used",
           "op": ">",
           "value": 1
          }
@@ -1792,12 +2440,12 @@ export const PROFILES = {
         "severity": "warning",
         "all": [
          {
-          "prop": "text.size",
+          "check": "text.size",
           "op": "<",
           "value": 5
          },
          {
-          "prop": "text.size",
+          "check": "text.size",
           "op": ">",
           "value": 0.01
          }
@@ -1808,17 +2456,17 @@ export const PROFILES = {
         "severity": "warning",
         "all": [
          {
-          "prop": "text.size",
+          "check": "text.size",
           "op": "<",
           "value": 8
          },
          {
-          "prop": "text.size",
+          "check": "text.size",
           "op": ">",
           "value": 0.01
          },
          {
-          "prop": "paint.inkCount",
+          "check": "color.inks_used",
           "op": ">",
           "value": 1
          }
@@ -1829,19 +2477,19 @@ export const PROFILES = {
         "severity": "warning",
         "all": [
          {
-          "prop": "text.size",
+          "check": "text.size",
           "op": "<",
           "value": 8
          },
          {
-          "prop": "text.size",
+          "check": "text.size",
           "op": ">",
           "value": 0.01
          },
          {
-          "prop": "paint.isWhite",
+          "check": "color.ink_mix",
           "op": "==",
-          "value": true
+          "value": "none"
          }
         ]
        },
@@ -1850,9 +2498,10 @@ export const PROFILES = {
         "severity": "error",
         "all": [
          {
-          "prop": "fill.totalInk",
+          "check": "color.total_ink",
           "op": ">",
-          "value": 320
+          "value": 320,
+          "paint": "fill"
          }
         ]
        },
@@ -1861,9 +2510,10 @@ export const PROFILES = {
         "severity": "error",
         "all": [
          {
-          "prop": "stroke.totalInk",
+          "check": "color.total_ink",
           "op": ">",
-          "value": 320
+          "value": 320,
+          "paint": "stroke"
          }
         ]
        },
@@ -1872,19 +2522,26 @@ export const PROFILES = {
         "severity": "warning",
         "all": [
          {
-          "prop": "content.isText",
+          "check": "content.kind",
           "op": "==",
-          "value": true
+          "value": "text"
          },
          {
-          "prop": "text.size",
+          "check": "text.size",
           "op": "<",
           "value": 12
          },
          {
-          "prop": "paint.richBlackCmyPercent",
+          "check": "color.ink",
+          "op": ">=",
+          "value": 100,
+          "ink": "black"
+         },
+         {
+          "check": "color.ink",
           "op": ">",
-          "value": 0
+          "value": 0,
+          "ink": "cmy_max"
          }
         ]
        },
@@ -1893,14 +2550,18 @@ export const PROFILES = {
         "severity": "error",
         "all": [
          {
-          "prop": "paint.isWhite",
+          "check": "color.ink_mix",
           "op": "==",
-          "value": true
+          "value": "none"
          },
          {
-          "prop": "fill.overprint",
-          "op": "==",
-          "value": true
+          "check": "color.overprint",
+          "op": "in",
+          "value": [
+           "on",
+           "on_nonzero_mode"
+          ],
+          "paint": "fill"
          }
         ]
        },
@@ -1909,19 +2570,20 @@ export const PROFILES = {
         "severity": "warning",
         "all": [
          {
-          "prop": "content.isText",
+          "check": "content.kind",
           "op": "==",
-          "value": true
+          "value": "text"
          },
          {
-          "prop": "paint.is100Black",
+          "check": "color.ink_mix",
           "op": "==",
-          "value": true
+          "value": "solid_black"
          },
          {
-          "prop": "fill.overprint",
+          "check": "color.overprint",
           "op": "==",
-          "value": false
+          "value": "off",
+          "paint": "fill"
          }
         ]
        },
@@ -1930,8 +2592,8 @@ export const PROFILES = {
         "severity": "info",
         "all": [
          {
-          "prop": "gstate.transparency",
-          "op": "==",
+          "check": "transparency.used",
+          "op": "is",
           "value": true
          }
         ]
@@ -1941,14 +2603,129 @@ export const PROFILES = {
         "severity": "info",
         "all": [
          {
-          "prop": "gstate.blendMode",
+          "check": "transparency.blend_mode",
+          "op": "not_in",
+          "value": [
+           "Normal",
+           "Compatible"
+          ]
+         }
+        ]
+       },
+       {
+        "name": "Image below 300 ppi",
+        "severity": "error",
+        "all": [
+         {
+          "check": "image.resolution",
+          "op": "<",
+          "value": 300,
+          "kind": "colour_or_grey"
+         }
+        ]
+       },
+       {
+        "name": "Bitmap below 1200 ppi",
+        "severity": "warning",
+        "all": [
+         {
+          "check": "image.resolution",
+          "op": "<",
+          "value": 1200,
+          "kind": "bitmap"
+         }
+        ]
+       },
+       {
+        "name": "Image above 450 ppi",
+        "severity": "info",
+        "all": [
+         {
+          "check": "image.resolution",
+          "op": ">",
+          "value": 450,
+          "kind": "colour_or_grey"
+         }
+        ]
+       },
+       {
+        "name": "Document is encrypted",
+        "severity": "error",
+        "all": [
+         {
+          "check": "security.encryption",
           "op": "!=",
-          "value": "Normal"
+          "value": "none"
+         }
+        ]
+       },
+       {
+        "name": "Document is damaged",
+        "severity": "error",
+        "all": [
+         {
+          "check": "document.damaged",
+          "op": "is",
+          "value": true
+         }
+        ]
+       },
+       {
+        "name": "Syntax problem",
+        "severity": "error",
+        "any": [
+         {
+          "all": [
+           {
+            "check": "syntax.content_stream_error",
+            "op": "count",
+            "value": 0,
+            "compare": ">"
+           }
+          ]
          },
          {
-          "prop": "gstate.blendMode",
-          "op": "!=",
-          "value": "Compatible"
+          "all": [
+           {
+            "check": "syntax.xref_layout",
+            "op": "count",
+            "value": 0,
+            "compare": ">"
+           }
+          ]
+         },
+         {
+          "all": [
+           {
+            "check": "syntax.object_layout",
+            "op": "count",
+            "value": 0,
+            "compare": ">"
+           }
+          ]
+         },
+         {
+          "all": [
+           {
+            "check": "syntax.broken_reference",
+            "op": "in",
+            "value": [
+             "object",
+             "external_file"
+            ]
+           }
+          ]
+         }
+        ]
+       },
+       {
+        "name": "PDF version below 1.6",
+        "severity": "warning",
+        "all": [
+         {
+          "check": "document.pdf_version",
+          "op": "<",
+          "value": 1.6
          }
         ]
        },
@@ -1957,9 +2734,85 @@ export const PROFILES = {
         "severity": "error",
         "all": [
          {
-          "prop": "paint.isRegistration",
+          "check": "color.ink_mix",
           "op": "==",
-          "value": true
+          "value": "registration"
+         }
+        ]
+       },
+       {
+        "name": "RGB colour",
+        "severity": "error",
+        "any": [
+         {
+          "all": [
+           {
+            "check": "color.space",
+            "op": "in",
+            "value": [
+             "DeviceRGB",
+             "CalRGB"
+            ]
+           }
+          ]
+         },
+         {
+          "all": [
+           {
+            "check": "color.space",
+            "op": "==",
+            "value": "ICCBased",
+            "icc_components": 3
+           }
+          ]
+         }
+        ]
+       },
+       {
+        "name": "Device-independent colour",
+        "severity": "warning",
+        "all": [
+         {
+          "check": "color.space",
+          "op": "in",
+          "value": [
+           "device_independent"
+          ]
+         }
+        ]
+       },
+       {
+        "name": "More than 1 spot colour on a page",
+        "severity": "warning",
+        "all": [
+         {
+          "check": "print.plates",
+          "op": "count",
+          "value": 1,
+          "compare": ">",
+          "kind": "spot"
+         }
+        ]
+       },
+       {
+        "name": "Spot colour names that differ only in spelling",
+        "severity": "warning",
+        "all": [
+         {
+          "check": "print.spot_naming",
+          "op": "includes",
+          "value": "similar_names"
+         }
+        ]
+       },
+       {
+        "name": "Font not embedded",
+        "severity": "error",
+        "all": [
+         {
+          "check": "font.embedding",
+          "op": "==",
+          "value": "not_embedded"
          }
         ]
        },
@@ -1968,9 +2821,9 @@ export const PROFILES = {
         "severity": "warning",
         "all": [
          {
-          "prop": "font.isType3",
+          "check": "font.type",
           "op": "==",
-          "value": true
+          "value": "type3"
          }
         ]
        },
@@ -1979,9 +2832,9 @@ export const PROFILES = {
         "severity": "error",
         "all": [
          {
-          "prop": "font.notdefUsed",
+          "check": "text.glyph",
           "op": "==",
-          "value": true
+          "value": "notdef"
          }
         ]
        },
@@ -1990,9 +2843,42 @@ export const PROFILES = {
         "severity": "error",
         "all": [
          {
-          "prop": "font.invalid",
-          "op": "==",
+          "check": "font.problem",
+          "op": "includes",
+          "value": "invalid_program"
+         }
+        ]
+       },
+       {
+        "name": "Pages differ in size or orientation",
+        "severity": "warning",
+        "all": [
+         {
+          "check": "document.pages_uniform",
+          "op": "is",
+          "value": false
+         }
+        ]
+       },
+       {
+        "name": "Empty page",
+        "severity": "warning",
+        "all": [
+         {
+          "check": "page.empty",
+          "op": "is",
           "value": true
+         }
+        ]
+       },
+       {
+        "name": "Page scaling in use",
+        "severity": "error",
+        "all": [
+         {
+          "check": "page.user_unit",
+          "op": "!=",
+          "value": 1
          }
         ]
        },
@@ -2001,9 +2887,12 @@ export const PROFILES = {
         "severity": "info",
         "all": [
          {
-          "prop": "content.distanceInsideTrimBox",
+          "check": "content.distance_to_box",
           "op": "<",
-          "value": 8.5
+          "value": 3,
+          "box": "trim",
+          "side": "inside",
+          "unit": "mm"
          }
         ],
         "scope": "trim"
@@ -2013,9 +2902,9 @@ export const PROFILES = {
         "severity": "warning",
         "all": [
          {
-          "prop": "annot.prints",
-          "op": "==",
-          "value": true
+          "check": "annotation.flags",
+          "op": "includes",
+          "value": "print"
          }
         ]
        },
@@ -2024,87 +2913,14 @@ export const PROFILES = {
         "severity": "info",
         "all": [
          {
-          "prop": "layers.onLayer",
-          "op": "==",
-          "value": true
+          "check": "layer.membership",
+          "op": "count",
+          "value": 0,
+          "compare": ">"
          }
         ]
        }
-      ],
-      "builtins": [
-       {
-        "name": "imageResolutionBelow",
-        "severity": "error",
-        "params": {
-         "ppi": 300
-        }
-       },
-       {
-        "name": "bitmapResolutionBelow",
-        "severity": "warning",
-        "params": {
-         "ppi": 1200
-        }
-       },
-       {
-        "name": "imageResolutionAbove",
-        "severity": "info",
-        "params": {
-         "ppi": 450
-        }
-       },
-       {
-        "name": "encrypted",
-        "severity": "error"
-       },
-       {
-        "name": "damaged",
-        "severity": "error"
-       },
-       {
-        "name": "syntaxProblems",
-        "severity": "error"
-       },
-       {
-        "name": "pdfVersionBelow",
-        "severity": "warning",
-        "params": {
-         "version": 1.6
-        }
-       },
-       {
-        "name": "rgbUsed",
-        "severity": "error"
-       },
-       {
-        "name": "deviceIndependentColour",
-        "severity": "warning"
-       },
-       {
-        "name": "spotColoursMoreThan",
-        "severity": "warning",
-        "params": {
-         "count": 1
-        }
-       },
-       {
-        "name": "spotNamesInconsistent",
-        "severity": "warning"
-       },
-       {
-        "name": "fontsNotEmbedded",
-        "severity": "error"
-       },
-       {
-        "name": "pagesDifferInSize",
-        "severity": "warning"
-       },
-       {
-        "name": "emptyPage",
-        "severity": "warning"
-       }
-      ],
-      "fixes": []
+      ]
      }
     },
     {
@@ -2120,7 +2936,7 @@ export const PROFILES = {
         "severity": "error",
         "all": [
          {
-          "prop": "stroke.width",
+          "check": "content.stroke_width",
           "op": "<=",
           "value": 0.25
          }
@@ -2131,12 +2947,12 @@ export const PROFILES = {
         "severity": "warning",
         "all": [
          {
-          "prop": "stroke.width",
+          "check": "content.stroke_width",
           "op": "<=",
           "value": 0.5
          },
          {
-          "prop": "stroke.width",
+          "check": "content.stroke_width",
           "op": ">",
           "value": 0.25
          }
@@ -2147,12 +2963,12 @@ export const PROFILES = {
         "severity": "error",
         "all": [
          {
-          "prop": "stroke.width",
+          "check": "content.stroke_width",
           "op": "<=",
           "value": 0.5
          },
          {
-          "prop": "paint.inkCount",
+          "check": "color.inks_used",
           "op": ">",
           "value": 1
          }
@@ -2163,12 +2979,12 @@ export const PROFILES = {
         "severity": "warning",
         "all": [
          {
-          "prop": "text.size",
+          "check": "text.size",
           "op": "<",
           "value": 8
          },
          {
-          "prop": "text.size",
+          "check": "text.size",
           "op": ">",
           "value": 0.01
          }
@@ -2179,17 +2995,17 @@ export const PROFILES = {
         "severity": "warning",
         "all": [
          {
-          "prop": "text.size",
+          "check": "text.size",
           "op": "<",
           "value": 12
          },
          {
-          "prop": "text.size",
+          "check": "text.size",
           "op": ">",
           "value": 0.01
          },
          {
-          "prop": "paint.inkCount",
+          "check": "color.inks_used",
           "op": ">",
           "value": 1
          }
@@ -2200,19 +3016,19 @@ export const PROFILES = {
         "severity": "warning",
         "all": [
          {
-          "prop": "text.size",
+          "check": "text.size",
           "op": "<",
           "value": 12
          },
          {
-          "prop": "text.size",
+          "check": "text.size",
           "op": ">",
           "value": 0.01
          },
          {
-          "prop": "paint.isWhite",
+          "check": "color.ink_mix",
           "op": "==",
-          "value": true
+          "value": "none"
          }
         ]
        },
@@ -2221,9 +3037,10 @@ export const PROFILES = {
         "severity": "error",
         "all": [
          {
-          "prop": "fill.totalInk",
+          "check": "color.total_ink",
           "op": ">",
-          "value": 300
+          "value": 300,
+          "paint": "fill"
          }
         ]
        },
@@ -2232,9 +3049,10 @@ export const PROFILES = {
         "severity": "error",
         "all": [
          {
-          "prop": "stroke.totalInk",
+          "check": "color.total_ink",
           "op": ">",
-          "value": 300
+          "value": 300,
+          "paint": "stroke"
          }
         ]
        },
@@ -2243,19 +3061,26 @@ export const PROFILES = {
         "severity": "warning",
         "all": [
          {
-          "prop": "content.isText",
+          "check": "content.kind",
           "op": "==",
-          "value": true
+          "value": "text"
          },
          {
-          "prop": "text.size",
+          "check": "text.size",
           "op": "<",
           "value": 12
          },
          {
-          "prop": "paint.richBlackCmyPercent",
+          "check": "color.ink",
+          "op": ">=",
+          "value": 100,
+          "ink": "black"
+         },
+         {
+          "check": "color.ink",
           "op": ">",
-          "value": 0
+          "value": 0,
+          "ink": "cmy_max"
          }
         ]
        },
@@ -2264,14 +3089,18 @@ export const PROFILES = {
         "severity": "error",
         "all": [
          {
-          "prop": "paint.isWhite",
+          "check": "color.ink_mix",
           "op": "==",
-          "value": true
+          "value": "none"
          },
          {
-          "prop": "fill.overprint",
-          "op": "==",
-          "value": true
+          "check": "color.overprint",
+          "op": "in",
+          "value": [
+           "on",
+           "on_nonzero_mode"
+          ],
+          "paint": "fill"
          }
         ]
        },
@@ -2280,19 +3109,20 @@ export const PROFILES = {
         "severity": "warning",
         "all": [
          {
-          "prop": "content.isText",
+          "check": "content.kind",
           "op": "==",
-          "value": true
+          "value": "text"
          },
          {
-          "prop": "paint.is100Black",
+          "check": "color.ink_mix",
           "op": "==",
-          "value": true
+          "value": "solid_black"
          },
          {
-          "prop": "fill.overprint",
+          "check": "color.overprint",
           "op": "==",
-          "value": false
+          "value": "off",
+          "paint": "fill"
          }
         ]
        },
@@ -2301,8 +3131,8 @@ export const PROFILES = {
         "severity": "info",
         "all": [
          {
-          "prop": "gstate.transparency",
-          "op": "==",
+          "check": "transparency.used",
+          "op": "is",
           "value": true
          }
         ]
@@ -2312,14 +3142,129 @@ export const PROFILES = {
         "severity": "info",
         "all": [
          {
-          "prop": "gstate.blendMode",
+          "check": "transparency.blend_mode",
+          "op": "not_in",
+          "value": [
+           "Normal",
+           "Compatible"
+          ]
+         }
+        ]
+       },
+       {
+        "name": "Image below 150 ppi",
+        "severity": "error",
+        "all": [
+         {
+          "check": "image.resolution",
+          "op": "<",
+          "value": 150,
+          "kind": "colour_or_grey"
+         }
+        ]
+       },
+       {
+        "name": "Bitmap below 600 ppi",
+        "severity": "warning",
+        "all": [
+         {
+          "check": "image.resolution",
+          "op": "<",
+          "value": 600,
+          "kind": "bitmap"
+         }
+        ]
+       },
+       {
+        "name": "Image above 300 ppi",
+        "severity": "info",
+        "all": [
+         {
+          "check": "image.resolution",
+          "op": ">",
+          "value": 300,
+          "kind": "colour_or_grey"
+         }
+        ]
+       },
+       {
+        "name": "Document is encrypted",
+        "severity": "error",
+        "all": [
+         {
+          "check": "security.encryption",
           "op": "!=",
-          "value": "Normal"
+          "value": "none"
+         }
+        ]
+       },
+       {
+        "name": "Document is damaged",
+        "severity": "error",
+        "all": [
+         {
+          "check": "document.damaged",
+          "op": "is",
+          "value": true
+         }
+        ]
+       },
+       {
+        "name": "Syntax problem",
+        "severity": "error",
+        "any": [
+         {
+          "all": [
+           {
+            "check": "syntax.content_stream_error",
+            "op": "count",
+            "value": 0,
+            "compare": ">"
+           }
+          ]
          },
          {
-          "prop": "gstate.blendMode",
-          "op": "!=",
-          "value": "Compatible"
+          "all": [
+           {
+            "check": "syntax.xref_layout",
+            "op": "count",
+            "value": 0,
+            "compare": ">"
+           }
+          ]
+         },
+         {
+          "all": [
+           {
+            "check": "syntax.object_layout",
+            "op": "count",
+            "value": 0,
+            "compare": ">"
+           }
+          ]
+         },
+         {
+          "all": [
+           {
+            "check": "syntax.broken_reference",
+            "op": "in",
+            "value": [
+             "object",
+             "external_file"
+            ]
+           }
+          ]
+         }
+        ]
+       },
+       {
+        "name": "PDF version below 1.6",
+        "severity": "warning",
+        "all": [
+         {
+          "check": "document.pdf_version",
+          "op": "<",
+          "value": 1.6
          }
         ]
        },
@@ -2328,9 +3273,85 @@ export const PROFILES = {
         "severity": "error",
         "all": [
          {
-          "prop": "paint.isRegistration",
+          "check": "color.ink_mix",
           "op": "==",
-          "value": true
+          "value": "registration"
+         }
+        ]
+       },
+       {
+        "name": "RGB colour",
+        "severity": "error",
+        "any": [
+         {
+          "all": [
+           {
+            "check": "color.space",
+            "op": "in",
+            "value": [
+             "DeviceRGB",
+             "CalRGB"
+            ]
+           }
+          ]
+         },
+         {
+          "all": [
+           {
+            "check": "color.space",
+            "op": "==",
+            "value": "ICCBased",
+            "icc_components": 3
+           }
+          ]
+         }
+        ]
+       },
+       {
+        "name": "Device-independent colour",
+        "severity": "warning",
+        "all": [
+         {
+          "check": "color.space",
+          "op": "in",
+          "value": [
+           "device_independent"
+          ]
+         }
+        ]
+       },
+       {
+        "name": "More than 2 spot colours on a page",
+        "severity": "warning",
+        "all": [
+         {
+          "check": "print.plates",
+          "op": "count",
+          "value": 2,
+          "compare": ">",
+          "kind": "spot"
+         }
+        ]
+       },
+       {
+        "name": "Spot colour names that differ only in spelling",
+        "severity": "warning",
+        "all": [
+         {
+          "check": "print.spot_naming",
+          "op": "includes",
+          "value": "similar_names"
+         }
+        ]
+       },
+       {
+        "name": "Font not embedded",
+        "severity": "error",
+        "all": [
+         {
+          "check": "font.embedding",
+          "op": "==",
+          "value": "not_embedded"
          }
         ]
        },
@@ -2339,9 +3360,9 @@ export const PROFILES = {
         "severity": "warning",
         "all": [
          {
-          "prop": "font.isType3",
+          "check": "font.type",
           "op": "==",
-          "value": true
+          "value": "type3"
          }
         ]
        },
@@ -2350,9 +3371,9 @@ export const PROFILES = {
         "severity": "error",
         "all": [
          {
-          "prop": "font.notdefUsed",
+          "check": "text.glyph",
           "op": "==",
-          "value": true
+          "value": "notdef"
          }
         ]
        },
@@ -2361,9 +3382,42 @@ export const PROFILES = {
         "severity": "error",
         "all": [
          {
-          "prop": "font.invalid",
-          "op": "==",
+          "check": "font.problem",
+          "op": "includes",
+          "value": "invalid_program"
+         }
+        ]
+       },
+       {
+        "name": "Pages differ in size or orientation",
+        "severity": "warning",
+        "all": [
+         {
+          "check": "document.pages_uniform",
+          "op": "is",
+          "value": false
+         }
+        ]
+       },
+       {
+        "name": "Empty page",
+        "severity": "warning",
+        "all": [
+         {
+          "check": "page.empty",
+          "op": "is",
           "value": true
+         }
+        ]
+       },
+       {
+        "name": "Page scaling in use",
+        "severity": "error",
+        "all": [
+         {
+          "check": "page.user_unit",
+          "op": "!=",
+          "value": 1
          }
         ]
        },
@@ -2372,9 +3426,12 @@ export const PROFILES = {
         "severity": "info",
         "all": [
          {
-          "prop": "content.distanceInsideTrimBox",
+          "check": "content.distance_to_box",
           "op": "<",
-          "value": 8.5
+          "value": 3,
+          "box": "trim",
+          "side": "inside",
+          "unit": "mm"
          }
         ],
         "scope": "trim"
@@ -2384,9 +3441,9 @@ export const PROFILES = {
         "severity": "warning",
         "all": [
          {
-          "prop": "annot.prints",
-          "op": "==",
-          "value": true
+          "check": "annotation.flags",
+          "op": "includes",
+          "value": "print"
          }
         ]
        },
@@ -2395,87 +3452,14 @@ export const PROFILES = {
         "severity": "info",
         "all": [
          {
-          "prop": "layers.onLayer",
-          "op": "==",
-          "value": true
+          "check": "layer.membership",
+          "op": "count",
+          "value": 0,
+          "compare": ">"
          }
         ]
        }
-      ],
-      "builtins": [
-       {
-        "name": "imageResolutionBelow",
-        "severity": "error",
-        "params": {
-         "ppi": 150
-        }
-       },
-       {
-        "name": "bitmapResolutionBelow",
-        "severity": "warning",
-        "params": {
-         "ppi": 600
-        }
-       },
-       {
-        "name": "imageResolutionAbove",
-        "severity": "info",
-        "params": {
-         "ppi": 300
-        }
-       },
-       {
-        "name": "encrypted",
-        "severity": "error"
-       },
-       {
-        "name": "damaged",
-        "severity": "error"
-       },
-       {
-        "name": "syntaxProblems",
-        "severity": "error"
-       },
-       {
-        "name": "pdfVersionBelow",
-        "severity": "warning",
-        "params": {
-         "version": 1.6
-        }
-       },
-       {
-        "name": "rgbUsed",
-        "severity": "error"
-       },
-       {
-        "name": "deviceIndependentColour",
-        "severity": "warning"
-       },
-       {
-        "name": "spotColoursMoreThan",
-        "severity": "warning",
-        "params": {
-         "count": 2
-        }
-       },
-       {
-        "name": "spotNamesInconsistent",
-        "severity": "warning"
-       },
-       {
-        "name": "fontsNotEmbedded",
-        "severity": "error"
-       },
-       {
-        "name": "pagesDifferInSize",
-        "severity": "warning"
-       },
-       {
-        "name": "emptyPage",
-        "severity": "warning"
-       }
-      ],
-      "fixes": []
+      ]
      }
     },
     {
@@ -2491,7 +3475,7 @@ export const PROFILES = {
         "severity": "error",
         "all": [
          {
-          "prop": "stroke.width",
+          "check": "content.stroke_width",
           "op": "<=",
           "value": 0.125
          }
@@ -2502,12 +3486,12 @@ export const PROFILES = {
         "severity": "warning",
         "all": [
          {
-          "prop": "stroke.width",
+          "check": "content.stroke_width",
           "op": "<=",
           "value": 0.25
          },
          {
-          "prop": "stroke.width",
+          "check": "content.stroke_width",
           "op": ">",
           "value": 0.125
          }
@@ -2518,12 +3502,12 @@ export const PROFILES = {
         "severity": "error",
         "all": [
          {
-          "prop": "stroke.width",
+          "check": "content.stroke_width",
           "op": "<=",
           "value": 0.25
          },
          {
-          "prop": "paint.inkCount",
+          "check": "color.inks_used",
           "op": ">",
           "value": 1
          }
@@ -2534,12 +3518,12 @@ export const PROFILES = {
         "severity": "warning",
         "all": [
          {
-          "prop": "text.size",
+          "check": "text.size",
           "op": "<",
           "value": 5
          },
          {
-          "prop": "text.size",
+          "check": "text.size",
           "op": ">",
           "value": 0.01
          }
@@ -2550,17 +3534,17 @@ export const PROFILES = {
         "severity": "warning",
         "all": [
          {
-          "prop": "text.size",
+          "check": "text.size",
           "op": "<",
           "value": 8
          },
          {
-          "prop": "text.size",
+          "check": "text.size",
           "op": ">",
           "value": 0.01
          },
          {
-          "prop": "paint.inkCount",
+          "check": "color.inks_used",
           "op": ">",
           "value": 1
          }
@@ -2571,19 +3555,19 @@ export const PROFILES = {
         "severity": "warning",
         "all": [
          {
-          "prop": "text.size",
+          "check": "text.size",
           "op": "<",
           "value": 8
          },
          {
-          "prop": "text.size",
+          "check": "text.size",
           "op": ">",
           "value": 0.01
          },
          {
-          "prop": "paint.isWhite",
+          "check": "color.ink_mix",
           "op": "==",
-          "value": true
+          "value": "none"
          }
         ]
        },
@@ -2592,9 +3576,10 @@ export const PROFILES = {
         "severity": "error",
         "all": [
          {
-          "prop": "fill.totalInk",
+          "check": "color.total_ink",
           "op": ">",
-          "value": 320
+          "value": 320,
+          "paint": "fill"
          }
         ]
        },
@@ -2603,9 +3588,10 @@ export const PROFILES = {
         "severity": "error",
         "all": [
          {
-          "prop": "stroke.totalInk",
+          "check": "color.total_ink",
           "op": ">",
-          "value": 320
+          "value": 320,
+          "paint": "stroke"
          }
         ]
        },
@@ -2614,19 +3600,26 @@ export const PROFILES = {
         "severity": "warning",
         "all": [
          {
-          "prop": "content.isText",
+          "check": "content.kind",
           "op": "==",
-          "value": true
+          "value": "text"
          },
          {
-          "prop": "text.size",
+          "check": "text.size",
           "op": "<",
           "value": 12
          },
          {
-          "prop": "paint.richBlackCmyPercent",
+          "check": "color.ink",
+          "op": ">=",
+          "value": 100,
+          "ink": "black"
+         },
+         {
+          "check": "color.ink",
           "op": ">",
-          "value": 0
+          "value": 0,
+          "ink": "cmy_max"
          }
         ]
        },
@@ -2635,14 +3628,18 @@ export const PROFILES = {
         "severity": "error",
         "all": [
          {
-          "prop": "paint.isWhite",
+          "check": "color.ink_mix",
           "op": "==",
-          "value": true
+          "value": "none"
          },
          {
-          "prop": "fill.overprint",
-          "op": "==",
-          "value": true
+          "check": "color.overprint",
+          "op": "in",
+          "value": [
+           "on",
+           "on_nonzero_mode"
+          ],
+          "paint": "fill"
          }
         ]
        },
@@ -2651,19 +3648,20 @@ export const PROFILES = {
         "severity": "warning",
         "all": [
          {
-          "prop": "content.isText",
+          "check": "content.kind",
           "op": "==",
-          "value": true
+          "value": "text"
          },
          {
-          "prop": "paint.is100Black",
+          "check": "color.ink_mix",
           "op": "==",
-          "value": true
+          "value": "solid_black"
          },
          {
-          "prop": "fill.overprint",
+          "check": "color.overprint",
           "op": "==",
-          "value": false
+          "value": "off",
+          "paint": "fill"
          }
         ]
        },
@@ -2672,8 +3670,8 @@ export const PROFILES = {
         "severity": "info",
         "all": [
          {
-          "prop": "gstate.transparency",
-          "op": "==",
+          "check": "transparency.used",
+          "op": "is",
           "value": true
          }
         ]
@@ -2683,14 +3681,129 @@ export const PROFILES = {
         "severity": "info",
         "all": [
          {
-          "prop": "gstate.blendMode",
+          "check": "transparency.blend_mode",
+          "op": "not_in",
+          "value": [
+           "Normal",
+           "Compatible"
+          ]
+         }
+        ]
+       },
+       {
+        "name": "Image below 300 ppi",
+        "severity": "error",
+        "all": [
+         {
+          "check": "image.resolution",
+          "op": "<",
+          "value": 300,
+          "kind": "colour_or_grey"
+         }
+        ]
+       },
+       {
+        "name": "Bitmap below 1200 ppi",
+        "severity": "warning",
+        "all": [
+         {
+          "check": "image.resolution",
+          "op": "<",
+          "value": 1200,
+          "kind": "bitmap"
+         }
+        ]
+       },
+       {
+        "name": "Image above 450 ppi",
+        "severity": "info",
+        "all": [
+         {
+          "check": "image.resolution",
+          "op": ">",
+          "value": 450,
+          "kind": "colour_or_grey"
+         }
+        ]
+       },
+       {
+        "name": "Document is encrypted",
+        "severity": "error",
+        "all": [
+         {
+          "check": "security.encryption",
           "op": "!=",
-          "value": "Normal"
+          "value": "none"
+         }
+        ]
+       },
+       {
+        "name": "Document is damaged",
+        "severity": "error",
+        "all": [
+         {
+          "check": "document.damaged",
+          "op": "is",
+          "value": true
+         }
+        ]
+       },
+       {
+        "name": "Syntax problem",
+        "severity": "error",
+        "any": [
+         {
+          "all": [
+           {
+            "check": "syntax.content_stream_error",
+            "op": "count",
+            "value": 0,
+            "compare": ">"
+           }
+          ]
          },
          {
-          "prop": "gstate.blendMode",
-          "op": "!=",
-          "value": "Compatible"
+          "all": [
+           {
+            "check": "syntax.xref_layout",
+            "op": "count",
+            "value": 0,
+            "compare": ">"
+           }
+          ]
+         },
+         {
+          "all": [
+           {
+            "check": "syntax.object_layout",
+            "op": "count",
+            "value": 0,
+            "compare": ">"
+           }
+          ]
+         },
+         {
+          "all": [
+           {
+            "check": "syntax.broken_reference",
+            "op": "in",
+            "value": [
+             "object",
+             "external_file"
+            ]
+           }
+          ]
+         }
+        ]
+       },
+       {
+        "name": "PDF version below 1.6",
+        "severity": "warning",
+        "all": [
+         {
+          "check": "document.pdf_version",
+          "op": "<",
+          "value": 1.6
          }
         ]
        },
@@ -2699,9 +3812,85 @@ export const PROFILES = {
         "severity": "error",
         "all": [
          {
-          "prop": "paint.isRegistration",
+          "check": "color.ink_mix",
           "op": "==",
-          "value": true
+          "value": "registration"
+         }
+        ]
+       },
+       {
+        "name": "RGB colour",
+        "severity": "error",
+        "any": [
+         {
+          "all": [
+           {
+            "check": "color.space",
+            "op": "in",
+            "value": [
+             "DeviceRGB",
+             "CalRGB"
+            ]
+           }
+          ]
+         },
+         {
+          "all": [
+           {
+            "check": "color.space",
+            "op": "==",
+            "value": "ICCBased",
+            "icc_components": 3
+           }
+          ]
+         }
+        ]
+       },
+       {
+        "name": "Device-independent colour",
+        "severity": "warning",
+        "all": [
+         {
+          "check": "color.space",
+          "op": "in",
+          "value": [
+           "device_independent"
+          ]
+         }
+        ]
+       },
+       {
+        "name": "More than 6 spot colours on a page",
+        "severity": "warning",
+        "all": [
+         {
+          "check": "print.plates",
+          "op": "count",
+          "value": 6,
+          "compare": ">",
+          "kind": "spot"
+         }
+        ]
+       },
+       {
+        "name": "Spot colour names that differ only in spelling",
+        "severity": "warning",
+        "all": [
+         {
+          "check": "print.spot_naming",
+          "op": "includes",
+          "value": "similar_names"
+         }
+        ]
+       },
+       {
+        "name": "Font not embedded",
+        "severity": "error",
+        "all": [
+         {
+          "check": "font.embedding",
+          "op": "==",
+          "value": "not_embedded"
          }
         ]
        },
@@ -2710,9 +3899,9 @@ export const PROFILES = {
         "severity": "warning",
         "all": [
          {
-          "prop": "font.isType3",
+          "check": "font.type",
           "op": "==",
-          "value": true
+          "value": "type3"
          }
         ]
        },
@@ -2721,9 +3910,9 @@ export const PROFILES = {
         "severity": "error",
         "all": [
          {
-          "prop": "font.notdefUsed",
+          "check": "text.glyph",
           "op": "==",
-          "value": true
+          "value": "notdef"
          }
         ]
        },
@@ -2732,9 +3921,42 @@ export const PROFILES = {
         "severity": "error",
         "all": [
          {
-          "prop": "font.invalid",
-          "op": "==",
+          "check": "font.problem",
+          "op": "includes",
+          "value": "invalid_program"
+         }
+        ]
+       },
+       {
+        "name": "Pages differ in size or orientation",
+        "severity": "warning",
+        "all": [
+         {
+          "check": "document.pages_uniform",
+          "op": "is",
+          "value": false
+         }
+        ]
+       },
+       {
+        "name": "Empty page",
+        "severity": "warning",
+        "all": [
+         {
+          "check": "page.empty",
+          "op": "is",
           "value": true
+         }
+        ]
+       },
+       {
+        "name": "Page scaling in use",
+        "severity": "error",
+        "all": [
+         {
+          "check": "page.user_unit",
+          "op": "!=",
+          "value": 1
          }
         ]
        },
@@ -2743,9 +3965,12 @@ export const PROFILES = {
         "severity": "info",
         "all": [
          {
-          "prop": "content.distanceInsideTrimBox",
+          "check": "content.distance_to_box",
           "op": "<",
-          "value": 8.5
+          "value": 3,
+          "box": "trim",
+          "side": "inside",
+          "unit": "mm"
          }
         ],
         "scope": "trim"
@@ -2755,9 +3980,9 @@ export const PROFILES = {
         "severity": "warning",
         "all": [
          {
-          "prop": "annot.prints",
-          "op": "==",
-          "value": true
+          "check": "annotation.flags",
+          "op": "includes",
+          "value": "print"
          }
         ]
        },
@@ -2766,87 +3991,14 @@ export const PROFILES = {
         "severity": "info",
         "all": [
          {
-          "prop": "layers.onLayer",
-          "op": "==",
-          "value": true
+          "check": "layer.membership",
+          "op": "count",
+          "value": 0,
+          "compare": ">"
          }
         ]
        }
-      ],
-      "builtins": [
-       {
-        "name": "imageResolutionBelow",
-        "severity": "error",
-        "params": {
-         "ppi": 300
-        }
-       },
-       {
-        "name": "bitmapResolutionBelow",
-        "severity": "warning",
-        "params": {
-         "ppi": 1200
-        }
-       },
-       {
-        "name": "imageResolutionAbove",
-        "severity": "info",
-        "params": {
-         "ppi": 450
-        }
-       },
-       {
-        "name": "encrypted",
-        "severity": "error"
-       },
-       {
-        "name": "damaged",
-        "severity": "error"
-       },
-       {
-        "name": "syntaxProblems",
-        "severity": "error"
-       },
-       {
-        "name": "pdfVersionBelow",
-        "severity": "warning",
-        "params": {
-         "version": 1.6
-        }
-       },
-       {
-        "name": "rgbUsed",
-        "severity": "error"
-       },
-       {
-        "name": "deviceIndependentColour",
-        "severity": "warning"
-       },
-       {
-        "name": "spotColoursMoreThan",
-        "severity": "warning",
-        "params": {
-         "count": 6
-        }
-       },
-       {
-        "name": "spotNamesInconsistent",
-        "severity": "warning"
-       },
-       {
-        "name": "fontsNotEmbedded",
-        "severity": "error"
-       },
-       {
-        "name": "pagesDifferInSize",
-        "severity": "warning"
-       },
-       {
-        "name": "emptyPage",
-        "severity": "warning"
-       }
-      ],
-      "fixes": []
+      ]
      }
     },
     {
@@ -2862,7 +4014,7 @@ export const PROFILES = {
         "severity": "error",
         "all": [
          {
-          "prop": "stroke.width",
+          "check": "content.stroke_width",
           "op": "<=",
           "value": 0.125
          }
@@ -2873,12 +4025,12 @@ export const PROFILES = {
         "severity": "warning",
         "all": [
          {
-          "prop": "stroke.width",
+          "check": "content.stroke_width",
           "op": "<=",
           "value": 0.25
          },
          {
-          "prop": "stroke.width",
+          "check": "content.stroke_width",
           "op": ">",
           "value": 0.125
          }
@@ -2889,12 +4041,12 @@ export const PROFILES = {
         "severity": "error",
         "all": [
          {
-          "prop": "stroke.width",
+          "check": "content.stroke_width",
           "op": "<=",
           "value": 0.25
          },
          {
-          "prop": "paint.inkCount",
+          "check": "color.inks_used",
           "op": ">",
           "value": 1
          }
@@ -2905,12 +4057,12 @@ export const PROFILES = {
         "severity": "warning",
         "all": [
          {
-          "prop": "text.size",
+          "check": "text.size",
           "op": "<",
           "value": 5
          },
          {
-          "prop": "text.size",
+          "check": "text.size",
           "op": ">",
           "value": 0.01
          }
@@ -2921,17 +4073,17 @@ export const PROFILES = {
         "severity": "warning",
         "all": [
          {
-          "prop": "text.size",
+          "check": "text.size",
           "op": "<",
           "value": 8
          },
          {
-          "prop": "text.size",
+          "check": "text.size",
           "op": ">",
           "value": 0.01
          },
          {
-          "prop": "paint.inkCount",
+          "check": "color.inks_used",
           "op": ">",
           "value": 1
          }
@@ -2942,19 +4094,19 @@ export const PROFILES = {
         "severity": "warning",
         "all": [
          {
-          "prop": "text.size",
+          "check": "text.size",
           "op": "<",
           "value": 8
          },
          {
-          "prop": "text.size",
+          "check": "text.size",
           "op": ">",
           "value": 0.01
          },
          {
-          "prop": "paint.isWhite",
+          "check": "color.ink_mix",
           "op": "==",
-          "value": true
+          "value": "none"
          }
         ]
        },
@@ -2963,9 +4115,10 @@ export const PROFILES = {
         "severity": "error",
         "all": [
          {
-          "prop": "fill.totalInk",
+          "check": "color.total_ink",
           "op": ">",
-          "value": 330
+          "value": 330,
+          "paint": "fill"
          }
         ]
        },
@@ -2974,9 +4127,10 @@ export const PROFILES = {
         "severity": "error",
         "all": [
          {
-          "prop": "stroke.totalInk",
+          "check": "color.total_ink",
           "op": ">",
-          "value": 330
+          "value": 330,
+          "paint": "stroke"
          }
         ]
        },
@@ -2985,19 +4139,26 @@ export const PROFILES = {
         "severity": "warning",
         "all": [
          {
-          "prop": "content.isText",
+          "check": "content.kind",
           "op": "==",
-          "value": true
+          "value": "text"
          },
          {
-          "prop": "text.size",
+          "check": "text.size",
           "op": "<",
           "value": 12
          },
          {
-          "prop": "paint.richBlackCmyPercent",
+          "check": "color.ink",
+          "op": ">=",
+          "value": 100,
+          "ink": "black"
+         },
+         {
+          "check": "color.ink",
           "op": ">",
-          "value": 0
+          "value": 0,
+          "ink": "cmy_max"
          }
         ]
        },
@@ -3006,14 +4167,18 @@ export const PROFILES = {
         "severity": "error",
         "all": [
          {
-          "prop": "paint.isWhite",
+          "check": "color.ink_mix",
           "op": "==",
-          "value": true
+          "value": "none"
          },
          {
-          "prop": "fill.overprint",
-          "op": "==",
-          "value": true
+          "check": "color.overprint",
+          "op": "in",
+          "value": [
+           "on",
+           "on_nonzero_mode"
+          ],
+          "paint": "fill"
          }
         ]
        },
@@ -3022,19 +4187,20 @@ export const PROFILES = {
         "severity": "warning",
         "all": [
          {
-          "prop": "content.isText",
+          "check": "content.kind",
           "op": "==",
-          "value": true
+          "value": "text"
          },
          {
-          "prop": "paint.is100Black",
+          "check": "color.ink_mix",
           "op": "==",
-          "value": true
+          "value": "solid_black"
          },
          {
-          "prop": "fill.overprint",
+          "check": "color.overprint",
           "op": "==",
-          "value": false
+          "value": "off",
+          "paint": "fill"
          }
         ]
        },
@@ -3043,8 +4209,8 @@ export const PROFILES = {
         "severity": "info",
         "all": [
          {
-          "prop": "gstate.transparency",
-          "op": "==",
+          "check": "transparency.used",
+          "op": "is",
           "value": true
          }
         ]
@@ -3054,14 +4220,129 @@ export const PROFILES = {
         "severity": "info",
         "all": [
          {
-          "prop": "gstate.blendMode",
+          "check": "transparency.blend_mode",
+          "op": "not_in",
+          "value": [
+           "Normal",
+           "Compatible"
+          ]
+         }
+        ]
+       },
+       {
+        "name": "Image below 300 ppi",
+        "severity": "error",
+        "all": [
+         {
+          "check": "image.resolution",
+          "op": "<",
+          "value": 300,
+          "kind": "colour_or_grey"
+         }
+        ]
+       },
+       {
+        "name": "Bitmap below 1200 ppi",
+        "severity": "warning",
+        "all": [
+         {
+          "check": "image.resolution",
+          "op": "<",
+          "value": 1200,
+          "kind": "bitmap"
+         }
+        ]
+       },
+       {
+        "name": "Image above 450 ppi",
+        "severity": "info",
+        "all": [
+         {
+          "check": "image.resolution",
+          "op": ">",
+          "value": 450,
+          "kind": "colour_or_grey"
+         }
+        ]
+       },
+       {
+        "name": "Document is encrypted",
+        "severity": "error",
+        "all": [
+         {
+          "check": "security.encryption",
           "op": "!=",
-          "value": "Normal"
+          "value": "none"
+         }
+        ]
+       },
+       {
+        "name": "Document is damaged",
+        "severity": "error",
+        "all": [
+         {
+          "check": "document.damaged",
+          "op": "is",
+          "value": true
+         }
+        ]
+       },
+       {
+        "name": "Syntax problem",
+        "severity": "error",
+        "any": [
+         {
+          "all": [
+           {
+            "check": "syntax.content_stream_error",
+            "op": "count",
+            "value": 0,
+            "compare": ">"
+           }
+          ]
          },
          {
-          "prop": "gstate.blendMode",
-          "op": "!=",
-          "value": "Compatible"
+          "all": [
+           {
+            "check": "syntax.xref_layout",
+            "op": "count",
+            "value": 0,
+            "compare": ">"
+           }
+          ]
+         },
+         {
+          "all": [
+           {
+            "check": "syntax.object_layout",
+            "op": "count",
+            "value": 0,
+            "compare": ">"
+           }
+          ]
+         },
+         {
+          "all": [
+           {
+            "check": "syntax.broken_reference",
+            "op": "in",
+            "value": [
+             "object",
+             "external_file"
+            ]
+           }
+          ]
+         }
+        ]
+       },
+       {
+        "name": "PDF version below 1.6",
+        "severity": "warning",
+        "all": [
+         {
+          "check": "document.pdf_version",
+          "op": "<",
+          "value": 1.6
          }
         ]
        },
@@ -3070,9 +4351,74 @@ export const PROFILES = {
         "severity": "error",
         "all": [
          {
-          "prop": "paint.isRegistration",
+          "check": "color.ink_mix",
           "op": "==",
-          "value": true
+          "value": "registration"
+         }
+        ]
+       },
+       {
+        "name": "RGB colour",
+        "severity": "error",
+        "any": [
+         {
+          "all": [
+           {
+            "check": "color.space",
+            "op": "in",
+            "value": [
+             "DeviceRGB",
+             "CalRGB"
+            ]
+           }
+          ]
+         },
+         {
+          "all": [
+           {
+            "check": "color.space",
+            "op": "==",
+            "value": "ICCBased",
+            "icc_components": 3
+           }
+          ]
+         }
+        ]
+       },
+       {
+        "name": "Device-independent colour",
+        "severity": "warning",
+        "all": [
+         {
+          "check": "color.space",
+          "op": "in",
+          "value": [
+           "device_independent"
+          ]
+         }
+        ]
+       },
+       {
+        "name": "More than 0 spot colours on a page",
+        "severity": "error",
+        "all": [
+         {
+          "check": "print.plates",
+          "op": "count",
+          "value": 0,
+          "compare": ">",
+          "kind": "spot"
+         }
+        ]
+       },
+       {
+        "name": "Font not embedded",
+        "severity": "error",
+        "all": [
+         {
+          "check": "font.embedding",
+          "op": "==",
+          "value": "not_embedded"
          }
         ]
        },
@@ -3081,9 +4427,9 @@ export const PROFILES = {
         "severity": "warning",
         "all": [
          {
-          "prop": "font.isType3",
+          "check": "font.type",
           "op": "==",
-          "value": true
+          "value": "type3"
          }
         ]
        },
@@ -3092,9 +4438,9 @@ export const PROFILES = {
         "severity": "error",
         "all": [
          {
-          "prop": "font.notdefUsed",
+          "check": "text.glyph",
           "op": "==",
-          "value": true
+          "value": "notdef"
          }
         ]
        },
@@ -3103,9 +4449,42 @@ export const PROFILES = {
         "severity": "error",
         "all": [
          {
-          "prop": "font.invalid",
-          "op": "==",
+          "check": "font.problem",
+          "op": "includes",
+          "value": "invalid_program"
+         }
+        ]
+       },
+       {
+        "name": "Pages differ in size or orientation",
+        "severity": "warning",
+        "all": [
+         {
+          "check": "document.pages_uniform",
+          "op": "is",
+          "value": false
+         }
+        ]
+       },
+       {
+        "name": "Empty page",
+        "severity": "warning",
+        "all": [
+         {
+          "check": "page.empty",
+          "op": "is",
           "value": true
+         }
+        ]
+       },
+       {
+        "name": "Page scaling in use",
+        "severity": "error",
+        "all": [
+         {
+          "check": "page.user_unit",
+          "op": "!=",
+          "value": 1
          }
         ]
        },
@@ -3114,9 +4493,12 @@ export const PROFILES = {
         "severity": "info",
         "all": [
          {
-          "prop": "content.distanceInsideTrimBox",
+          "check": "content.distance_to_box",
           "op": "<",
-          "value": 8.5
+          "value": 3,
+          "box": "trim",
+          "side": "inside",
+          "unit": "mm"
          }
         ],
         "scope": "trim"
@@ -3126,9 +4508,9 @@ export const PROFILES = {
         "severity": "warning",
         "all": [
          {
-          "prop": "annot.prints",
-          "op": "==",
-          "value": true
+          "check": "annotation.flags",
+          "op": "includes",
+          "value": "print"
          }
         ]
        },
@@ -3137,150 +4519,57 @@ export const PROFILES = {
         "severity": "info",
         "all": [
          {
-          "prop": "layers.onLayer",
-          "op": "==",
-          "value": true
+          "check": "layer.membership",
+          "op": "count",
+          "value": 0,
+          "compare": ">"
          }
         ]
        }
       ],
-      "builtins": [
-       {
-        "name": "imageResolutionBelow",
-        "severity": "error",
-        "params": {
-         "ppi": 300
-        }
-       },
-       {
-        "name": "bitmapResolutionBelow",
-        "severity": "warning",
-        "params": {
-         "ppi": 1200
-        }
-       },
-       {
-        "name": "imageResolutionAbove",
-        "severity": "info",
-        "params": {
-         "ppi": 450
-        }
-       },
-       {
-        "name": "encrypted",
-        "severity": "error"
-       },
-       {
-        "name": "damaged",
-        "severity": "error"
-       },
-       {
-        "name": "syntaxProblems",
-        "severity": "error"
-       },
-       {
-        "name": "pdfVersionBelow",
-        "severity": "warning",
-        "params": {
-         "version": 1.6
-        }
-       },
-       {
-        "name": "rgbUsed",
-        "severity": "error"
-       },
-       {
-        "name": "deviceIndependentColour",
-        "severity": "warning"
-       },
-       {
-        "name": "spotColoursMoreThan",
-        "severity": "error",
-        "params": {
-         "count": 0
-        }
-       },
-       {
-        "name": "fontsNotEmbedded",
-        "severity": "error"
-       },
-       {
-        "name": "pagesDifferInSize",
-        "severity": "warning"
-       },
-       {
-        "name": "emptyPage",
-        "severity": "warning"
-       }
-      ],
       "fixes": [
        {
-        "op": "setpagebox",
-        "params": [
-         "TrimBox",
-         "RelativeToCropBox",
-         "0",
-         "0",
-         "0",
-         "0",
-         "pt"
+        "fix": "page.set_box",
+        "box": "trim",
+        "from": "crop",
+        "when": "missing"
+       },
+       {
+        "fix": "bleed.generate",
+        "amount": "3mm"
+       },
+       {
+        "fix": "page.remove_user_unit"
+       },
+       {
+        "fix": "ink.min_line_width",
+        "width": "0.25pt"
+       },
+       {
+        "fix": "ink.overprint_black",
+        "objects": "text"
+       },
+       {
+        "fix": "ink.knockout_white"
+       },
+       {
+        "fix": "document.set_info",
+        "key": "Trapped",
+        "value": "False"
+       },
+       {
+        "fix": "graphics.remove",
+        "settings": [
+         "flatness",
+         "smoothness"
         ]
        },
        {
-        "op": "generatebleed",
-        "params": [
-         "Amount",
-         "3",
-         "mm"
-        ]
+        "fix": "transparency.remove_unneeded_groups"
        },
        {
-        "op": "removepagescaling",
-        "params": []
-       },
-       {
-        "op": "increaselinewidth",
-        "params": [
-         "0.25",
-         "",
-         "pt"
-        ]
-       },
-       {
-        "op": "overprintblack",
-        "params": [
-         "Text"
-        ]
-       },
-       {
-        "op": "knockoutwhite",
-        "params": [
-         ""
-        ]
-       },
-       {
-        "op": "trappedkey",
-        "params": [
-         "false"
-        ]
-       },
-       {
-        "op": "removeflatness",
-        "params": []
-       },
-       {
-        "op": "removesmoothness",
-        "params": []
-       },
-       {
-        "op": "removeunnecessarytransparencygroups",
-        "params": []
-       },
-       {
-        "op": "settransparencyblendcs",
-        "params": [
-         "CMYK"
-        ]
+        "fix": "transparency.set_blend_space",
+        "space": "CMYK"
        }
       ]
      }
@@ -3299,11 +4588,23 @@ export const PROFILES = {
       "description": "Written from the Ghent Workgroup 2022 specification for this workflow: PDF/X-4 conformance plus the workflow's resolution, ink, hairline, text, font, colour and page requirements.",
       "checks": [
        {
+        "name": "Not PDF/X-4",
+        "severity": "error",
+        "all": [
+         {
+          "check": "conformance.meets",
+          "op": "is",
+          "value": false,
+          "standard": "pdfx-4"
+         }
+        ]
+       },
+       {
         "name": "Stroke thinner than 0.125 pt",
         "severity": "error",
         "all": [
          {
-          "prop": "stroke.width",
+          "check": "content.stroke_width",
           "op": "<=",
           "value": 0.125
          }
@@ -3314,12 +4615,12 @@ export const PROFILES = {
         "severity": "warning",
         "all": [
          {
-          "prop": "stroke.width",
+          "check": "content.stroke_width",
           "op": "<=",
           "value": 0.25
          },
          {
-          "prop": "stroke.width",
+          "check": "content.stroke_width",
           "op": ">",
           "value": 0.125
          }
@@ -3330,12 +4631,12 @@ export const PROFILES = {
         "severity": "error",
         "all": [
          {
-          "prop": "stroke.width",
+          "check": "content.stroke_width",
           "op": "<=",
           "value": 0.25
          },
          {
-          "prop": "paint.inkCount",
+          "check": "color.inks_used",
           "op": ">",
           "value": 1
          }
@@ -3346,12 +4647,12 @@ export const PROFILES = {
         "severity": "warning",
         "all": [
          {
-          "prop": "text.size",
+          "check": "text.size",
           "op": "<",
           "value": 5
          },
          {
-          "prop": "text.size",
+          "check": "text.size",
           "op": ">",
           "value": 0.01
          }
@@ -3362,17 +4663,17 @@ export const PROFILES = {
         "severity": "warning",
         "all": [
          {
-          "prop": "text.size",
+          "check": "text.size",
           "op": "<",
           "value": 8
          },
          {
-          "prop": "text.size",
+          "check": "text.size",
           "op": ">",
           "value": 0.01
          },
          {
-          "prop": "paint.inkCount",
+          "check": "color.inks_used",
           "op": ">",
           "value": 1
          }
@@ -3383,19 +4684,19 @@ export const PROFILES = {
         "severity": "warning",
         "all": [
          {
-          "prop": "text.size",
+          "check": "text.size",
           "op": "<",
           "value": 8
          },
          {
-          "prop": "text.size",
+          "check": "text.size",
           "op": ">",
           "value": 0.01
          },
          {
-          "prop": "paint.isWhite",
+          "check": "color.ink_mix",
           "op": "==",
-          "value": true
+          "value": "none"
          }
         ]
        },
@@ -3404,9 +4705,10 @@ export const PROFILES = {
         "severity": "error",
         "all": [
          {
-          "prop": "fill.totalInk",
+          "check": "color.total_ink",
           "op": ">",
-          "value": 330
+          "value": 330,
+          "paint": "fill"
          }
         ]
        },
@@ -3415,9 +4717,10 @@ export const PROFILES = {
         "severity": "error",
         "all": [
          {
-          "prop": "stroke.totalInk",
+          "check": "color.total_ink",
           "op": ">",
-          "value": 330
+          "value": 330,
+          "paint": "stroke"
          }
         ]
        },
@@ -3426,19 +4729,26 @@ export const PROFILES = {
         "severity": "warning",
         "all": [
          {
-          "prop": "content.isText",
+          "check": "content.kind",
           "op": "==",
-          "value": true
+          "value": "text"
          },
          {
-          "prop": "text.size",
+          "check": "text.size",
           "op": "<",
           "value": 12
          },
          {
-          "prop": "paint.richBlackCmyPercent",
+          "check": "color.ink",
+          "op": ">=",
+          "value": 100,
+          "ink": "black"
+         },
+         {
+          "check": "color.ink",
           "op": ">",
-          "value": 0
+          "value": 0,
+          "ink": "cmy_max"
          }
         ]
        },
@@ -3447,14 +4757,18 @@ export const PROFILES = {
         "severity": "error",
         "all": [
          {
-          "prop": "paint.isWhite",
+          "check": "color.ink_mix",
           "op": "==",
-          "value": true
+          "value": "none"
          },
          {
-          "prop": "fill.overprint",
-          "op": "==",
-          "value": true
+          "check": "color.overprint",
+          "op": "in",
+          "value": [
+           "on",
+           "on_nonzero_mode"
+          ],
+          "paint": "fill"
          }
         ]
        },
@@ -3463,19 +4777,20 @@ export const PROFILES = {
         "severity": "warning",
         "all": [
          {
-          "prop": "content.isText",
+          "check": "content.kind",
           "op": "==",
-          "value": true
+          "value": "text"
          },
          {
-          "prop": "paint.is100Black",
+          "check": "color.ink_mix",
           "op": "==",
-          "value": true
+          "value": "solid_black"
          },
          {
-          "prop": "fill.overprint",
+          "check": "color.overprint",
           "op": "==",
-          "value": false
+          "value": "off",
+          "paint": "fill"
          }
         ]
        },
@@ -3484,8 +4799,8 @@ export const PROFILES = {
         "severity": "info",
         "all": [
          {
-          "prop": "gstate.transparency",
-          "op": "==",
+          "check": "transparency.used",
+          "op": "is",
           "value": true
          }
         ]
@@ -3495,14 +4810,129 @@ export const PROFILES = {
         "severity": "info",
         "all": [
          {
-          "prop": "gstate.blendMode",
+          "check": "transparency.blend_mode",
+          "op": "not_in",
+          "value": [
+           "Normal",
+           "Compatible"
+          ]
+         }
+        ]
+       },
+       {
+        "name": "Image below 300 ppi",
+        "severity": "error",
+        "all": [
+         {
+          "check": "image.resolution",
+          "op": "<",
+          "value": 300,
+          "kind": "colour_or_grey"
+         }
+        ]
+       },
+       {
+        "name": "Bitmap below 1200 ppi",
+        "severity": "warning",
+        "all": [
+         {
+          "check": "image.resolution",
+          "op": "<",
+          "value": 1200,
+          "kind": "bitmap"
+         }
+        ]
+       },
+       {
+        "name": "Image above 450 ppi",
+        "severity": "info",
+        "all": [
+         {
+          "check": "image.resolution",
+          "op": ">",
+          "value": 450,
+          "kind": "colour_or_grey"
+         }
+        ]
+       },
+       {
+        "name": "Document is encrypted",
+        "severity": "error",
+        "all": [
+         {
+          "check": "security.encryption",
           "op": "!=",
-          "value": "Normal"
+          "value": "none"
+         }
+        ]
+       },
+       {
+        "name": "Document is damaged",
+        "severity": "error",
+        "all": [
+         {
+          "check": "document.damaged",
+          "op": "is",
+          "value": true
+         }
+        ]
+       },
+       {
+        "name": "Syntax problem",
+        "severity": "error",
+        "any": [
+         {
+          "all": [
+           {
+            "check": "syntax.content_stream_error",
+            "op": "count",
+            "value": 0,
+            "compare": ">"
+           }
+          ]
          },
          {
-          "prop": "gstate.blendMode",
-          "op": "!=",
-          "value": "Compatible"
+          "all": [
+           {
+            "check": "syntax.xref_layout",
+            "op": "count",
+            "value": 0,
+            "compare": ">"
+           }
+          ]
+         },
+         {
+          "all": [
+           {
+            "check": "syntax.object_layout",
+            "op": "count",
+            "value": 0,
+            "compare": ">"
+           }
+          ]
+         },
+         {
+          "all": [
+           {
+            "check": "syntax.broken_reference",
+            "op": "in",
+            "value": [
+             "object",
+             "external_file"
+            ]
+           }
+          ]
+         }
+        ]
+       },
+       {
+        "name": "PDF version below 1.6",
+        "severity": "warning",
+        "all": [
+         {
+          "check": "document.pdf_version",
+          "op": "<",
+          "value": 1.6
          }
         ]
        },
@@ -3511,9 +4941,74 @@ export const PROFILES = {
         "severity": "error",
         "all": [
          {
-          "prop": "paint.isRegistration",
+          "check": "color.ink_mix",
           "op": "==",
-          "value": true
+          "value": "registration"
+         }
+        ]
+       },
+       {
+        "name": "RGB colour",
+        "severity": "error",
+        "any": [
+         {
+          "all": [
+           {
+            "check": "color.space",
+            "op": "in",
+            "value": [
+             "DeviceRGB",
+             "CalRGB"
+            ]
+           }
+          ]
+         },
+         {
+          "all": [
+           {
+            "check": "color.space",
+            "op": "==",
+            "value": "ICCBased",
+            "icc_components": 3
+           }
+          ]
+         }
+        ]
+       },
+       {
+        "name": "Device-independent colour",
+        "severity": "warning",
+        "all": [
+         {
+          "check": "color.space",
+          "op": "in",
+          "value": [
+           "device_independent"
+          ]
+         }
+        ]
+       },
+       {
+        "name": "More than 0 spot colours on a page",
+        "severity": "error",
+        "all": [
+         {
+          "check": "print.plates",
+          "op": "count",
+          "value": 0,
+          "compare": ">",
+          "kind": "spot"
+         }
+        ]
+       },
+       {
+        "name": "Font not embedded",
+        "severity": "error",
+        "all": [
+         {
+          "check": "font.embedding",
+          "op": "==",
+          "value": "not_embedded"
          }
         ]
        },
@@ -3522,9 +5017,9 @@ export const PROFILES = {
         "severity": "warning",
         "all": [
          {
-          "prop": "font.isType3",
+          "check": "font.type",
           "op": "==",
-          "value": true
+          "value": "type3"
          }
         ]
        },
@@ -3533,9 +5028,9 @@ export const PROFILES = {
         "severity": "error",
         "all": [
          {
-          "prop": "font.notdefUsed",
+          "check": "text.glyph",
           "op": "==",
-          "value": true
+          "value": "notdef"
          }
         ]
        },
@@ -3544,9 +5039,42 @@ export const PROFILES = {
         "severity": "error",
         "all": [
          {
-          "prop": "font.invalid",
-          "op": "==",
+          "check": "font.problem",
+          "op": "includes",
+          "value": "invalid_program"
+         }
+        ]
+       },
+       {
+        "name": "Pages differ in size or orientation",
+        "severity": "warning",
+        "all": [
+         {
+          "check": "document.pages_uniform",
+          "op": "is",
+          "value": false
+         }
+        ]
+       },
+       {
+        "name": "Empty page",
+        "severity": "warning",
+        "all": [
+         {
+          "check": "page.empty",
+          "op": "is",
           "value": true
+         }
+        ]
+       },
+       {
+        "name": "Page scaling in use",
+        "severity": "error",
+        "all": [
+         {
+          "check": "page.user_unit",
+          "op": "!=",
+          "value": 1
          }
         ]
        },
@@ -3555,9 +5083,12 @@ export const PROFILES = {
         "severity": "info",
         "all": [
          {
-          "prop": "content.distanceInsideTrimBox",
+          "check": "content.distance_to_box",
           "op": "<",
-          "value": 8.5
+          "value": 3,
+          "box": "trim",
+          "side": "inside",
+          "unit": "mm"
          }
         ],
         "scope": "trim"
@@ -3567,9 +5098,9 @@ export const PROFILES = {
         "severity": "warning",
         "all": [
          {
-          "prop": "annot.prints",
-          "op": "==",
-          "value": true
+          "check": "annotation.flags",
+          "op": "includes",
+          "value": "print"
          }
         ]
        },
@@ -3578,88 +5109,14 @@ export const PROFILES = {
         "severity": "info",
         "all": [
          {
-          "prop": "layers.onLayer",
-          "op": "==",
-          "value": true
+          "check": "layer.membership",
+          "op": "count",
+          "value": 0,
+          "compare": ">"
          }
         ]
        }
-      ],
-      "builtins": [
-       {
-        "name": "conformsTo",
-        "severity": "error",
-        "level": "x4"
-       },
-       {
-        "name": "imageResolutionBelow",
-        "severity": "error",
-        "params": {
-         "ppi": 300
-        }
-       },
-       {
-        "name": "bitmapResolutionBelow",
-        "severity": "warning",
-        "params": {
-         "ppi": 1200
-        }
-       },
-       {
-        "name": "imageResolutionAbove",
-        "severity": "info",
-        "params": {
-         "ppi": 450
-        }
-       },
-       {
-        "name": "encrypted",
-        "severity": "error"
-       },
-       {
-        "name": "damaged",
-        "severity": "error"
-       },
-       {
-        "name": "syntaxProblems",
-        "severity": "error"
-       },
-       {
-        "name": "pdfVersionBelow",
-        "severity": "warning",
-        "params": {
-         "version": 1.6
-        }
-       },
-       {
-        "name": "rgbUsed",
-        "severity": "error"
-       },
-       {
-        "name": "deviceIndependentColour",
-        "severity": "warning"
-       },
-       {
-        "name": "spotColoursMoreThan",
-        "severity": "error",
-        "params": {
-         "count": 0
-        }
-       },
-       {
-        "name": "fontsNotEmbedded",
-        "severity": "error"
-       },
-       {
-        "name": "pagesDifferInSize",
-        "severity": "warning"
-       },
-       {
-        "name": "emptyPage",
-        "severity": "warning"
-       }
-      ],
-      "fixes": []
+      ]
      }
     },
     {
@@ -3671,11 +5128,23 @@ export const PROFILES = {
       "description": "Written from the Ghent Workgroup 2022 specification for this workflow: PDF/X-4 conformance plus the workflow's resolution, ink, hairline, text, font, colour and page requirements.",
       "checks": [
        {
+        "name": "Not PDF/X-4",
+        "severity": "error",
+        "all": [
+         {
+          "check": "conformance.meets",
+          "op": "is",
+          "value": false,
+          "standard": "pdfx-4"
+         }
+        ]
+       },
+       {
         "name": "Stroke thinner than 0.125 pt",
         "severity": "error",
         "all": [
          {
-          "prop": "stroke.width",
+          "check": "content.stroke_width",
           "op": "<=",
           "value": 0.125
          }
@@ -3686,12 +5155,12 @@ export const PROFILES = {
         "severity": "warning",
         "all": [
          {
-          "prop": "stroke.width",
+          "check": "content.stroke_width",
           "op": "<=",
           "value": 0.25
          },
          {
-          "prop": "stroke.width",
+          "check": "content.stroke_width",
           "op": ">",
           "value": 0.125
          }
@@ -3702,12 +5171,12 @@ export const PROFILES = {
         "severity": "error",
         "all": [
          {
-          "prop": "stroke.width",
+          "check": "content.stroke_width",
           "op": "<=",
           "value": 0.25
          },
          {
-          "prop": "paint.inkCount",
+          "check": "color.inks_used",
           "op": ">",
           "value": 1
          }
@@ -3718,12 +5187,12 @@ export const PROFILES = {
         "severity": "warning",
         "all": [
          {
-          "prop": "text.size",
+          "check": "text.size",
           "op": "<",
           "value": 5
          },
          {
-          "prop": "text.size",
+          "check": "text.size",
           "op": ">",
           "value": 0.01
          }
@@ -3734,17 +5203,17 @@ export const PROFILES = {
         "severity": "warning",
         "all": [
          {
-          "prop": "text.size",
+          "check": "text.size",
           "op": "<",
           "value": 8
          },
          {
-          "prop": "text.size",
+          "check": "text.size",
           "op": ">",
           "value": 0.01
          },
          {
-          "prop": "paint.inkCount",
+          "check": "color.inks_used",
           "op": ">",
           "value": 1
          }
@@ -3755,19 +5224,19 @@ export const PROFILES = {
         "severity": "warning",
         "all": [
          {
-          "prop": "text.size",
+          "check": "text.size",
           "op": "<",
           "value": 8
          },
          {
-          "prop": "text.size",
+          "check": "text.size",
           "op": ">",
           "value": 0.01
          },
          {
-          "prop": "paint.isWhite",
+          "check": "color.ink_mix",
           "op": "==",
-          "value": true
+          "value": "none"
          }
         ]
        },
@@ -3776,9 +5245,10 @@ export const PROFILES = {
         "severity": "error",
         "all": [
          {
-          "prop": "fill.totalInk",
+          "check": "color.total_ink",
           "op": ">",
-          "value": 330
+          "value": 330,
+          "paint": "fill"
          }
         ]
        },
@@ -3787,9 +5257,10 @@ export const PROFILES = {
         "severity": "error",
         "all": [
          {
-          "prop": "stroke.totalInk",
+          "check": "color.total_ink",
           "op": ">",
-          "value": 330
+          "value": 330,
+          "paint": "stroke"
          }
         ]
        },
@@ -3798,19 +5269,26 @@ export const PROFILES = {
         "severity": "warning",
         "all": [
          {
-          "prop": "content.isText",
+          "check": "content.kind",
           "op": "==",
-          "value": true
+          "value": "text"
          },
          {
-          "prop": "text.size",
+          "check": "text.size",
           "op": "<",
           "value": 12
          },
          {
-          "prop": "paint.richBlackCmyPercent",
+          "check": "color.ink",
+          "op": ">=",
+          "value": 100,
+          "ink": "black"
+         },
+         {
+          "check": "color.ink",
           "op": ">",
-          "value": 0
+          "value": 0,
+          "ink": "cmy_max"
          }
         ]
        },
@@ -3819,14 +5297,18 @@ export const PROFILES = {
         "severity": "error",
         "all": [
          {
-          "prop": "paint.isWhite",
+          "check": "color.ink_mix",
           "op": "==",
-          "value": true
+          "value": "none"
          },
          {
-          "prop": "fill.overprint",
-          "op": "==",
-          "value": true
+          "check": "color.overprint",
+          "op": "in",
+          "value": [
+           "on",
+           "on_nonzero_mode"
+          ],
+          "paint": "fill"
          }
         ]
        },
@@ -3835,19 +5317,20 @@ export const PROFILES = {
         "severity": "warning",
         "all": [
          {
-          "prop": "content.isText",
+          "check": "content.kind",
           "op": "==",
-          "value": true
+          "value": "text"
          },
          {
-          "prop": "paint.is100Black",
+          "check": "color.ink_mix",
           "op": "==",
-          "value": true
+          "value": "solid_black"
          },
          {
-          "prop": "fill.overprint",
+          "check": "color.overprint",
           "op": "==",
-          "value": false
+          "value": "off",
+          "paint": "fill"
          }
         ]
        },
@@ -3856,8 +5339,8 @@ export const PROFILES = {
         "severity": "info",
         "all": [
          {
-          "prop": "gstate.transparency",
-          "op": "==",
+          "check": "transparency.used",
+          "op": "is",
           "value": true
          }
         ]
@@ -3867,14 +5350,129 @@ export const PROFILES = {
         "severity": "info",
         "all": [
          {
-          "prop": "gstate.blendMode",
+          "check": "transparency.blend_mode",
+          "op": "not_in",
+          "value": [
+           "Normal",
+           "Compatible"
+          ]
+         }
+        ]
+       },
+       {
+        "name": "Image below 300 ppi",
+        "severity": "error",
+        "all": [
+         {
+          "check": "image.resolution",
+          "op": "<",
+          "value": 300,
+          "kind": "colour_or_grey"
+         }
+        ]
+       },
+       {
+        "name": "Bitmap below 1200 ppi",
+        "severity": "warning",
+        "all": [
+         {
+          "check": "image.resolution",
+          "op": "<",
+          "value": 1200,
+          "kind": "bitmap"
+         }
+        ]
+       },
+       {
+        "name": "Image above 450 ppi",
+        "severity": "info",
+        "all": [
+         {
+          "check": "image.resolution",
+          "op": ">",
+          "value": 450,
+          "kind": "colour_or_grey"
+         }
+        ]
+       },
+       {
+        "name": "Document is encrypted",
+        "severity": "error",
+        "all": [
+         {
+          "check": "security.encryption",
           "op": "!=",
-          "value": "Normal"
+          "value": "none"
+         }
+        ]
+       },
+       {
+        "name": "Document is damaged",
+        "severity": "error",
+        "all": [
+         {
+          "check": "document.damaged",
+          "op": "is",
+          "value": true
+         }
+        ]
+       },
+       {
+        "name": "Syntax problem",
+        "severity": "error",
+        "any": [
+         {
+          "all": [
+           {
+            "check": "syntax.content_stream_error",
+            "op": "count",
+            "value": 0,
+            "compare": ">"
+           }
+          ]
          },
          {
-          "prop": "gstate.blendMode",
-          "op": "!=",
-          "value": "Compatible"
+          "all": [
+           {
+            "check": "syntax.xref_layout",
+            "op": "count",
+            "value": 0,
+            "compare": ">"
+           }
+          ]
+         },
+         {
+          "all": [
+           {
+            "check": "syntax.object_layout",
+            "op": "count",
+            "value": 0,
+            "compare": ">"
+           }
+          ]
+         },
+         {
+          "all": [
+           {
+            "check": "syntax.broken_reference",
+            "op": "in",
+            "value": [
+             "object",
+             "external_file"
+            ]
+           }
+          ]
+         }
+        ]
+       },
+       {
+        "name": "PDF version below 1.6",
+        "severity": "warning",
+        "all": [
+         {
+          "check": "document.pdf_version",
+          "op": "<",
+          "value": 1.6
          }
         ]
        },
@@ -3883,9 +5481,85 @@ export const PROFILES = {
         "severity": "error",
         "all": [
          {
-          "prop": "paint.isRegistration",
+          "check": "color.ink_mix",
           "op": "==",
-          "value": true
+          "value": "registration"
+         }
+        ]
+       },
+       {
+        "name": "RGB colour",
+        "severity": "error",
+        "any": [
+         {
+          "all": [
+           {
+            "check": "color.space",
+            "op": "in",
+            "value": [
+             "DeviceRGB",
+             "CalRGB"
+            ]
+           }
+          ]
+         },
+         {
+          "all": [
+           {
+            "check": "color.space",
+            "op": "==",
+            "value": "ICCBased",
+            "icc_components": 3
+           }
+          ]
+         }
+        ]
+       },
+       {
+        "name": "Device-independent colour",
+        "severity": "warning",
+        "all": [
+         {
+          "check": "color.space",
+          "op": "in",
+          "value": [
+           "device_independent"
+          ]
+         }
+        ]
+       },
+       {
+        "name": "More than 2 spot colours on a page",
+        "severity": "warning",
+        "all": [
+         {
+          "check": "print.plates",
+          "op": "count",
+          "value": 2,
+          "compare": ">",
+          "kind": "spot"
+         }
+        ]
+       },
+       {
+        "name": "Spot colour names that differ only in spelling",
+        "severity": "warning",
+        "all": [
+         {
+          "check": "print.spot_naming",
+          "op": "includes",
+          "value": "similar_names"
+         }
+        ]
+       },
+       {
+        "name": "Font not embedded",
+        "severity": "error",
+        "all": [
+         {
+          "check": "font.embedding",
+          "op": "==",
+          "value": "not_embedded"
          }
         ]
        },
@@ -3894,9 +5568,9 @@ export const PROFILES = {
         "severity": "warning",
         "all": [
          {
-          "prop": "font.isType3",
+          "check": "font.type",
           "op": "==",
-          "value": true
+          "value": "type3"
          }
         ]
        },
@@ -3905,9 +5579,9 @@ export const PROFILES = {
         "severity": "error",
         "all": [
          {
-          "prop": "font.notdefUsed",
+          "check": "text.glyph",
           "op": "==",
-          "value": true
+          "value": "notdef"
          }
         ]
        },
@@ -3916,9 +5590,42 @@ export const PROFILES = {
         "severity": "error",
         "all": [
          {
-          "prop": "font.invalid",
-          "op": "==",
+          "check": "font.problem",
+          "op": "includes",
+          "value": "invalid_program"
+         }
+        ]
+       },
+       {
+        "name": "Pages differ in size or orientation",
+        "severity": "warning",
+        "all": [
+         {
+          "check": "document.pages_uniform",
+          "op": "is",
+          "value": false
+         }
+        ]
+       },
+       {
+        "name": "Empty page",
+        "severity": "warning",
+        "all": [
+         {
+          "check": "page.empty",
+          "op": "is",
           "value": true
+         }
+        ]
+       },
+       {
+        "name": "Page scaling in use",
+        "severity": "error",
+        "all": [
+         {
+          "check": "page.user_unit",
+          "op": "!=",
+          "value": 1
          }
         ]
        },
@@ -3927,9 +5634,12 @@ export const PROFILES = {
         "severity": "info",
         "all": [
          {
-          "prop": "content.distanceInsideTrimBox",
+          "check": "content.distance_to_box",
           "op": "<",
-          "value": 8.5
+          "value": 3,
+          "box": "trim",
+          "side": "inside",
+          "unit": "mm"
          }
         ],
         "scope": "trim"
@@ -3939,9 +5649,9 @@ export const PROFILES = {
         "severity": "warning",
         "all": [
          {
-          "prop": "annot.prints",
-          "op": "==",
-          "value": true
+          "check": "annotation.flags",
+          "op": "includes",
+          "value": "print"
          }
         ]
        },
@@ -3950,92 +5660,14 @@ export const PROFILES = {
         "severity": "info",
         "all": [
          {
-          "prop": "layers.onLayer",
-          "op": "==",
-          "value": true
+          "check": "layer.membership",
+          "op": "count",
+          "value": 0,
+          "compare": ">"
          }
         ]
        }
-      ],
-      "builtins": [
-       {
-        "name": "conformsTo",
-        "severity": "error",
-        "level": "x4"
-       },
-       {
-        "name": "imageResolutionBelow",
-        "severity": "error",
-        "params": {
-         "ppi": 300
-        }
-       },
-       {
-        "name": "bitmapResolutionBelow",
-        "severity": "warning",
-        "params": {
-         "ppi": 1200
-        }
-       },
-       {
-        "name": "imageResolutionAbove",
-        "severity": "info",
-        "params": {
-         "ppi": 450
-        }
-       },
-       {
-        "name": "encrypted",
-        "severity": "error"
-       },
-       {
-        "name": "damaged",
-        "severity": "error"
-       },
-       {
-        "name": "syntaxProblems",
-        "severity": "error"
-       },
-       {
-        "name": "pdfVersionBelow",
-        "severity": "warning",
-        "params": {
-         "version": 1.6
-        }
-       },
-       {
-        "name": "rgbUsed",
-        "severity": "error"
-       },
-       {
-        "name": "deviceIndependentColour",
-        "severity": "warning"
-       },
-       {
-        "name": "spotColoursMoreThan",
-        "severity": "warning",
-        "params": {
-         "count": 2
-        }
-       },
-       {
-        "name": "spotNamesInconsistent",
-        "severity": "warning"
-       },
-       {
-        "name": "fontsNotEmbedded",
-        "severity": "error"
-       },
-       {
-        "name": "pagesDifferInSize",
-        "severity": "warning"
-       },
-       {
-        "name": "emptyPage",
-        "severity": "warning"
-       }
-      ],
-      "fixes": []
+      ]
      }
     },
     {
@@ -4047,11 +5679,23 @@ export const PROFILES = {
       "description": "Written from the Ghent Workgroup 2022 specification for this workflow: PDF/X-4 conformance plus the workflow's resolution, ink, hairline, text, font, colour and page requirements.",
       "checks": [
        {
+        "name": "Not PDF/X-4",
+        "severity": "error",
+        "all": [
+         {
+          "check": "conformance.meets",
+          "op": "is",
+          "value": false,
+          "standard": "pdfx-4"
+         }
+        ]
+       },
+       {
         "name": "Stroke thinner than 0.125 pt",
         "severity": "error",
         "all": [
          {
-          "prop": "stroke.width",
+          "check": "content.stroke_width",
           "op": "<=",
           "value": 0.125
          }
@@ -4062,12 +5706,12 @@ export const PROFILES = {
         "severity": "warning",
         "all": [
          {
-          "prop": "stroke.width",
+          "check": "content.stroke_width",
           "op": "<=",
           "value": 0.25
          },
          {
-          "prop": "stroke.width",
+          "check": "content.stroke_width",
           "op": ">",
           "value": 0.125
          }
@@ -4078,12 +5722,12 @@ export const PROFILES = {
         "severity": "error",
         "all": [
          {
-          "prop": "stroke.width",
+          "check": "content.stroke_width",
           "op": "<=",
           "value": 0.25
          },
          {
-          "prop": "paint.inkCount",
+          "check": "color.inks_used",
           "op": ">",
           "value": 1
          }
@@ -4094,12 +5738,12 @@ export const PROFILES = {
         "severity": "warning",
         "all": [
          {
-          "prop": "text.size",
+          "check": "text.size",
           "op": "<",
           "value": 5
          },
          {
-          "prop": "text.size",
+          "check": "text.size",
           "op": ">",
           "value": 0.01
          }
@@ -4110,17 +5754,17 @@ export const PROFILES = {
         "severity": "warning",
         "all": [
          {
-          "prop": "text.size",
+          "check": "text.size",
           "op": "<",
           "value": 8
          },
          {
-          "prop": "text.size",
+          "check": "text.size",
           "op": ">",
           "value": 0.01
          },
          {
-          "prop": "paint.inkCount",
+          "check": "color.inks_used",
           "op": ">",
           "value": 1
          }
@@ -4131,19 +5775,19 @@ export const PROFILES = {
         "severity": "warning",
         "all": [
          {
-          "prop": "text.size",
+          "check": "text.size",
           "op": "<",
           "value": 8
          },
          {
-          "prop": "text.size",
+          "check": "text.size",
           "op": ">",
           "value": 0.01
          },
          {
-          "prop": "paint.isWhite",
+          "check": "color.ink_mix",
           "op": "==",
-          "value": true
+          "value": "none"
          }
         ]
        },
@@ -4152,9 +5796,10 @@ export const PROFILES = {
         "severity": "error",
         "all": [
          {
-          "prop": "fill.totalInk",
+          "check": "color.total_ink",
           "op": ">",
-          "value": 300
+          "value": 300,
+          "paint": "fill"
          }
         ]
        },
@@ -4163,9 +5808,10 @@ export const PROFILES = {
         "severity": "error",
         "all": [
          {
-          "prop": "stroke.totalInk",
+          "check": "color.total_ink",
           "op": ">",
-          "value": 300
+          "value": 300,
+          "paint": "stroke"
          }
         ]
        },
@@ -4174,19 +5820,26 @@ export const PROFILES = {
         "severity": "warning",
         "all": [
          {
-          "prop": "content.isText",
+          "check": "content.kind",
           "op": "==",
-          "value": true
+          "value": "text"
          },
          {
-          "prop": "text.size",
+          "check": "text.size",
           "op": "<",
           "value": 12
          },
          {
-          "prop": "paint.richBlackCmyPercent",
+          "check": "color.ink",
+          "op": ">=",
+          "value": 100,
+          "ink": "black"
+         },
+         {
+          "check": "color.ink",
           "op": ">",
-          "value": 0
+          "value": 0,
+          "ink": "cmy_max"
          }
         ]
        },
@@ -4195,14 +5848,18 @@ export const PROFILES = {
         "severity": "error",
         "all": [
          {
-          "prop": "paint.isWhite",
+          "check": "color.ink_mix",
           "op": "==",
-          "value": true
+          "value": "none"
          },
          {
-          "prop": "fill.overprint",
-          "op": "==",
-          "value": true
+          "check": "color.overprint",
+          "op": "in",
+          "value": [
+           "on",
+           "on_nonzero_mode"
+          ],
+          "paint": "fill"
          }
         ]
        },
@@ -4211,19 +5868,20 @@ export const PROFILES = {
         "severity": "warning",
         "all": [
          {
-          "prop": "content.isText",
+          "check": "content.kind",
           "op": "==",
-          "value": true
+          "value": "text"
          },
          {
-          "prop": "paint.is100Black",
+          "check": "color.ink_mix",
           "op": "==",
-          "value": true
+          "value": "solid_black"
          },
          {
-          "prop": "fill.overprint",
+          "check": "color.overprint",
           "op": "==",
-          "value": false
+          "value": "off",
+          "paint": "fill"
          }
         ]
        },
@@ -4232,8 +5890,8 @@ export const PROFILES = {
         "severity": "info",
         "all": [
          {
-          "prop": "gstate.transparency",
-          "op": "==",
+          "check": "transparency.used",
+          "op": "is",
           "value": true
          }
         ]
@@ -4243,14 +5901,129 @@ export const PROFILES = {
         "severity": "info",
         "all": [
          {
-          "prop": "gstate.blendMode",
+          "check": "transparency.blend_mode",
+          "op": "not_in",
+          "value": [
+           "Normal",
+           "Compatible"
+          ]
+         }
+        ]
+       },
+       {
+        "name": "Image below 300 ppi",
+        "severity": "error",
+        "all": [
+         {
+          "check": "image.resolution",
+          "op": "<",
+          "value": 300,
+          "kind": "colour_or_grey"
+         }
+        ]
+       },
+       {
+        "name": "Bitmap below 1200 ppi",
+        "severity": "warning",
+        "all": [
+         {
+          "check": "image.resolution",
+          "op": "<",
+          "value": 1200,
+          "kind": "bitmap"
+         }
+        ]
+       },
+       {
+        "name": "Image above 450 ppi",
+        "severity": "info",
+        "all": [
+         {
+          "check": "image.resolution",
+          "op": ">",
+          "value": 450,
+          "kind": "colour_or_grey"
+         }
+        ]
+       },
+       {
+        "name": "Document is encrypted",
+        "severity": "error",
+        "all": [
+         {
+          "check": "security.encryption",
           "op": "!=",
-          "value": "Normal"
+          "value": "none"
+         }
+        ]
+       },
+       {
+        "name": "Document is damaged",
+        "severity": "error",
+        "all": [
+         {
+          "check": "document.damaged",
+          "op": "is",
+          "value": true
+         }
+        ]
+       },
+       {
+        "name": "Syntax problem",
+        "severity": "error",
+        "any": [
+         {
+          "all": [
+           {
+            "check": "syntax.content_stream_error",
+            "op": "count",
+            "value": 0,
+            "compare": ">"
+           }
+          ]
          },
          {
-          "prop": "gstate.blendMode",
-          "op": "!=",
-          "value": "Compatible"
+          "all": [
+           {
+            "check": "syntax.xref_layout",
+            "op": "count",
+            "value": 0,
+            "compare": ">"
+           }
+          ]
+         },
+         {
+          "all": [
+           {
+            "check": "syntax.object_layout",
+            "op": "count",
+            "value": 0,
+            "compare": ">"
+           }
+          ]
+         },
+         {
+          "all": [
+           {
+            "check": "syntax.broken_reference",
+            "op": "in",
+            "value": [
+             "object",
+             "external_file"
+            ]
+           }
+          ]
+         }
+        ]
+       },
+       {
+        "name": "PDF version below 1.6",
+        "severity": "warning",
+        "all": [
+         {
+          "check": "document.pdf_version",
+          "op": "<",
+          "value": 1.6
          }
         ]
        },
@@ -4259,9 +6032,74 @@ export const PROFILES = {
         "severity": "error",
         "all": [
          {
-          "prop": "paint.isRegistration",
+          "check": "color.ink_mix",
           "op": "==",
-          "value": true
+          "value": "registration"
+         }
+        ]
+       },
+       {
+        "name": "RGB colour",
+        "severity": "error",
+        "any": [
+         {
+          "all": [
+           {
+            "check": "color.space",
+            "op": "in",
+            "value": [
+             "DeviceRGB",
+             "CalRGB"
+            ]
+           }
+          ]
+         },
+         {
+          "all": [
+           {
+            "check": "color.space",
+            "op": "==",
+            "value": "ICCBased",
+            "icc_components": 3
+           }
+          ]
+         }
+        ]
+       },
+       {
+        "name": "Device-independent colour",
+        "severity": "warning",
+        "all": [
+         {
+          "check": "color.space",
+          "op": "in",
+          "value": [
+           "device_independent"
+          ]
+         }
+        ]
+       },
+       {
+        "name": "More than 0 spot colours on a page",
+        "severity": "error",
+        "all": [
+         {
+          "check": "print.plates",
+          "op": "count",
+          "value": 0,
+          "compare": ">",
+          "kind": "spot"
+         }
+        ]
+       },
+       {
+        "name": "Font not embedded",
+        "severity": "error",
+        "all": [
+         {
+          "check": "font.embedding",
+          "op": "==",
+          "value": "not_embedded"
          }
         ]
        },
@@ -4270,9 +6108,9 @@ export const PROFILES = {
         "severity": "warning",
         "all": [
          {
-          "prop": "font.isType3",
+          "check": "font.type",
           "op": "==",
-          "value": true
+          "value": "type3"
          }
         ]
        },
@@ -4281,9 +6119,9 @@ export const PROFILES = {
         "severity": "error",
         "all": [
          {
-          "prop": "font.notdefUsed",
+          "check": "text.glyph",
           "op": "==",
-          "value": true
+          "value": "notdef"
          }
         ]
        },
@@ -4292,9 +6130,42 @@ export const PROFILES = {
         "severity": "error",
         "all": [
          {
-          "prop": "font.invalid",
-          "op": "==",
+          "check": "font.problem",
+          "op": "includes",
+          "value": "invalid_program"
+         }
+        ]
+       },
+       {
+        "name": "Pages differ in size or orientation",
+        "severity": "warning",
+        "all": [
+         {
+          "check": "document.pages_uniform",
+          "op": "is",
+          "value": false
+         }
+        ]
+       },
+       {
+        "name": "Empty page",
+        "severity": "warning",
+        "all": [
+         {
+          "check": "page.empty",
+          "op": "is",
           "value": true
+         }
+        ]
+       },
+       {
+        "name": "Page scaling in use",
+        "severity": "error",
+        "all": [
+         {
+          "check": "page.user_unit",
+          "op": "!=",
+          "value": 1
          }
         ]
        },
@@ -4303,9 +6174,12 @@ export const PROFILES = {
         "severity": "info",
         "all": [
          {
-          "prop": "content.distanceInsideTrimBox",
+          "check": "content.distance_to_box",
           "op": "<",
-          "value": 8.5
+          "value": 3,
+          "box": "trim",
+          "side": "inside",
+          "unit": "mm"
          }
         ],
         "scope": "trim"
@@ -4315,9 +6189,9 @@ export const PROFILES = {
         "severity": "warning",
         "all": [
          {
-          "prop": "annot.prints",
-          "op": "==",
-          "value": true
+          "check": "annotation.flags",
+          "op": "includes",
+          "value": "print"
          }
         ]
        },
@@ -4326,88 +6200,14 @@ export const PROFILES = {
         "severity": "info",
         "all": [
          {
-          "prop": "layers.onLayer",
-          "op": "==",
-          "value": true
+          "check": "layer.membership",
+          "op": "count",
+          "value": 0,
+          "compare": ">"
          }
         ]
        }
-      ],
-      "builtins": [
-       {
-        "name": "conformsTo",
-        "severity": "error",
-        "level": "x4"
-       },
-       {
-        "name": "imageResolutionBelow",
-        "severity": "error",
-        "params": {
-         "ppi": 300
-        }
-       },
-       {
-        "name": "bitmapResolutionBelow",
-        "severity": "warning",
-        "params": {
-         "ppi": 1200
-        }
-       },
-       {
-        "name": "imageResolutionAbove",
-        "severity": "info",
-        "params": {
-         "ppi": 450
-        }
-       },
-       {
-        "name": "encrypted",
-        "severity": "error"
-       },
-       {
-        "name": "damaged",
-        "severity": "error"
-       },
-       {
-        "name": "syntaxProblems",
-        "severity": "error"
-       },
-       {
-        "name": "pdfVersionBelow",
-        "severity": "warning",
-        "params": {
-         "version": 1.6
-        }
-       },
-       {
-        "name": "rgbUsed",
-        "severity": "error"
-       },
-       {
-        "name": "deviceIndependentColour",
-        "severity": "warning"
-       },
-       {
-        "name": "spotColoursMoreThan",
-        "severity": "error",
-        "params": {
-         "count": 0
-        }
-       },
-       {
-        "name": "fontsNotEmbedded",
-        "severity": "error"
-       },
-       {
-        "name": "pagesDifferInSize",
-        "severity": "warning"
-       },
-       {
-        "name": "emptyPage",
-        "severity": "warning"
-       }
-      ],
-      "fixes": []
+      ]
      }
     },
     {
@@ -4419,11 +6219,23 @@ export const PROFILES = {
       "description": "Written from the Ghent Workgroup 2022 specification for this workflow: PDF/X-4 conformance plus the workflow's resolution, ink, hairline, text, font, colour and page requirements.",
       "checks": [
        {
+        "name": "Not PDF/X-4",
+        "severity": "error",
+        "all": [
+         {
+          "check": "conformance.meets",
+          "op": "is",
+          "value": false,
+          "standard": "pdfx-4"
+         }
+        ]
+       },
+       {
         "name": "Stroke thinner than 0.125 pt",
         "severity": "error",
         "all": [
          {
-          "prop": "stroke.width",
+          "check": "content.stroke_width",
           "op": "<=",
           "value": 0.125
          }
@@ -4434,12 +6246,12 @@ export const PROFILES = {
         "severity": "warning",
         "all": [
          {
-          "prop": "stroke.width",
+          "check": "content.stroke_width",
           "op": "<=",
           "value": 0.25
          },
          {
-          "prop": "stroke.width",
+          "check": "content.stroke_width",
           "op": ">",
           "value": 0.125
          }
@@ -4450,12 +6262,12 @@ export const PROFILES = {
         "severity": "error",
         "all": [
          {
-          "prop": "stroke.width",
+          "check": "content.stroke_width",
           "op": "<=",
           "value": 0.25
          },
          {
-          "prop": "paint.inkCount",
+          "check": "color.inks_used",
           "op": ">",
           "value": 1
          }
@@ -4466,12 +6278,12 @@ export const PROFILES = {
         "severity": "warning",
         "all": [
          {
-          "prop": "text.size",
+          "check": "text.size",
           "op": "<",
           "value": 5
          },
          {
-          "prop": "text.size",
+          "check": "text.size",
           "op": ">",
           "value": 0.01
          }
@@ -4482,17 +6294,17 @@ export const PROFILES = {
         "severity": "warning",
         "all": [
          {
-          "prop": "text.size",
+          "check": "text.size",
           "op": "<",
           "value": 8
          },
          {
-          "prop": "text.size",
+          "check": "text.size",
           "op": ">",
           "value": 0.01
          },
          {
-          "prop": "paint.inkCount",
+          "check": "color.inks_used",
           "op": ">",
           "value": 1
          }
@@ -4503,19 +6315,19 @@ export const PROFILES = {
         "severity": "warning",
         "all": [
          {
-          "prop": "text.size",
+          "check": "text.size",
           "op": "<",
           "value": 8
          },
          {
-          "prop": "text.size",
+          "check": "text.size",
           "op": ">",
           "value": 0.01
          },
          {
-          "prop": "paint.isWhite",
+          "check": "color.ink_mix",
           "op": "==",
-          "value": true
+          "value": "none"
          }
         ]
        },
@@ -4524,9 +6336,10 @@ export const PROFILES = {
         "severity": "error",
         "all": [
          {
-          "prop": "fill.totalInk",
+          "check": "color.total_ink",
           "op": ">",
-          "value": 320
+          "value": 320,
+          "paint": "fill"
          }
         ]
        },
@@ -4535,9 +6348,10 @@ export const PROFILES = {
         "severity": "error",
         "all": [
          {
-          "prop": "stroke.totalInk",
+          "check": "color.total_ink",
           "op": ">",
-          "value": 320
+          "value": 320,
+          "paint": "stroke"
          }
         ]
        },
@@ -4546,19 +6360,26 @@ export const PROFILES = {
         "severity": "warning",
         "all": [
          {
-          "prop": "content.isText",
+          "check": "content.kind",
           "op": "==",
-          "value": true
+          "value": "text"
          },
          {
-          "prop": "text.size",
+          "check": "text.size",
           "op": "<",
           "value": 12
          },
          {
-          "prop": "paint.richBlackCmyPercent",
+          "check": "color.ink",
+          "op": ">=",
+          "value": 100,
+          "ink": "black"
+         },
+         {
+          "check": "color.ink",
           "op": ">",
-          "value": 0
+          "value": 0,
+          "ink": "cmy_max"
          }
         ]
        },
@@ -4567,14 +6388,18 @@ export const PROFILES = {
         "severity": "error",
         "all": [
          {
-          "prop": "paint.isWhite",
+          "check": "color.ink_mix",
           "op": "==",
-          "value": true
+          "value": "none"
          },
          {
-          "prop": "fill.overprint",
-          "op": "==",
-          "value": true
+          "check": "color.overprint",
+          "op": "in",
+          "value": [
+           "on",
+           "on_nonzero_mode"
+          ],
+          "paint": "fill"
          }
         ]
        },
@@ -4583,19 +6408,20 @@ export const PROFILES = {
         "severity": "warning",
         "all": [
          {
-          "prop": "content.isText",
+          "check": "content.kind",
           "op": "==",
-          "value": true
+          "value": "text"
          },
          {
-          "prop": "paint.is100Black",
+          "check": "color.ink_mix",
           "op": "==",
-          "value": true
+          "value": "solid_black"
          },
          {
-          "prop": "fill.overprint",
+          "check": "color.overprint",
           "op": "==",
-          "value": false
+          "value": "off",
+          "paint": "fill"
          }
         ]
        },
@@ -4604,8 +6430,8 @@ export const PROFILES = {
         "severity": "info",
         "all": [
          {
-          "prop": "gstate.transparency",
-          "op": "==",
+          "check": "transparency.used",
+          "op": "is",
           "value": true
          }
         ]
@@ -4615,14 +6441,129 @@ export const PROFILES = {
         "severity": "info",
         "all": [
          {
-          "prop": "gstate.blendMode",
+          "check": "transparency.blend_mode",
+          "op": "not_in",
+          "value": [
+           "Normal",
+           "Compatible"
+          ]
+         }
+        ]
+       },
+       {
+        "name": "Image below 300 ppi",
+        "severity": "error",
+        "all": [
+         {
+          "check": "image.resolution",
+          "op": "<",
+          "value": 300,
+          "kind": "colour_or_grey"
+         }
+        ]
+       },
+       {
+        "name": "Bitmap below 1200 ppi",
+        "severity": "warning",
+        "all": [
+         {
+          "check": "image.resolution",
+          "op": "<",
+          "value": 1200,
+          "kind": "bitmap"
+         }
+        ]
+       },
+       {
+        "name": "Image above 450 ppi",
+        "severity": "info",
+        "all": [
+         {
+          "check": "image.resolution",
+          "op": ">",
+          "value": 450,
+          "kind": "colour_or_grey"
+         }
+        ]
+       },
+       {
+        "name": "Document is encrypted",
+        "severity": "error",
+        "all": [
+         {
+          "check": "security.encryption",
           "op": "!=",
-          "value": "Normal"
+          "value": "none"
+         }
+        ]
+       },
+       {
+        "name": "Document is damaged",
+        "severity": "error",
+        "all": [
+         {
+          "check": "document.damaged",
+          "op": "is",
+          "value": true
+         }
+        ]
+       },
+       {
+        "name": "Syntax problem",
+        "severity": "error",
+        "any": [
+         {
+          "all": [
+           {
+            "check": "syntax.content_stream_error",
+            "op": "count",
+            "value": 0,
+            "compare": ">"
+           }
+          ]
          },
          {
-          "prop": "gstate.blendMode",
-          "op": "!=",
-          "value": "Compatible"
+          "all": [
+           {
+            "check": "syntax.xref_layout",
+            "op": "count",
+            "value": 0,
+            "compare": ">"
+           }
+          ]
+         },
+         {
+          "all": [
+           {
+            "check": "syntax.object_layout",
+            "op": "count",
+            "value": 0,
+            "compare": ">"
+           }
+          ]
+         },
+         {
+          "all": [
+           {
+            "check": "syntax.broken_reference",
+            "op": "in",
+            "value": [
+             "object",
+             "external_file"
+            ]
+           }
+          ]
+         }
+        ]
+       },
+       {
+        "name": "PDF version below 1.6",
+        "severity": "warning",
+        "all": [
+         {
+          "check": "document.pdf_version",
+          "op": "<",
+          "value": 1.6
          }
         ]
        },
@@ -4631,9 +6572,85 @@ export const PROFILES = {
         "severity": "error",
         "all": [
          {
-          "prop": "paint.isRegistration",
+          "check": "color.ink_mix",
           "op": "==",
-          "value": true
+          "value": "registration"
+         }
+        ]
+       },
+       {
+        "name": "RGB colour",
+        "severity": "error",
+        "any": [
+         {
+          "all": [
+           {
+            "check": "color.space",
+            "op": "in",
+            "value": [
+             "DeviceRGB",
+             "CalRGB"
+            ]
+           }
+          ]
+         },
+         {
+          "all": [
+           {
+            "check": "color.space",
+            "op": "==",
+            "value": "ICCBased",
+            "icc_components": 3
+           }
+          ]
+         }
+        ]
+       },
+       {
+        "name": "Device-independent colour",
+        "severity": "warning",
+        "all": [
+         {
+          "check": "color.space",
+          "op": "in",
+          "value": [
+           "device_independent"
+          ]
+         }
+        ]
+       },
+       {
+        "name": "More than 1 spot colour on a page",
+        "severity": "warning",
+        "all": [
+         {
+          "check": "print.plates",
+          "op": "count",
+          "value": 1,
+          "compare": ">",
+          "kind": "spot"
+         }
+        ]
+       },
+       {
+        "name": "Spot colour names that differ only in spelling",
+        "severity": "warning",
+        "all": [
+         {
+          "check": "print.spot_naming",
+          "op": "includes",
+          "value": "similar_names"
+         }
+        ]
+       },
+       {
+        "name": "Font not embedded",
+        "severity": "error",
+        "all": [
+         {
+          "check": "font.embedding",
+          "op": "==",
+          "value": "not_embedded"
          }
         ]
        },
@@ -4642,9 +6659,9 @@ export const PROFILES = {
         "severity": "warning",
         "all": [
          {
-          "prop": "font.isType3",
+          "check": "font.type",
           "op": "==",
-          "value": true
+          "value": "type3"
          }
         ]
        },
@@ -4653,9 +6670,9 @@ export const PROFILES = {
         "severity": "error",
         "all": [
          {
-          "prop": "font.notdefUsed",
+          "check": "text.glyph",
           "op": "==",
-          "value": true
+          "value": "notdef"
          }
         ]
        },
@@ -4664,9 +6681,42 @@ export const PROFILES = {
         "severity": "error",
         "all": [
          {
-          "prop": "font.invalid",
-          "op": "==",
+          "check": "font.problem",
+          "op": "includes",
+          "value": "invalid_program"
+         }
+        ]
+       },
+       {
+        "name": "Pages differ in size or orientation",
+        "severity": "warning",
+        "all": [
+         {
+          "check": "document.pages_uniform",
+          "op": "is",
+          "value": false
+         }
+        ]
+       },
+       {
+        "name": "Empty page",
+        "severity": "warning",
+        "all": [
+         {
+          "check": "page.empty",
+          "op": "is",
           "value": true
+         }
+        ]
+       },
+       {
+        "name": "Page scaling in use",
+        "severity": "error",
+        "all": [
+         {
+          "check": "page.user_unit",
+          "op": "!=",
+          "value": 1
          }
         ]
        },
@@ -4675,9 +6725,12 @@ export const PROFILES = {
         "severity": "info",
         "all": [
          {
-          "prop": "content.distanceInsideTrimBox",
+          "check": "content.distance_to_box",
           "op": "<",
-          "value": 8.5
+          "value": 3,
+          "box": "trim",
+          "side": "inside",
+          "unit": "mm"
          }
         ],
         "scope": "trim"
@@ -4687,9 +6740,9 @@ export const PROFILES = {
         "severity": "warning",
         "all": [
          {
-          "prop": "annot.prints",
-          "op": "==",
-          "value": true
+          "check": "annotation.flags",
+          "op": "includes",
+          "value": "print"
          }
         ]
        },
@@ -4698,92 +6751,14 @@ export const PROFILES = {
         "severity": "info",
         "all": [
          {
-          "prop": "layers.onLayer",
-          "op": "==",
-          "value": true
+          "check": "layer.membership",
+          "op": "count",
+          "value": 0,
+          "compare": ">"
          }
         ]
        }
-      ],
-      "builtins": [
-       {
-        "name": "conformsTo",
-        "severity": "error",
-        "level": "x4"
-       },
-       {
-        "name": "imageResolutionBelow",
-        "severity": "error",
-        "params": {
-         "ppi": 300
-        }
-       },
-       {
-        "name": "bitmapResolutionBelow",
-        "severity": "warning",
-        "params": {
-         "ppi": 1200
-        }
-       },
-       {
-        "name": "imageResolutionAbove",
-        "severity": "info",
-        "params": {
-         "ppi": 450
-        }
-       },
-       {
-        "name": "encrypted",
-        "severity": "error"
-       },
-       {
-        "name": "damaged",
-        "severity": "error"
-       },
-       {
-        "name": "syntaxProblems",
-        "severity": "error"
-       },
-       {
-        "name": "pdfVersionBelow",
-        "severity": "warning",
-        "params": {
-         "version": 1.6
-        }
-       },
-       {
-        "name": "rgbUsed",
-        "severity": "error"
-       },
-       {
-        "name": "deviceIndependentColour",
-        "severity": "warning"
-       },
-       {
-        "name": "spotColoursMoreThan",
-        "severity": "warning",
-        "params": {
-         "count": 1
-        }
-       },
-       {
-        "name": "spotNamesInconsistent",
-        "severity": "warning"
-       },
-       {
-        "name": "fontsNotEmbedded",
-        "severity": "error"
-       },
-       {
-        "name": "pagesDifferInSize",
-        "severity": "warning"
-       },
-       {
-        "name": "emptyPage",
-        "severity": "warning"
-       }
-      ],
-      "fixes": []
+      ]
      }
     },
     {
@@ -4795,11 +6770,23 @@ export const PROFILES = {
       "description": "Written from the Ghent Workgroup 2022 specification for this workflow: PDF/X-4 conformance plus the workflow's resolution, ink, hairline, text, font, colour and page requirements.",
       "checks": [
        {
+        "name": "Not PDF/X-4",
+        "severity": "error",
+        "all": [
+         {
+          "check": "conformance.meets",
+          "op": "is",
+          "value": false,
+          "standard": "pdfx-4"
+         }
+        ]
+       },
+       {
         "name": "Stroke thinner than 0.25 pt",
         "severity": "error",
         "all": [
          {
-          "prop": "stroke.width",
+          "check": "content.stroke_width",
           "op": "<=",
           "value": 0.25
          }
@@ -4810,12 +6797,12 @@ export const PROFILES = {
         "severity": "warning",
         "all": [
          {
-          "prop": "stroke.width",
+          "check": "content.stroke_width",
           "op": "<=",
           "value": 0.5
          },
          {
-          "prop": "stroke.width",
+          "check": "content.stroke_width",
           "op": ">",
           "value": 0.25
          }
@@ -4826,12 +6813,12 @@ export const PROFILES = {
         "severity": "error",
         "all": [
          {
-          "prop": "stroke.width",
+          "check": "content.stroke_width",
           "op": "<=",
           "value": 0.5
          },
          {
-          "prop": "paint.inkCount",
+          "check": "color.inks_used",
           "op": ">",
           "value": 1
          }
@@ -4842,12 +6829,12 @@ export const PROFILES = {
         "severity": "warning",
         "all": [
          {
-          "prop": "text.size",
+          "check": "text.size",
           "op": "<",
           "value": 8
          },
          {
-          "prop": "text.size",
+          "check": "text.size",
           "op": ">",
           "value": 0.01
          }
@@ -4858,17 +6845,17 @@ export const PROFILES = {
         "severity": "warning",
         "all": [
          {
-          "prop": "text.size",
+          "check": "text.size",
           "op": "<",
           "value": 12
          },
          {
-          "prop": "text.size",
+          "check": "text.size",
           "op": ">",
           "value": 0.01
          },
          {
-          "prop": "paint.inkCount",
+          "check": "color.inks_used",
           "op": ">",
           "value": 1
          }
@@ -4879,19 +6866,19 @@ export const PROFILES = {
         "severity": "warning",
         "all": [
          {
-          "prop": "text.size",
+          "check": "text.size",
           "op": "<",
           "value": 12
          },
          {
-          "prop": "text.size",
+          "check": "text.size",
           "op": ">",
           "value": 0.01
          },
          {
-          "prop": "paint.isWhite",
+          "check": "color.ink_mix",
           "op": "==",
-          "value": true
+          "value": "none"
          }
         ]
        },
@@ -4900,9 +6887,10 @@ export const PROFILES = {
         "severity": "error",
         "all": [
          {
-          "prop": "fill.totalInk",
+          "check": "color.total_ink",
           "op": ">",
-          "value": 300
+          "value": 300,
+          "paint": "fill"
          }
         ]
        },
@@ -4911,9 +6899,10 @@ export const PROFILES = {
         "severity": "error",
         "all": [
          {
-          "prop": "stroke.totalInk",
+          "check": "color.total_ink",
           "op": ">",
-          "value": 300
+          "value": 300,
+          "paint": "stroke"
          }
         ]
        },
@@ -4922,19 +6911,26 @@ export const PROFILES = {
         "severity": "warning",
         "all": [
          {
-          "prop": "content.isText",
+          "check": "content.kind",
           "op": "==",
-          "value": true
+          "value": "text"
          },
          {
-          "prop": "text.size",
+          "check": "text.size",
           "op": "<",
           "value": 12
          },
          {
-          "prop": "paint.richBlackCmyPercent",
+          "check": "color.ink",
+          "op": ">=",
+          "value": 100,
+          "ink": "black"
+         },
+         {
+          "check": "color.ink",
           "op": ">",
-          "value": 0
+          "value": 0,
+          "ink": "cmy_max"
          }
         ]
        },
@@ -4943,14 +6939,18 @@ export const PROFILES = {
         "severity": "error",
         "all": [
          {
-          "prop": "paint.isWhite",
+          "check": "color.ink_mix",
           "op": "==",
-          "value": true
+          "value": "none"
          },
          {
-          "prop": "fill.overprint",
-          "op": "==",
-          "value": true
+          "check": "color.overprint",
+          "op": "in",
+          "value": [
+           "on",
+           "on_nonzero_mode"
+          ],
+          "paint": "fill"
          }
         ]
        },
@@ -4959,19 +6959,20 @@ export const PROFILES = {
         "severity": "warning",
         "all": [
          {
-          "prop": "content.isText",
+          "check": "content.kind",
           "op": "==",
-          "value": true
+          "value": "text"
          },
          {
-          "prop": "paint.is100Black",
+          "check": "color.ink_mix",
           "op": "==",
-          "value": true
+          "value": "solid_black"
          },
          {
-          "prop": "fill.overprint",
+          "check": "color.overprint",
           "op": "==",
-          "value": false
+          "value": "off",
+          "paint": "fill"
          }
         ]
        },
@@ -4980,8 +6981,8 @@ export const PROFILES = {
         "severity": "info",
         "all": [
          {
-          "prop": "gstate.transparency",
-          "op": "==",
+          "check": "transparency.used",
+          "op": "is",
           "value": true
          }
         ]
@@ -4991,14 +6992,129 @@ export const PROFILES = {
         "severity": "info",
         "all": [
          {
-          "prop": "gstate.blendMode",
+          "check": "transparency.blend_mode",
+          "op": "not_in",
+          "value": [
+           "Normal",
+           "Compatible"
+          ]
+         }
+        ]
+       },
+       {
+        "name": "Image below 150 ppi",
+        "severity": "error",
+        "all": [
+         {
+          "check": "image.resolution",
+          "op": "<",
+          "value": 150,
+          "kind": "colour_or_grey"
+         }
+        ]
+       },
+       {
+        "name": "Bitmap below 600 ppi",
+        "severity": "warning",
+        "all": [
+         {
+          "check": "image.resolution",
+          "op": "<",
+          "value": 600,
+          "kind": "bitmap"
+         }
+        ]
+       },
+       {
+        "name": "Image above 300 ppi",
+        "severity": "info",
+        "all": [
+         {
+          "check": "image.resolution",
+          "op": ">",
+          "value": 300,
+          "kind": "colour_or_grey"
+         }
+        ]
+       },
+       {
+        "name": "Document is encrypted",
+        "severity": "error",
+        "all": [
+         {
+          "check": "security.encryption",
           "op": "!=",
-          "value": "Normal"
+          "value": "none"
+         }
+        ]
+       },
+       {
+        "name": "Document is damaged",
+        "severity": "error",
+        "all": [
+         {
+          "check": "document.damaged",
+          "op": "is",
+          "value": true
+         }
+        ]
+       },
+       {
+        "name": "Syntax problem",
+        "severity": "error",
+        "any": [
+         {
+          "all": [
+           {
+            "check": "syntax.content_stream_error",
+            "op": "count",
+            "value": 0,
+            "compare": ">"
+           }
+          ]
          },
          {
-          "prop": "gstate.blendMode",
-          "op": "!=",
-          "value": "Compatible"
+          "all": [
+           {
+            "check": "syntax.xref_layout",
+            "op": "count",
+            "value": 0,
+            "compare": ">"
+           }
+          ]
+         },
+         {
+          "all": [
+           {
+            "check": "syntax.object_layout",
+            "op": "count",
+            "value": 0,
+            "compare": ">"
+           }
+          ]
+         },
+         {
+          "all": [
+           {
+            "check": "syntax.broken_reference",
+            "op": "in",
+            "value": [
+             "object",
+             "external_file"
+            ]
+           }
+          ]
+         }
+        ]
+       },
+       {
+        "name": "PDF version below 1.6",
+        "severity": "warning",
+        "all": [
+         {
+          "check": "document.pdf_version",
+          "op": "<",
+          "value": 1.6
          }
         ]
        },
@@ -5007,9 +7123,85 @@ export const PROFILES = {
         "severity": "error",
         "all": [
          {
-          "prop": "paint.isRegistration",
+          "check": "color.ink_mix",
           "op": "==",
-          "value": true
+          "value": "registration"
+         }
+        ]
+       },
+       {
+        "name": "RGB colour",
+        "severity": "error",
+        "any": [
+         {
+          "all": [
+           {
+            "check": "color.space",
+            "op": "in",
+            "value": [
+             "DeviceRGB",
+             "CalRGB"
+            ]
+           }
+          ]
+         },
+         {
+          "all": [
+           {
+            "check": "color.space",
+            "op": "==",
+            "value": "ICCBased",
+            "icc_components": 3
+           }
+          ]
+         }
+        ]
+       },
+       {
+        "name": "Device-independent colour",
+        "severity": "warning",
+        "all": [
+         {
+          "check": "color.space",
+          "op": "in",
+          "value": [
+           "device_independent"
+          ]
+         }
+        ]
+       },
+       {
+        "name": "More than 2 spot colours on a page",
+        "severity": "warning",
+        "all": [
+         {
+          "check": "print.plates",
+          "op": "count",
+          "value": 2,
+          "compare": ">",
+          "kind": "spot"
+         }
+        ]
+       },
+       {
+        "name": "Spot colour names that differ only in spelling",
+        "severity": "warning",
+        "all": [
+         {
+          "check": "print.spot_naming",
+          "op": "includes",
+          "value": "similar_names"
+         }
+        ]
+       },
+       {
+        "name": "Font not embedded",
+        "severity": "error",
+        "all": [
+         {
+          "check": "font.embedding",
+          "op": "==",
+          "value": "not_embedded"
          }
         ]
        },
@@ -5018,9 +7210,9 @@ export const PROFILES = {
         "severity": "warning",
         "all": [
          {
-          "prop": "font.isType3",
+          "check": "font.type",
           "op": "==",
-          "value": true
+          "value": "type3"
          }
         ]
        },
@@ -5029,9 +7221,9 @@ export const PROFILES = {
         "severity": "error",
         "all": [
          {
-          "prop": "font.notdefUsed",
+          "check": "text.glyph",
           "op": "==",
-          "value": true
+          "value": "notdef"
          }
         ]
        },
@@ -5040,9 +7232,42 @@ export const PROFILES = {
         "severity": "error",
         "all": [
          {
-          "prop": "font.invalid",
-          "op": "==",
+          "check": "font.problem",
+          "op": "includes",
+          "value": "invalid_program"
+         }
+        ]
+       },
+       {
+        "name": "Pages differ in size or orientation",
+        "severity": "warning",
+        "all": [
+         {
+          "check": "document.pages_uniform",
+          "op": "is",
+          "value": false
+         }
+        ]
+       },
+       {
+        "name": "Empty page",
+        "severity": "warning",
+        "all": [
+         {
+          "check": "page.empty",
+          "op": "is",
           "value": true
+         }
+        ]
+       },
+       {
+        "name": "Page scaling in use",
+        "severity": "error",
+        "all": [
+         {
+          "check": "page.user_unit",
+          "op": "!=",
+          "value": 1
          }
         ]
        },
@@ -5051,9 +7276,12 @@ export const PROFILES = {
         "severity": "info",
         "all": [
          {
-          "prop": "content.distanceInsideTrimBox",
+          "check": "content.distance_to_box",
           "op": "<",
-          "value": 8.5
+          "value": 3,
+          "box": "trim",
+          "side": "inside",
+          "unit": "mm"
          }
         ],
         "scope": "trim"
@@ -5063,9 +7291,9 @@ export const PROFILES = {
         "severity": "warning",
         "all": [
          {
-          "prop": "annot.prints",
-          "op": "==",
-          "value": true
+          "check": "annotation.flags",
+          "op": "includes",
+          "value": "print"
          }
         ]
        },
@@ -5074,92 +7302,14 @@ export const PROFILES = {
         "severity": "info",
         "all": [
          {
-          "prop": "layers.onLayer",
-          "op": "==",
-          "value": true
+          "check": "layer.membership",
+          "op": "count",
+          "value": 0,
+          "compare": ">"
          }
         ]
        }
-      ],
-      "builtins": [
-       {
-        "name": "conformsTo",
-        "severity": "error",
-        "level": "x4"
-       },
-       {
-        "name": "imageResolutionBelow",
-        "severity": "error",
-        "params": {
-         "ppi": 150
-        }
-       },
-       {
-        "name": "bitmapResolutionBelow",
-        "severity": "warning",
-        "params": {
-         "ppi": 600
-        }
-       },
-       {
-        "name": "imageResolutionAbove",
-        "severity": "info",
-        "params": {
-         "ppi": 300
-        }
-       },
-       {
-        "name": "encrypted",
-        "severity": "error"
-       },
-       {
-        "name": "damaged",
-        "severity": "error"
-       },
-       {
-        "name": "syntaxProblems",
-        "severity": "error"
-       },
-       {
-        "name": "pdfVersionBelow",
-        "severity": "warning",
-        "params": {
-         "version": 1.6
-        }
-       },
-       {
-        "name": "rgbUsed",
-        "severity": "error"
-       },
-       {
-        "name": "deviceIndependentColour",
-        "severity": "warning"
-       },
-       {
-        "name": "spotColoursMoreThan",
-        "severity": "warning",
-        "params": {
-         "count": 2
-        }
-       },
-       {
-        "name": "spotNamesInconsistent",
-        "severity": "warning"
-       },
-       {
-        "name": "fontsNotEmbedded",
-        "severity": "error"
-       },
-       {
-        "name": "pagesDifferInSize",
-        "severity": "warning"
-       },
-       {
-        "name": "emptyPage",
-        "severity": "warning"
-       }
-      ],
-      "fixes": []
+      ]
      }
     },
     {
@@ -5171,11 +7321,23 @@ export const PROFILES = {
       "description": "Written from the Ghent Workgroup 2022 specification for this workflow: PDF/X-4 conformance plus the workflow's resolution, ink, hairline, text, font, colour and page requirements.",
       "checks": [
        {
+        "name": "Not PDF/X-4",
+        "severity": "error",
+        "all": [
+         {
+          "check": "conformance.meets",
+          "op": "is",
+          "value": false,
+          "standard": "pdfx-4"
+         }
+        ]
+       },
+       {
         "name": "Stroke thinner than 0.125 pt",
         "severity": "error",
         "all": [
          {
-          "prop": "stroke.width",
+          "check": "content.stroke_width",
           "op": "<=",
           "value": 0.125
          }
@@ -5186,12 +7348,12 @@ export const PROFILES = {
         "severity": "warning",
         "all": [
          {
-          "prop": "stroke.width",
+          "check": "content.stroke_width",
           "op": "<=",
           "value": 0.25
          },
          {
-          "prop": "stroke.width",
+          "check": "content.stroke_width",
           "op": ">",
           "value": 0.125
          }
@@ -5202,12 +7364,12 @@ export const PROFILES = {
         "severity": "error",
         "all": [
          {
-          "prop": "stroke.width",
+          "check": "content.stroke_width",
           "op": "<=",
           "value": 0.25
          },
          {
-          "prop": "paint.inkCount",
+          "check": "color.inks_used",
           "op": ">",
           "value": 1
          }
@@ -5218,12 +7380,12 @@ export const PROFILES = {
         "severity": "warning",
         "all": [
          {
-          "prop": "text.size",
+          "check": "text.size",
           "op": "<",
           "value": 5
          },
          {
-          "prop": "text.size",
+          "check": "text.size",
           "op": ">",
           "value": 0.01
          }
@@ -5234,17 +7396,17 @@ export const PROFILES = {
         "severity": "warning",
         "all": [
          {
-          "prop": "text.size",
+          "check": "text.size",
           "op": "<",
           "value": 8
          },
          {
-          "prop": "text.size",
+          "check": "text.size",
           "op": ">",
           "value": 0.01
          },
          {
-          "prop": "paint.inkCount",
+          "check": "color.inks_used",
           "op": ">",
           "value": 1
          }
@@ -5255,19 +7417,19 @@ export const PROFILES = {
         "severity": "warning",
         "all": [
          {
-          "prop": "text.size",
+          "check": "text.size",
           "op": "<",
           "value": 8
          },
          {
-          "prop": "text.size",
+          "check": "text.size",
           "op": ">",
           "value": 0.01
          },
          {
-          "prop": "paint.isWhite",
+          "check": "color.ink_mix",
           "op": "==",
-          "value": true
+          "value": "none"
          }
         ]
        },
@@ -5276,9 +7438,10 @@ export const PROFILES = {
         "severity": "error",
         "all": [
          {
-          "prop": "fill.totalInk",
+          "check": "color.total_ink",
           "op": ">",
-          "value": 320
+          "value": 320,
+          "paint": "fill"
          }
         ]
        },
@@ -5287,9 +7450,10 @@ export const PROFILES = {
         "severity": "error",
         "all": [
          {
-          "prop": "stroke.totalInk",
+          "check": "color.total_ink",
           "op": ">",
-          "value": 320
+          "value": 320,
+          "paint": "stroke"
          }
         ]
        },
@@ -5298,19 +7462,26 @@ export const PROFILES = {
         "severity": "warning",
         "all": [
          {
-          "prop": "content.isText",
+          "check": "content.kind",
           "op": "==",
-          "value": true
+          "value": "text"
          },
          {
-          "prop": "text.size",
+          "check": "text.size",
           "op": "<",
           "value": 12
          },
          {
-          "prop": "paint.richBlackCmyPercent",
+          "check": "color.ink",
+          "op": ">=",
+          "value": 100,
+          "ink": "black"
+         },
+         {
+          "check": "color.ink",
           "op": ">",
-          "value": 0
+          "value": 0,
+          "ink": "cmy_max"
          }
         ]
        },
@@ -5319,14 +7490,18 @@ export const PROFILES = {
         "severity": "error",
         "all": [
          {
-          "prop": "paint.isWhite",
+          "check": "color.ink_mix",
           "op": "==",
-          "value": true
+          "value": "none"
          },
          {
-          "prop": "fill.overprint",
-          "op": "==",
-          "value": true
+          "check": "color.overprint",
+          "op": "in",
+          "value": [
+           "on",
+           "on_nonzero_mode"
+          ],
+          "paint": "fill"
          }
         ]
        },
@@ -5335,19 +7510,20 @@ export const PROFILES = {
         "severity": "warning",
         "all": [
          {
-          "prop": "content.isText",
+          "check": "content.kind",
           "op": "==",
-          "value": true
+          "value": "text"
          },
          {
-          "prop": "paint.is100Black",
+          "check": "color.ink_mix",
           "op": "==",
-          "value": true
+          "value": "solid_black"
          },
          {
-          "prop": "fill.overprint",
+          "check": "color.overprint",
           "op": "==",
-          "value": false
+          "value": "off",
+          "paint": "fill"
          }
         ]
        },
@@ -5356,8 +7532,8 @@ export const PROFILES = {
         "severity": "info",
         "all": [
          {
-          "prop": "gstate.transparency",
-          "op": "==",
+          "check": "transparency.used",
+          "op": "is",
           "value": true
          }
         ]
@@ -5367,14 +7543,129 @@ export const PROFILES = {
         "severity": "info",
         "all": [
          {
-          "prop": "gstate.blendMode",
+          "check": "transparency.blend_mode",
+          "op": "not_in",
+          "value": [
+           "Normal",
+           "Compatible"
+          ]
+         }
+        ]
+       },
+       {
+        "name": "Image below 300 ppi",
+        "severity": "error",
+        "all": [
+         {
+          "check": "image.resolution",
+          "op": "<",
+          "value": 300,
+          "kind": "colour_or_grey"
+         }
+        ]
+       },
+       {
+        "name": "Bitmap below 1200 ppi",
+        "severity": "warning",
+        "all": [
+         {
+          "check": "image.resolution",
+          "op": "<",
+          "value": 1200,
+          "kind": "bitmap"
+         }
+        ]
+       },
+       {
+        "name": "Image above 450 ppi",
+        "severity": "info",
+        "all": [
+         {
+          "check": "image.resolution",
+          "op": ">",
+          "value": 450,
+          "kind": "colour_or_grey"
+         }
+        ]
+       },
+       {
+        "name": "Document is encrypted",
+        "severity": "error",
+        "all": [
+         {
+          "check": "security.encryption",
           "op": "!=",
-          "value": "Normal"
+          "value": "none"
+         }
+        ]
+       },
+       {
+        "name": "Document is damaged",
+        "severity": "error",
+        "all": [
+         {
+          "check": "document.damaged",
+          "op": "is",
+          "value": true
+         }
+        ]
+       },
+       {
+        "name": "Syntax problem",
+        "severity": "error",
+        "any": [
+         {
+          "all": [
+           {
+            "check": "syntax.content_stream_error",
+            "op": "count",
+            "value": 0,
+            "compare": ">"
+           }
+          ]
          },
          {
-          "prop": "gstate.blendMode",
-          "op": "!=",
-          "value": "Compatible"
+          "all": [
+           {
+            "check": "syntax.xref_layout",
+            "op": "count",
+            "value": 0,
+            "compare": ">"
+           }
+          ]
+         },
+         {
+          "all": [
+           {
+            "check": "syntax.object_layout",
+            "op": "count",
+            "value": 0,
+            "compare": ">"
+           }
+          ]
+         },
+         {
+          "all": [
+           {
+            "check": "syntax.broken_reference",
+            "op": "in",
+            "value": [
+             "object",
+             "external_file"
+            ]
+           }
+          ]
+         }
+        ]
+       },
+       {
+        "name": "PDF version below 1.6",
+        "severity": "warning",
+        "all": [
+         {
+          "check": "document.pdf_version",
+          "op": "<",
+          "value": 1.6
          }
         ]
        },
@@ -5383,9 +7674,85 @@ export const PROFILES = {
         "severity": "error",
         "all": [
          {
-          "prop": "paint.isRegistration",
+          "check": "color.ink_mix",
           "op": "==",
-          "value": true
+          "value": "registration"
+         }
+        ]
+       },
+       {
+        "name": "RGB colour",
+        "severity": "error",
+        "any": [
+         {
+          "all": [
+           {
+            "check": "color.space",
+            "op": "in",
+            "value": [
+             "DeviceRGB",
+             "CalRGB"
+            ]
+           }
+          ]
+         },
+         {
+          "all": [
+           {
+            "check": "color.space",
+            "op": "==",
+            "value": "ICCBased",
+            "icc_components": 3
+           }
+          ]
+         }
+        ]
+       },
+       {
+        "name": "Device-independent colour",
+        "severity": "warning",
+        "all": [
+         {
+          "check": "color.space",
+          "op": "in",
+          "value": [
+           "device_independent"
+          ]
+         }
+        ]
+       },
+       {
+        "name": "More than 6 spot colours on a page",
+        "severity": "warning",
+        "all": [
+         {
+          "check": "print.plates",
+          "op": "count",
+          "value": 6,
+          "compare": ">",
+          "kind": "spot"
+         }
+        ]
+       },
+       {
+        "name": "Spot colour names that differ only in spelling",
+        "severity": "warning",
+        "all": [
+         {
+          "check": "print.spot_naming",
+          "op": "includes",
+          "value": "similar_names"
+         }
+        ]
+       },
+       {
+        "name": "Font not embedded",
+        "severity": "error",
+        "all": [
+         {
+          "check": "font.embedding",
+          "op": "==",
+          "value": "not_embedded"
          }
         ]
        },
@@ -5394,9 +7761,9 @@ export const PROFILES = {
         "severity": "warning",
         "all": [
          {
-          "prop": "font.isType3",
+          "check": "font.type",
           "op": "==",
-          "value": true
+          "value": "type3"
          }
         ]
        },
@@ -5405,9 +7772,9 @@ export const PROFILES = {
         "severity": "error",
         "all": [
          {
-          "prop": "font.notdefUsed",
+          "check": "text.glyph",
           "op": "==",
-          "value": true
+          "value": "notdef"
          }
         ]
        },
@@ -5416,9 +7783,42 @@ export const PROFILES = {
         "severity": "error",
         "all": [
          {
-          "prop": "font.invalid",
-          "op": "==",
+          "check": "font.problem",
+          "op": "includes",
+          "value": "invalid_program"
+         }
+        ]
+       },
+       {
+        "name": "Pages differ in size or orientation",
+        "severity": "warning",
+        "all": [
+         {
+          "check": "document.pages_uniform",
+          "op": "is",
+          "value": false
+         }
+        ]
+       },
+       {
+        "name": "Empty page",
+        "severity": "warning",
+        "all": [
+         {
+          "check": "page.empty",
+          "op": "is",
           "value": true
+         }
+        ]
+       },
+       {
+        "name": "Page scaling in use",
+        "severity": "error",
+        "all": [
+         {
+          "check": "page.user_unit",
+          "op": "!=",
+          "value": 1
          }
         ]
        },
@@ -5427,9 +7827,12 @@ export const PROFILES = {
         "severity": "info",
         "all": [
          {
-          "prop": "content.distanceInsideTrimBox",
+          "check": "content.distance_to_box",
           "op": "<",
-          "value": 8.5
+          "value": 3,
+          "box": "trim",
+          "side": "inside",
+          "unit": "mm"
          }
         ],
         "scope": "trim"
@@ -5439,9 +7842,9 @@ export const PROFILES = {
         "severity": "warning",
         "all": [
          {
-          "prop": "annot.prints",
-          "op": "==",
-          "value": true
+          "check": "annotation.flags",
+          "op": "includes",
+          "value": "print"
          }
         ]
        },
@@ -5450,108 +7853,45 @@ export const PROFILES = {
         "severity": "info",
         "all": [
          {
-          "prop": "layers.onLayer",
-          "op": "==",
-          "value": true
+          "check": "layer.membership",
+          "op": "count",
+          "value": 0,
+          "compare": ">"
          }
         ]
        }
-      ],
-      "builtins": [
-       {
-        "name": "conformsTo",
-        "severity": "error",
-        "level": "x4"
-       },
-       {
-        "name": "imageResolutionBelow",
-        "severity": "error",
-        "params": {
-         "ppi": 300
-        }
-       },
-       {
-        "name": "bitmapResolutionBelow",
-        "severity": "warning",
-        "params": {
-         "ppi": 1200
-        }
-       },
-       {
-        "name": "imageResolutionAbove",
-        "severity": "info",
-        "params": {
-         "ppi": 450
-        }
-       },
-       {
-        "name": "encrypted",
-        "severity": "error"
-       },
-       {
-        "name": "damaged",
-        "severity": "error"
-       },
-       {
-        "name": "syntaxProblems",
-        "severity": "error"
-       },
-       {
-        "name": "pdfVersionBelow",
-        "severity": "warning",
-        "params": {
-         "version": 1.6
-        }
-       },
-       {
-        "name": "rgbUsed",
-        "severity": "error"
-       },
-       {
-        "name": "deviceIndependentColour",
-        "severity": "warning"
-       },
-       {
-        "name": "spotColoursMoreThan",
-        "severity": "warning",
-        "params": {
-         "count": 6
-        }
-       },
-       {
-        "name": "spotNamesInconsistent",
-        "severity": "warning"
-       },
-       {
-        "name": "fontsNotEmbedded",
-        "severity": "error"
-       },
-       {
-        "name": "pagesDifferInSize",
-        "severity": "warning"
-       },
-       {
-        "name": "emptyPage",
-        "severity": "warning"
-       }
-      ],
-      "fixes": []
+      ]
      }
     },
     {
      "name": "GWG 2022 sheetfed offset, CMYK: check and fix",
-     "description": "The Ghent Workgroup 2022 checks for this workflow, with the safe repairs applied; convert with --level x4 to reach PDF/X-4.",
+     "description": "The Ghent Workgroup 2022 checks for this workflow, with the safe repairs applied, converted to PDF/X-4.",
      "json": {
       "kura-profile": 1,
       "name": "GWG 2022 sheetfed offset, CMYK: check and fix",
-      "description": "The Ghent Workgroup 2022 checks for this workflow, with the safe repairs applied; convert with --level x4 to reach PDF/X-4.",
+      "description": "The Ghent Workgroup 2022 checks for this workflow, with the safe repairs applied, converted to PDF/X-4.",
+      "convert": {
+       "level": "pdfx-4"
+      },
       "checks": [
+       {
+        "name": "Not PDF/X-4",
+        "severity": "error",
+        "all": [
+         {
+          "check": "conformance.meets",
+          "op": "is",
+          "value": false,
+          "standard": "pdfx-4"
+         }
+        ]
+       },
        {
         "name": "Stroke thinner than 0.125 pt",
         "severity": "error",
         "all": [
          {
-          "prop": "stroke.width",
+          "check": "content.stroke_width",
           "op": "<=",
           "value": 0.125
          }
@@ -5562,12 +7902,12 @@ export const PROFILES = {
         "severity": "warning",
         "all": [
          {
-          "prop": "stroke.width",
+          "check": "content.stroke_width",
           "op": "<=",
           "value": 0.25
          },
          {
-          "prop": "stroke.width",
+          "check": "content.stroke_width",
           "op": ">",
           "value": 0.125
          }
@@ -5578,12 +7918,12 @@ export const PROFILES = {
         "severity": "error",
         "all": [
          {
-          "prop": "stroke.width",
+          "check": "content.stroke_width",
           "op": "<=",
           "value": 0.25
          },
          {
-          "prop": "paint.inkCount",
+          "check": "color.inks_used",
           "op": ">",
           "value": 1
          }
@@ -5594,12 +7934,12 @@ export const PROFILES = {
         "severity": "warning",
         "all": [
          {
-          "prop": "text.size",
+          "check": "text.size",
           "op": "<",
           "value": 5
          },
          {
-          "prop": "text.size",
+          "check": "text.size",
           "op": ">",
           "value": 0.01
          }
@@ -5610,17 +7950,17 @@ export const PROFILES = {
         "severity": "warning",
         "all": [
          {
-          "prop": "text.size",
+          "check": "text.size",
           "op": "<",
           "value": 8
          },
          {
-          "prop": "text.size",
+          "check": "text.size",
           "op": ">",
           "value": 0.01
          },
          {
-          "prop": "paint.inkCount",
+          "check": "color.inks_used",
           "op": ">",
           "value": 1
          }
@@ -5631,19 +7971,19 @@ export const PROFILES = {
         "severity": "warning",
         "all": [
          {
-          "prop": "text.size",
+          "check": "text.size",
           "op": "<",
           "value": 8
          },
          {
-          "prop": "text.size",
+          "check": "text.size",
           "op": ">",
           "value": 0.01
          },
          {
-          "prop": "paint.isWhite",
+          "check": "color.ink_mix",
           "op": "==",
-          "value": true
+          "value": "none"
          }
         ]
        },
@@ -5652,9 +7992,10 @@ export const PROFILES = {
         "severity": "error",
         "all": [
          {
-          "prop": "fill.totalInk",
+          "check": "color.total_ink",
           "op": ">",
-          "value": 330
+          "value": 330,
+          "paint": "fill"
          }
         ]
        },
@@ -5663,9 +8004,10 @@ export const PROFILES = {
         "severity": "error",
         "all": [
          {
-          "prop": "stroke.totalInk",
+          "check": "color.total_ink",
           "op": ">",
-          "value": 330
+          "value": 330,
+          "paint": "stroke"
          }
         ]
        },
@@ -5674,19 +8016,26 @@ export const PROFILES = {
         "severity": "warning",
         "all": [
          {
-          "prop": "content.isText",
+          "check": "content.kind",
           "op": "==",
-          "value": true
+          "value": "text"
          },
          {
-          "prop": "text.size",
+          "check": "text.size",
           "op": "<",
           "value": 12
          },
          {
-          "prop": "paint.richBlackCmyPercent",
+          "check": "color.ink",
+          "op": ">=",
+          "value": 100,
+          "ink": "black"
+         },
+         {
+          "check": "color.ink",
           "op": ">",
-          "value": 0
+          "value": 0,
+          "ink": "cmy_max"
          }
         ]
        },
@@ -5695,14 +8044,18 @@ export const PROFILES = {
         "severity": "error",
         "all": [
          {
-          "prop": "paint.isWhite",
+          "check": "color.ink_mix",
           "op": "==",
-          "value": true
+          "value": "none"
          },
          {
-          "prop": "fill.overprint",
-          "op": "==",
-          "value": true
+          "check": "color.overprint",
+          "op": "in",
+          "value": [
+           "on",
+           "on_nonzero_mode"
+          ],
+          "paint": "fill"
          }
         ]
        },
@@ -5711,19 +8064,20 @@ export const PROFILES = {
         "severity": "warning",
         "all": [
          {
-          "prop": "content.isText",
+          "check": "content.kind",
           "op": "==",
-          "value": true
+          "value": "text"
          },
          {
-          "prop": "paint.is100Black",
+          "check": "color.ink_mix",
           "op": "==",
-          "value": true
+          "value": "solid_black"
          },
          {
-          "prop": "fill.overprint",
+          "check": "color.overprint",
           "op": "==",
-          "value": false
+          "value": "off",
+          "paint": "fill"
          }
         ]
        },
@@ -5732,8 +8086,8 @@ export const PROFILES = {
         "severity": "info",
         "all": [
          {
-          "prop": "gstate.transparency",
-          "op": "==",
+          "check": "transparency.used",
+          "op": "is",
           "value": true
          }
         ]
@@ -5743,14 +8097,129 @@ export const PROFILES = {
         "severity": "info",
         "all": [
          {
-          "prop": "gstate.blendMode",
+          "check": "transparency.blend_mode",
+          "op": "not_in",
+          "value": [
+           "Normal",
+           "Compatible"
+          ]
+         }
+        ]
+       },
+       {
+        "name": "Image below 300 ppi",
+        "severity": "error",
+        "all": [
+         {
+          "check": "image.resolution",
+          "op": "<",
+          "value": 300,
+          "kind": "colour_or_grey"
+         }
+        ]
+       },
+       {
+        "name": "Bitmap below 1200 ppi",
+        "severity": "warning",
+        "all": [
+         {
+          "check": "image.resolution",
+          "op": "<",
+          "value": 1200,
+          "kind": "bitmap"
+         }
+        ]
+       },
+       {
+        "name": "Image above 450 ppi",
+        "severity": "info",
+        "all": [
+         {
+          "check": "image.resolution",
+          "op": ">",
+          "value": 450,
+          "kind": "colour_or_grey"
+         }
+        ]
+       },
+       {
+        "name": "Document is encrypted",
+        "severity": "error",
+        "all": [
+         {
+          "check": "security.encryption",
           "op": "!=",
-          "value": "Normal"
+          "value": "none"
+         }
+        ]
+       },
+       {
+        "name": "Document is damaged",
+        "severity": "error",
+        "all": [
+         {
+          "check": "document.damaged",
+          "op": "is",
+          "value": true
+         }
+        ]
+       },
+       {
+        "name": "Syntax problem",
+        "severity": "error",
+        "any": [
+         {
+          "all": [
+           {
+            "check": "syntax.content_stream_error",
+            "op": "count",
+            "value": 0,
+            "compare": ">"
+           }
+          ]
          },
          {
-          "prop": "gstate.blendMode",
-          "op": "!=",
-          "value": "Compatible"
+          "all": [
+           {
+            "check": "syntax.xref_layout",
+            "op": "count",
+            "value": 0,
+            "compare": ">"
+           }
+          ]
+         },
+         {
+          "all": [
+           {
+            "check": "syntax.object_layout",
+            "op": "count",
+            "value": 0,
+            "compare": ">"
+           }
+          ]
+         },
+         {
+          "all": [
+           {
+            "check": "syntax.broken_reference",
+            "op": "in",
+            "value": [
+             "object",
+             "external_file"
+            ]
+           }
+          ]
+         }
+        ]
+       },
+       {
+        "name": "PDF version below 1.6",
+        "severity": "warning",
+        "all": [
+         {
+          "check": "document.pdf_version",
+          "op": "<",
+          "value": 1.6
          }
         ]
        },
@@ -5759,9 +8228,74 @@ export const PROFILES = {
         "severity": "error",
         "all": [
          {
-          "prop": "paint.isRegistration",
+          "check": "color.ink_mix",
           "op": "==",
-          "value": true
+          "value": "registration"
+         }
+        ]
+       },
+       {
+        "name": "RGB colour",
+        "severity": "error",
+        "any": [
+         {
+          "all": [
+           {
+            "check": "color.space",
+            "op": "in",
+            "value": [
+             "DeviceRGB",
+             "CalRGB"
+            ]
+           }
+          ]
+         },
+         {
+          "all": [
+           {
+            "check": "color.space",
+            "op": "==",
+            "value": "ICCBased",
+            "icc_components": 3
+           }
+          ]
+         }
+        ]
+       },
+       {
+        "name": "Device-independent colour",
+        "severity": "warning",
+        "all": [
+         {
+          "check": "color.space",
+          "op": "in",
+          "value": [
+           "device_independent"
+          ]
+         }
+        ]
+       },
+       {
+        "name": "More than 0 spot colours on a page",
+        "severity": "error",
+        "all": [
+         {
+          "check": "print.plates",
+          "op": "count",
+          "value": 0,
+          "compare": ">",
+          "kind": "spot"
+         }
+        ]
+       },
+       {
+        "name": "Font not embedded",
+        "severity": "error",
+        "all": [
+         {
+          "check": "font.embedding",
+          "op": "==",
+          "value": "not_embedded"
          }
         ]
        },
@@ -5770,9 +8304,9 @@ export const PROFILES = {
         "severity": "warning",
         "all": [
          {
-          "prop": "font.isType3",
+          "check": "font.type",
           "op": "==",
-          "value": true
+          "value": "type3"
          }
         ]
        },
@@ -5781,9 +8315,9 @@ export const PROFILES = {
         "severity": "error",
         "all": [
          {
-          "prop": "font.notdefUsed",
+          "check": "text.glyph",
           "op": "==",
-          "value": true
+          "value": "notdef"
          }
         ]
        },
@@ -5792,9 +8326,42 @@ export const PROFILES = {
         "severity": "error",
         "all": [
          {
-          "prop": "font.invalid",
-          "op": "==",
+          "check": "font.problem",
+          "op": "includes",
+          "value": "invalid_program"
+         }
+        ]
+       },
+       {
+        "name": "Pages differ in size or orientation",
+        "severity": "warning",
+        "all": [
+         {
+          "check": "document.pages_uniform",
+          "op": "is",
+          "value": false
+         }
+        ]
+       },
+       {
+        "name": "Empty page",
+        "severity": "warning",
+        "all": [
+         {
+          "check": "page.empty",
+          "op": "is",
           "value": true
+         }
+        ]
+       },
+       {
+        "name": "Page scaling in use",
+        "severity": "error",
+        "all": [
+         {
+          "check": "page.user_unit",
+          "op": "!=",
+          "value": 1
          }
         ]
        },
@@ -5803,9 +8370,12 @@ export const PROFILES = {
         "severity": "info",
         "all": [
          {
-          "prop": "content.distanceInsideTrimBox",
+          "check": "content.distance_to_box",
           "op": "<",
-          "value": 8.5
+          "value": 3,
+          "box": "trim",
+          "side": "inside",
+          "unit": "mm"
          }
         ],
         "scope": "trim"
@@ -5815,9 +8385,9 @@ export const PROFILES = {
         "severity": "warning",
         "all": [
          {
-          "prop": "annot.prints",
-          "op": "==",
-          "value": true
+          "check": "annotation.flags",
+          "op": "includes",
+          "value": "print"
          }
         ]
        },
@@ -5826,155 +8396,57 @@ export const PROFILES = {
         "severity": "info",
         "all": [
          {
-          "prop": "layers.onLayer",
-          "op": "==",
-          "value": true
+          "check": "layer.membership",
+          "op": "count",
+          "value": 0,
+          "compare": ">"
          }
         ]
        }
       ],
-      "builtins": [
-       {
-        "name": "conformsTo",
-        "severity": "error",
-        "level": "x4"
-       },
-       {
-        "name": "imageResolutionBelow",
-        "severity": "error",
-        "params": {
-         "ppi": 300
-        }
-       },
-       {
-        "name": "bitmapResolutionBelow",
-        "severity": "warning",
-        "params": {
-         "ppi": 1200
-        }
-       },
-       {
-        "name": "imageResolutionAbove",
-        "severity": "info",
-        "params": {
-         "ppi": 450
-        }
-       },
-       {
-        "name": "encrypted",
-        "severity": "error"
-       },
-       {
-        "name": "damaged",
-        "severity": "error"
-       },
-       {
-        "name": "syntaxProblems",
-        "severity": "error"
-       },
-       {
-        "name": "pdfVersionBelow",
-        "severity": "warning",
-        "params": {
-         "version": 1.6
-        }
-       },
-       {
-        "name": "rgbUsed",
-        "severity": "error"
-       },
-       {
-        "name": "deviceIndependentColour",
-        "severity": "warning"
-       },
-       {
-        "name": "spotColoursMoreThan",
-        "severity": "error",
-        "params": {
-         "count": 0
-        }
-       },
-       {
-        "name": "fontsNotEmbedded",
-        "severity": "error"
-       },
-       {
-        "name": "pagesDifferInSize",
-        "severity": "warning"
-       },
-       {
-        "name": "emptyPage",
-        "severity": "warning"
-       }
-      ],
       "fixes": [
        {
-        "op": "setpagebox",
-        "params": [
-         "TrimBox",
-         "RelativeToCropBox",
-         "0",
-         "0",
-         "0",
-         "0",
-         "pt"
+        "fix": "page.set_box",
+        "box": "trim",
+        "from": "crop",
+        "when": "missing"
+       },
+       {
+        "fix": "bleed.generate",
+        "amount": "3mm"
+       },
+       {
+        "fix": "page.remove_user_unit"
+       },
+       {
+        "fix": "ink.min_line_width",
+        "width": "0.25pt"
+       },
+       {
+        "fix": "ink.overprint_black",
+        "objects": "text"
+       },
+       {
+        "fix": "ink.knockout_white"
+       },
+       {
+        "fix": "document.set_info",
+        "key": "Trapped",
+        "value": "False"
+       },
+       {
+        "fix": "graphics.remove",
+        "settings": [
+         "flatness",
+         "smoothness"
         ]
        },
        {
-        "op": "generatebleed",
-        "params": [
-         "Amount",
-         "3",
-         "mm"
-        ]
+        "fix": "transparency.remove_unneeded_groups"
        },
        {
-        "op": "removepagescaling",
-        "params": []
-       },
-       {
-        "op": "increaselinewidth",
-        "params": [
-         "0.25",
-         "",
-         "pt"
-        ]
-       },
-       {
-        "op": "overprintblack",
-        "params": [
-         "Text"
-        ]
-       },
-       {
-        "op": "knockoutwhite",
-        "params": [
-         ""
-        ]
-       },
-       {
-        "op": "trappedkey",
-        "params": [
-         "false"
-        ]
-       },
-       {
-        "op": "removeflatness",
-        "params": []
-       },
-       {
-        "op": "removesmoothness",
-        "params": []
-       },
-       {
-        "op": "removeunnecessarytransparencygroups",
-        "params": []
-       },
-       {
-        "op": "settransparencyblendcs",
-        "params": [
-         "CMYK"
-        ]
+        "fix": "transparency.set_blend_space",
+        "space": "CMYK"
        }
       ]
      }
@@ -5997,9 +8469,13 @@ export const PROFILES = {
         "severity": "warning",
         "all": [
          {
-          "prop": "paint.isSpot",
-          "op": "==",
-          "value": true
+          "check": "color.ink_mix",
+          "op": "in",
+          "value": [
+           "spot_only",
+           "spot_and_black",
+           "process_and_spot"
+          ]
          }
         ]
        },
@@ -6008,9 +8484,9 @@ export const PROFILES = {
         "severity": "error",
         "all": [
          {
-          "prop": "paint.isRegistration",
+          "check": "color.ink_mix",
           "op": "==",
-          "value": true
+          "value": "registration"
          }
         ]
        },
@@ -6019,80 +8495,180 @@ export const PROFILES = {
         "severity": "info",
         "all": [
          {
-          "prop": "text.size",
+          "check": "text.size",
           "op": "<",
           "value": 6
          },
          {
-          "prop": "text.size",
+          "check": "text.size",
           "op": ">",
           "value": 0.01
          }
         ]
-       }
-      ],
-      "builtins": [
+       },
        {
-        "name": "imageResolutionAbove",
+        "name": "Page scaling in use",
         "severity": "warning",
-        "params": {
-         "ppi": 150
-        }
+        "all": [
+         {
+          "check": "page.user_unit",
+          "op": "!=",
+          "value": 1
+         }
+        ]
        },
        {
-        "name": "bitmapResolutionAbove",
+        "name": "Image above 150 ppi",
+        "severity": "warning",
+        "all": [
+         {
+          "check": "image.resolution",
+          "op": ">",
+          "value": 150,
+          "kind": "colour_or_grey"
+         }
+        ]
+       },
+       {
+        "name": "Bitmap above 600 ppi",
         "severity": "info",
-        "params": {
-         "ppi": 600
-        }
+        "all": [
+         {
+          "check": "image.resolution",
+          "op": ">",
+          "value": 600,
+          "kind": "bitmap"
+         }
+        ]
        },
        {
-        "name": "imageResolutionBelow",
+        "name": "Image below 72 ppi",
         "severity": "info",
-        "params": {
-         "ppi": 72
-        }
+        "all": [
+         {
+          "check": "image.resolution",
+          "op": "<",
+          "value": 72,
+          "kind": "colour_or_grey"
+         }
+        ]
        },
        {
-        "name": "fontsNotEmbedded",
-        "severity": "error"
+        "name": "Font not embedded",
+        "severity": "error",
+        "all": [
+         {
+          "check": "font.embedding",
+          "op": "==",
+          "value": "not_embedded"
+         }
+        ]
        },
        {
-        "name": "encrypted",
-        "severity": "warning"
+        "name": "Document is encrypted",
+        "severity": "warning",
+        "all": [
+         {
+          "check": "security.encryption",
+          "op": "!=",
+          "value": "none"
+         }
+        ]
        },
        {
-        "name": "damaged",
-        "severity": "error"
+        "name": "Document is damaged",
+        "severity": "error",
+        "all": [
+         {
+          "check": "document.damaged",
+          "op": "is",
+          "value": true
+         }
+        ]
        },
        {
-        "name": "syntaxProblems",
-        "severity": "error"
+        "name": "Syntax problem",
+        "severity": "error",
+        "any": [
+         {
+          "all": [
+           {
+            "check": "syntax.content_stream_error",
+            "op": "count",
+            "value": 0,
+            "compare": ">"
+           }
+          ]
+         },
+         {
+          "all": [
+           {
+            "check": "syntax.xref_layout",
+            "op": "count",
+            "value": 0,
+            "compare": ">"
+           }
+          ]
+         },
+         {
+          "all": [
+           {
+            "check": "syntax.object_layout",
+            "op": "count",
+            "value": 0,
+            "compare": ">"
+           }
+          ]
+         },
+         {
+          "all": [
+           {
+            "check": "syntax.broken_reference",
+            "op": "in",
+            "value": [
+             "object",
+             "external_file"
+            ]
+           }
+          ]
+         }
+        ]
        },
        {
-        "name": "uncompressedImages",
-        "severity": "warning"
+        "name": "Uncompressed image",
+        "severity": "warning",
+        "all": [
+         {
+          "check": "image.property",
+          "op": "==",
+          "value": "false",
+          "property": "compressed"
+         }
+        ]
        }
-      ],
-      "fixes": []
+      ]
      }
     },
     {
      "name": "Online publishing: check and fix",
-     "description": "The online checks, then the safe cleanups: page scaling removed, flatness and smoothness dropped, interpolation removed, sRGB blending; convert with --image-max-ppi 150 to downsample.",
+     "description": "The online checks, then the safe cleanups: page scaling removed, flatness and smoothness dropped, colour images above 225 ppi brought down to 150 ppi, sRGB blending, single-page view.",
      "json": {
       "kura-profile": 1,
       "name": "Online publishing: check and fix",
-      "description": "The online checks, then the safe cleanups: page scaling removed, flatness and smoothness dropped, interpolation removed, sRGB blending; convert with --image-max-ppi 150 to downsample.",
+      "description": "The online checks, then the safe cleanups: page scaling removed, flatness and smoothness dropped, colour images above 225 ppi brought down to 150 ppi, sRGB blending, single-page view.",
       "checks": [
        {
         "name": "Spot colour in use",
         "severity": "warning",
         "all": [
          {
-          "prop": "paint.isSpot",
-          "op": "==",
-          "value": true
+          "check": "color.ink_mix",
+          "op": "in",
+          "value": [
+           "spot_only",
+           "spot_and_black",
+           "process_and_spot"
+          ]
          }
         ]
        },
@@ -6101,9 +8677,9 @@ export const PROFILES = {
         "severity": "error",
         "all": [
          {
-          "prop": "paint.isRegistration",
+          "check": "color.ink_mix",
           "op": "==",
-          "value": true
+          "value": "registration"
          }
         ]
        },
@@ -6112,86 +8688,183 @@ export const PROFILES = {
         "severity": "info",
         "all": [
          {
-          "prop": "text.size",
+          "check": "text.size",
           "op": "<",
           "value": 6
          },
          {
-          "prop": "text.size",
+          "check": "text.size",
           "op": ">",
           "value": 0.01
          }
         ]
-       }
-      ],
-      "builtins": [
+       },
        {
-        "name": "imageResolutionAbove",
+        "name": "Page scaling in use",
         "severity": "warning",
-        "params": {
-         "ppi": 150
-        }
+        "all": [
+         {
+          "check": "page.user_unit",
+          "op": "!=",
+          "value": 1
+         }
+        ]
        },
        {
-        "name": "bitmapResolutionAbove",
+        "name": "Image above 150 ppi",
+        "severity": "warning",
+        "all": [
+         {
+          "check": "image.resolution",
+          "op": ">",
+          "value": 150,
+          "kind": "colour_or_grey"
+         }
+        ]
+       },
+       {
+        "name": "Bitmap above 600 ppi",
         "severity": "info",
-        "params": {
-         "ppi": 600
-        }
+        "all": [
+         {
+          "check": "image.resolution",
+          "op": ">",
+          "value": 600,
+          "kind": "bitmap"
+         }
+        ]
        },
        {
-        "name": "imageResolutionBelow",
+        "name": "Image below 72 ppi",
         "severity": "info",
-        "params": {
-         "ppi": 72
-        }
+        "all": [
+         {
+          "check": "image.resolution",
+          "op": "<",
+          "value": 72,
+          "kind": "colour_or_grey"
+         }
+        ]
        },
        {
-        "name": "fontsNotEmbedded",
-        "severity": "error"
+        "name": "Font not embedded",
+        "severity": "error",
+        "all": [
+         {
+          "check": "font.embedding",
+          "op": "==",
+          "value": "not_embedded"
+         }
+        ]
        },
        {
-        "name": "encrypted",
-        "severity": "warning"
+        "name": "Document is encrypted",
+        "severity": "warning",
+        "all": [
+         {
+          "check": "security.encryption",
+          "op": "!=",
+          "value": "none"
+         }
+        ]
        },
        {
-        "name": "damaged",
-        "severity": "error"
+        "name": "Document is damaged",
+        "severity": "error",
+        "all": [
+         {
+          "check": "document.damaged",
+          "op": "is",
+          "value": true
+         }
+        ]
        },
        {
-        "name": "syntaxProblems",
-        "severity": "error"
+        "name": "Syntax problem",
+        "severity": "error",
+        "any": [
+         {
+          "all": [
+           {
+            "check": "syntax.content_stream_error",
+            "op": "count",
+            "value": 0,
+            "compare": ">"
+           }
+          ]
+         },
+         {
+          "all": [
+           {
+            "check": "syntax.xref_layout",
+            "op": "count",
+            "value": 0,
+            "compare": ">"
+           }
+          ]
+         },
+         {
+          "all": [
+           {
+            "check": "syntax.object_layout",
+            "op": "count",
+            "value": 0,
+            "compare": ">"
+           }
+          ]
+         },
+         {
+          "all": [
+           {
+            "check": "syntax.broken_reference",
+            "op": "in",
+            "value": [
+             "object",
+             "external_file"
+            ]
+           }
+          ]
+         }
+        ]
        },
        {
-        "name": "uncompressedImages",
-        "severity": "warning"
+        "name": "Uncompressed image",
+        "severity": "warning",
+        "all": [
+         {
+          "check": "image.property",
+          "op": "==",
+          "value": "false",
+          "property": "compressed"
+         }
+        ]
        }
       ],
       "fixes": [
        {
-        "op": "removepagescaling",
-        "params": []
+        "fix": "page.remove_user_unit"
        },
        {
-        "op": "removeflatness",
-        "params": []
-       },
-       {
-        "op": "removesmoothness",
-        "params": []
-       },
-       {
-        "op": "settransparencyblendcs",
-        "params": [
-         "sRGB"
+        "fix": "graphics.remove",
+        "settings": [
+         "flatness",
+         "smoothness"
         ]
        },
        {
-        "op": "setinitialviewdocumentoptions",
-        "params": [
-         "UseNone",
-         "SinglePage"
-        ]
+        "fix": "image.downsample",
+        "kind": "colour_and_grey",
+        "target": "150ppi",
+        "above": "225ppi"
+       },
+       {
+        "fix": "transparency.set_blend_space",
+        "space": "sRGB"
+       },
+       {
+        "fix": "document.set_view",
+        "page_mode": "UseNone",
+        "page_layout": "SinglePage"
        }
       ]
      }
@@ -6209,9 +8882,13 @@ export const PROFILES = {
         "severity": "warning",
         "all": [
          {
-          "prop": "paint.isSpot",
-          "op": "==",
-          "value": true
+          "check": "color.ink_mix",
+          "op": "in",
+          "value": [
+           "spot_only",
+           "spot_and_black",
+           "process_and_spot"
+          ]
          }
         ]
        },
@@ -6220,9 +8897,9 @@ export const PROFILES = {
         "severity": "error",
         "all": [
          {
-          "prop": "paint.isRegistration",
+          "check": "color.ink_mix",
           "op": "==",
-          "value": true
+          "value": "registration"
          }
         ]
        },
@@ -6231,14 +8908,154 @@ export const PROFILES = {
         "severity": "info",
         "all": [
          {
-          "prop": "text.size",
+          "check": "text.size",
           "op": "<",
           "value": 6
          },
          {
-          "prop": "text.size",
+          "check": "text.size",
           "op": ">",
           "value": 0.01
+         }
+        ]
+       },
+       {
+        "name": "Page scaling in use",
+        "severity": "warning",
+        "all": [
+         {
+          "check": "page.user_unit",
+          "op": "!=",
+          "value": 1
+         }
+        ]
+       },
+       {
+        "name": "Image above 150 ppi",
+        "severity": "warning",
+        "all": [
+         {
+          "check": "image.resolution",
+          "op": ">",
+          "value": 150,
+          "kind": "colour_or_grey"
+         }
+        ]
+       },
+       {
+        "name": "Bitmap above 600 ppi",
+        "severity": "info",
+        "all": [
+         {
+          "check": "image.resolution",
+          "op": ">",
+          "value": 600,
+          "kind": "bitmap"
+         }
+        ]
+       },
+       {
+        "name": "Image below 72 ppi",
+        "severity": "info",
+        "all": [
+         {
+          "check": "image.resolution",
+          "op": "<",
+          "value": 72,
+          "kind": "colour_or_grey"
+         }
+        ]
+       },
+       {
+        "name": "Font not embedded",
+        "severity": "error",
+        "all": [
+         {
+          "check": "font.embedding",
+          "op": "==",
+          "value": "not_embedded"
+         }
+        ]
+       },
+       {
+        "name": "Document is encrypted",
+        "severity": "warning",
+        "all": [
+         {
+          "check": "security.encryption",
+          "op": "!=",
+          "value": "none"
+         }
+        ]
+       },
+       {
+        "name": "Document is damaged",
+        "severity": "error",
+        "all": [
+         {
+          "check": "document.damaged",
+          "op": "is",
+          "value": true
+         }
+        ]
+       },
+       {
+        "name": "Syntax problem",
+        "severity": "error",
+        "any": [
+         {
+          "all": [
+           {
+            "check": "syntax.content_stream_error",
+            "op": "count",
+            "value": 0,
+            "compare": ">"
+           }
+          ]
+         },
+         {
+          "all": [
+           {
+            "check": "syntax.xref_layout",
+            "op": "count",
+            "value": 0,
+            "compare": ">"
+           }
+          ]
+         },
+         {
+          "all": [
+           {
+            "check": "syntax.object_layout",
+            "op": "count",
+            "value": 0,
+            "compare": ">"
+           }
+          ]
+         },
+         {
+          "all": [
+           {
+            "check": "syntax.broken_reference",
+            "op": "in",
+            "value": [
+             "object",
+             "external_file"
+            ]
+           }
+          ]
+         }
+        ]
+       },
+       {
+        "name": "Uncompressed image",
+        "severity": "warning",
+        "all": [
+         {
+          "check": "image.property",
+          "op": "==",
+          "value": "false",
+          "property": "compressed"
          }
         ]
        },
@@ -6247,57 +9064,14 @@ export const PROFILES = {
         "severity": "error",
         "all": [
          {
-          "prop": "doc.fileSizeBytes",
+          "check": "document.file_size",
           "op": ">",
-          "value": 5242880
+          "value": 5,
+          "unit": "mb"
          }
         ]
        }
-      ],
-      "builtins": [
-       {
-        "name": "imageResolutionAbove",
-        "severity": "warning",
-        "params": {
-         "ppi": 150
-        }
-       },
-       {
-        "name": "bitmapResolutionAbove",
-        "severity": "info",
-        "params": {
-         "ppi": 600
-        }
-       },
-       {
-        "name": "imageResolutionBelow",
-        "severity": "info",
-        "params": {
-         "ppi": 72
-        }
-       },
-       {
-        "name": "fontsNotEmbedded",
-        "severity": "error"
-       },
-       {
-        "name": "encrypted",
-        "severity": "warning"
-       },
-       {
-        "name": "damaged",
-        "severity": "error"
-       },
-       {
-        "name": "syntaxProblems",
-        "severity": "error"
-       },
-       {
-        "name": "uncompressedImages",
-        "severity": "warning"
-       }
-      ],
-      "fixes": []
+      ]
      }
     }
    ]
@@ -6307,18 +9081,18 @@ export const PROFILES = {
    "profiles": [
     {
      "name": "Report hairlines",
-     "description": "Finds strokes too thin to print reliably, graded by rendered width.",
+     "description": "Finds strokes too thin to print reliably, graded by width.",
      "json": {
       "kura-profile": 1,
       "name": "Report hairlines",
-      "description": "Finds strokes too thin to print reliably, graded by rendered width.",
+      "description": "Finds strokes too thin to print reliably, graded by width.",
       "checks": [
        {
         "name": "Stroke thinner than 0.125 pt",
         "severity": "error",
         "all": [
          {
-          "prop": "stroke.width",
+          "check": "content.stroke_width",
           "op": "<=",
           "value": 0.125
          }
@@ -6329,12 +9103,12 @@ export const PROFILES = {
         "severity": "warning",
         "all": [
          {
-          "prop": "stroke.width",
+          "check": "content.stroke_width",
           "op": "<=",
           "value": 0.25
          },
          {
-          "prop": "stroke.width",
+          "check": "content.stroke_width",
           "op": ">",
           "value": 0.125
          }
@@ -6345,12 +9119,12 @@ export const PROFILES = {
         "severity": "error",
         "all": [
          {
-          "prop": "stroke.width",
+          "check": "content.stroke_width",
           "op": "<=",
           "value": 0.25
          },
          {
-          "prop": "paint.inkCount",
+          "check": "color.inks_used",
           "op": ">",
           "value": 1
          }
@@ -6361,20 +9135,18 @@ export const PROFILES = {
         "severity": "info",
         "all": [
          {
-          "prop": "stroke.width",
+          "check": "content.stroke_width",
           "op": "<=",
           "value": 0.5
          },
          {
-          "prop": "stroke.width",
+          "check": "content.stroke_width",
           "op": ">",
           "value": 0.25
          }
         ]
        }
-      ],
-      "builtins": [],
-      "fixes": []
+      ]
      }
     },
     {
@@ -6390,12 +9162,12 @@ export const PROFILES = {
         "severity": "warning",
         "all": [
          {
-          "prop": "text.size",
+          "check": "text.size",
           "op": "<",
           "value": 5
          },
          {
-          "prop": "text.size",
+          "check": "text.size",
           "op": ">",
           "value": 0.01
          }
@@ -6406,17 +9178,17 @@ export const PROFILES = {
         "severity": "warning",
         "all": [
          {
-          "prop": "text.size",
+          "check": "text.size",
           "op": "<",
           "value": 8
          },
          {
-          "prop": "text.size",
+          "check": "text.size",
           "op": ">",
           "value": 0.01
          },
          {
-          "prop": "paint.inkCount",
+          "check": "color.inks_used",
           "op": ">",
           "value": 1
          }
@@ -6427,43 +9199,48 @@ export const PROFILES = {
         "severity": "warning",
         "all": [
          {
-          "prop": "text.size",
+          "check": "text.size",
           "op": "<",
           "value": 8
          },
          {
-          "prop": "text.size",
+          "check": "text.size",
           "op": ">",
           "value": 0.01
          },
          {
-          "prop": "paint.isWhite",
+          "check": "color.ink_mix",
           "op": "==",
-          "value": true
+          "value": "none"
          }
         ]
        }
-      ],
-      "builtins": [],
-      "fixes": []
+      ]
      }
     },
     {
      "name": "Report rich black",
-     "description": "Finds black objects that also carry cyan, magenta or yellow.",
+     "description": "Finds solid black objects that also carry cyan, magenta or yellow.",
      "json": {
       "kura-profile": 1,
       "name": "Report rich black",
-      "description": "Finds black objects that also carry cyan, magenta or yellow.",
+      "description": "Finds solid black objects that also carry cyan, magenta or yellow.",
       "checks": [
        {
         "name": "Rich black object",
         "severity": "info",
         "all": [
          {
-          "prop": "paint.richBlackCmyPercent",
+          "check": "color.ink",
+          "op": ">=",
+          "value": 100,
+          "ink": "black"
+         },
+         {
+          "check": "color.ink",
           "op": ">",
-          "value": 0
+          "value": 0,
+          "ink": "cmy_max"
          }
         ]
        },
@@ -6472,25 +9249,30 @@ export const PROFILES = {
         "severity": "warning",
         "all": [
          {
-          "prop": "content.isText",
+          "check": "content.kind",
           "op": "==",
-          "value": true
+          "value": "text"
          },
          {
-          "prop": "text.size",
+          "check": "text.size",
           "op": "<",
           "value": 12
          },
          {
-          "prop": "paint.richBlackCmyPercent",
+          "check": "color.ink",
+          "op": ">=",
+          "value": 100,
+          "ink": "black"
+         },
+         {
+          "check": "color.ink",
           "op": ">",
-          "value": 0
+          "value": 0,
+          "ink": "cmy_max"
          }
         ]
        }
-      ],
-      "builtins": [],
-      "fixes": []
+      ]
      }
     },
     {
@@ -6506,14 +9288,17 @@ export const PROFILES = {
         "severity": "info",
         "all": [
          {
-          "prop": "paint.isWhite",
+          "check": "color.ink_mix",
           "op": "==",
-          "value": true
+          "value": "none"
          },
          {
-          "prop": "content.isFilled",
-          "op": "==",
-          "value": true
+          "check": "content.painting",
+          "op": "in",
+          "value": [
+           "fill",
+           "fill_and_stroke"
+          ]
          }
         ]
        },
@@ -6522,14 +9307,17 @@ export const PROFILES = {
         "severity": "info",
         "all": [
          {
-          "prop": "paint.isWhite",
+          "check": "color.ink_mix",
           "op": "==",
-          "value": true
+          "value": "none"
          },
          {
-          "prop": "content.isStroked",
-          "op": "==",
-          "value": true
+          "check": "content.painting",
+          "op": "in",
+          "value": [
+           "stroke",
+           "fill_and_stroke"
+          ]
          }
         ]
        },
@@ -6538,20 +9326,22 @@ export const PROFILES = {
         "severity": "error",
         "all": [
          {
-          "prop": "paint.isWhite",
+          "check": "color.ink_mix",
           "op": "==",
-          "value": true
+          "value": "none"
          },
          {
-          "prop": "fill.overprint",
-          "op": "==",
-          "value": true
+          "check": "color.overprint",
+          "op": "in",
+          "value": [
+           "on",
+           "on_nonzero_mode"
+          ],
+          "paint": "fill"
          }
         ]
        }
-      ],
-      "builtins": [],
-      "fixes": []
+      ]
      }
     },
     {
@@ -6567,15 +9357,13 @@ export const PROFILES = {
         "severity": "info",
         "all": [
          {
-          "prop": "text.isInvisible",
+          "check": "text.rendering",
           "op": "==",
-          "value": true
+          "value": "invisible"
          }
         ]
        }
-      ],
-      "builtins": [],
-      "fixes": []
+      ]
      }
     },
     {
@@ -6585,24 +9373,32 @@ export const PROFILES = {
       "kura-profile": 1,
       "name": "Report low resolution images",
       "description": "Reports colour and grayscale images below 300 ppi and bitmaps below 1200 ppi.",
-      "checks": [],
-      "builtins": [
+      "checks": [
        {
-        "name": "imageResolutionBelow",
+        "name": "Image below 300 ppi",
         "severity": "warning",
-        "params": {
-         "ppi": 300
-        }
+        "all": [
+         {
+          "check": "image.resolution",
+          "op": "<",
+          "value": 300,
+          "kind": "colour_or_grey"
+         }
+        ]
        },
        {
-        "name": "bitmapResolutionBelow",
+        "name": "Bitmap below 1200 ppi",
         "severity": "warning",
-        "params": {
-         "ppi": 1200
-        }
+        "all": [
+         {
+          "check": "image.resolution",
+          "op": "<",
+          "value": 1200,
+          "kind": "bitmap"
+         }
+        ]
        }
-      ],
-      "fixes": []
+      ]
      }
     },
     {
@@ -6612,24 +9408,32 @@ export const PROFILES = {
       "kura-profile": 1,
       "name": "Report high resolution images",
       "description": "Reports images above 450 ppi and bitmaps above 2400 ppi, candidates for downsampling.",
-      "checks": [],
-      "builtins": [
+      "checks": [
        {
-        "name": "imageResolutionAbove",
+        "name": "Image above 450 ppi",
         "severity": "info",
-        "params": {
-         "ppi": 450
-        }
+        "all": [
+         {
+          "check": "image.resolution",
+          "op": ">",
+          "value": 450,
+          "kind": "colour_or_grey"
+         }
+        ]
        },
        {
-        "name": "bitmapResolutionAbove",
+        "name": "Bitmap above 2400 ppi",
         "severity": "info",
-        "params": {
-         "ppi": 2400
-        }
+        "all": [
+         {
+          "check": "image.resolution",
+          "op": ">",
+          "value": 2400,
+          "kind": "bitmap"
+         }
+        ]
        }
-      ],
-      "fixes": []
+      ]
      }
     },
     {
@@ -6645,9 +9449,10 @@ export const PROFILES = {
         "severity": "info",
         "all": [
          {
-          "prop": "image.filter",
+          "check": "image.property",
           "op": "contains",
-          "value": "DCT"
+          "value": "DCTDecode",
+          "property": "filter"
          }
         ]
        },
@@ -6656,9 +9461,10 @@ export const PROFILES = {
         "severity": "info",
         "all": [
          {
-          "prop": "image.filter",
+          "check": "image.property",
           "op": "contains",
-          "value": "JPX"
+          "value": "JPXDecode",
+          "property": "filter"
          }
         ]
        },
@@ -6667,9 +9473,10 @@ export const PROFILES = {
         "severity": "info",
         "all": [
          {
-          "prop": "image.filter",
+          "check": "image.property",
           "op": "contains",
-          "value": "CCITT"
+          "value": "CCITTFaxDecode",
+          "property": "filter"
          }
         ]
        },
@@ -6678,9 +9485,10 @@ export const PROFILES = {
         "severity": "info",
         "all": [
          {
-          "prop": "image.filter",
+          "check": "image.property",
           "op": "contains",
-          "value": "JBIG2"
+          "value": "JBIG2Decode",
+          "property": "filter"
          }
         ]
        },
@@ -6689,9 +9497,10 @@ export const PROFILES = {
         "severity": "info",
         "all": [
          {
-          "prop": "image.bitsPerComponent",
+          "check": "image.property",
           "op": "==",
-          "value": 16
+          "value": "16",
+          "property": "bits_per_component"
          }
         ]
        },
@@ -6700,15 +9509,14 @@ export const PROFILES = {
         "severity": "info",
         "all": [
          {
-          "prop": "image.bitsPerComponent",
+          "check": "image.property",
           "op": "==",
-          "value": 1
+          "value": "1",
+          "property": "bits_per_component"
          }
         ]
        }
-      ],
-      "builtins": [],
-      "fixes": []
+      ]
      }
     },
     {
@@ -6724,23 +9532,30 @@ export const PROFILES = {
         "severity": "info",
         "all": [
          {
-          "prop": "paint.isSpot",
-          "op": "==",
-          "value": true
+          "check": "color.ink_mix",
+          "op": "in",
+          "value": [
+           "spot_only",
+           "spot_and_black",
+           "process_and_spot"
+          ]
+         }
+        ]
+       },
+       {
+        "name": "More than 2 spot colours on a page",
+        "severity": "warning",
+        "all": [
+         {
+          "check": "print.plates",
+          "op": "count",
+          "value": 2,
+          "compare": ">",
+          "kind": "spot"
          }
         ]
        }
-      ],
-      "builtins": [
-       {
-        "name": "spotColoursMoreThan",
-        "severity": "warning",
-        "params": {
-         "count": 2
-        }
-       }
-      ],
-      "fixes": []
+      ]
      }
     },
     {
@@ -6756,14 +9571,18 @@ export const PROFILES = {
         "severity": "error",
         "all": [
          {
-          "prop": "paint.isWhite",
+          "check": "color.ink_mix",
           "op": "==",
-          "value": true
+          "value": "none"
          },
          {
-          "prop": "fill.overprint",
-          "op": "==",
-          "value": true
+          "check": "color.overprint",
+          "op": "in",
+          "value": [
+           "on",
+           "on_nonzero_mode"
+          ],
+          "paint": "fill"
          }
         ]
        },
@@ -6772,19 +9591,20 @@ export const PROFILES = {
         "severity": "warning",
         "all": [
          {
-          "prop": "content.isText",
+          "check": "content.kind",
           "op": "==",
-          "value": true
+          "value": "text"
          },
          {
-          "prop": "paint.is100Black",
+          "check": "color.ink_mix",
           "op": "==",
-          "value": true
+          "value": "solid_black"
          },
          {
-          "prop": "fill.overprint",
+          "check": "color.overprint",
           "op": "==",
-          "value": false
+          "value": "off",
+          "paint": "fill"
          }
         ]
        },
@@ -6793,15 +9613,17 @@ export const PROFILES = {
         "severity": "info",
         "all": [
          {
-          "prop": "fill.overprint",
-          "op": "==",
-          "value": true
+          "check": "color.overprint",
+          "op": "in",
+          "value": [
+           "on",
+           "on_nonzero_mode"
+          ],
+          "paint": "fill"
          }
         ]
        }
-      ],
-      "builtins": [],
-      "fixes": []
+      ]
      }
     },
     {
@@ -6817,8 +9639,8 @@ export const PROFILES = {
         "severity": "info",
         "all": [
          {
-          "prop": "gstate.transparency",
-          "op": "==",
+          "check": "transparency.used",
+          "op": "is",
           "value": true
          }
         ]
@@ -6828,14 +9650,12 @@ export const PROFILES = {
         "severity": "info",
         "all": [
          {
-          "prop": "gstate.blendMode",
-          "op": "!=",
-          "value": "Normal"
-         },
-         {
-          "prop": "gstate.blendMode",
-          "op": "!=",
-          "value": "Compatible"
+          "check": "transparency.blend_mode",
+          "op": "not_in",
+          "value": [
+           "Normal",
+           "Compatible"
+          ]
          }
         ]
        },
@@ -6844,15 +9664,14 @@ export const PROFILES = {
         "severity": "info",
         "all": [
          {
-          "prop": "gstate.hasSoftMask",
-          "op": "==",
-          "value": true
+          "check": "transparency.used",
+          "op": "is",
+          "value": true,
+          "how": "soft_mask"
          }
         ]
        }
-      ],
-      "builtins": [],
-      "fixes": []
+      ]
      }
     },
     {
@@ -6864,13 +9683,24 @@ export const PROFILES = {
       "description": "Reports fonts not embedded, Type 3 fonts, missing glyphs and text without Unicode.",
       "checks": [
        {
+        "name": "Font not embedded",
+        "severity": "warning",
+        "all": [
+         {
+          "check": "font.embedding",
+          "op": "==",
+          "value": "not_embedded"
+         }
+        ]
+       },
+       {
         "name": "Type 3 font in use",
         "severity": "warning",
         "all": [
          {
-          "prop": "font.isType3",
+          "check": "font.type",
           "op": "==",
-          "value": true
+          "value": "type3"
          }
         ]
        },
@@ -6879,9 +9709,9 @@ export const PROFILES = {
         "severity": "error",
         "all": [
          {
-          "prop": "font.notdefUsed",
+          "check": "text.glyph",
           "op": "==",
-          "value": true
+          "value": "notdef"
          }
         ]
        },
@@ -6890,9 +9720,9 @@ export const PROFILES = {
         "severity": "error",
         "all": [
          {
-          "prop": "font.invalid",
-          "op": "==",
-          "value": true
+          "check": "font.problem",
+          "op": "includes",
+          "value": "invalid_program"
          }
         ]
        },
@@ -6901,20 +9731,13 @@ export const PROFILES = {
         "severity": "info",
         "all": [
          {
-          "prop": "font.unicodeComplete",
-          "op": "==",
+          "check": "font.all_text_unicode",
+          "op": "is",
           "value": false
          }
         ]
        }
-      ],
-      "builtins": [
-       {
-        "name": "fontsNotEmbedded",
-        "severity": "warning"
-       }
-      ],
-      "fixes": []
+      ]
      }
     },
     {
@@ -6930,9 +9753,20 @@ export const PROFILES = {
         "severity": "info",
         "all": [
          {
-          "prop": "page.isRotated",
-          "op": "==",
-          "value": true
+          "check": "page.rotation",
+          "op": "!=",
+          "value": 0
+         }
+        ]
+       },
+       {
+        "name": "Page scaling in use",
+        "severity": "warning",
+        "all": [
+         {
+          "check": "page.user_unit",
+          "op": "!=",
+          "value": 1
          }
         ]
        },
@@ -6941,24 +9775,36 @@ export const PROFILES = {
         "severity": "info",
         "all": [
          {
-          "prop": "page.hasCropBox",
-          "op": "==",
+          "check": "page.box_present",
+          "op": "is",
+          "value": false,
+          "box": "crop"
+         }
+        ]
+       },
+       {
+        "name": "Pages differ in size or orientation",
+        "severity": "info",
+        "all": [
+         {
+          "check": "document.pages_uniform",
+          "op": "is",
           "value": false
          }
         ]
-       }
-      ],
-      "builtins": [
-       {
-        "name": "pagesDifferInSize",
-        "severity": "info"
        },
        {
-        "name": "emptyPage",
-        "severity": "info"
+        "name": "Empty page",
+        "severity": "info",
+        "all": [
+         {
+          "check": "page.empty",
+          "op": "is",
+          "value": true
+         }
+        ]
        }
-      ],
-      "fixes": []
+      ]
      }
     },
     {
@@ -6974,9 +9820,10 @@ export const PROFILES = {
         "severity": "error",
         "all": [
          {
-          "prop": "fill.totalInk",
+          "check": "color.total_ink",
           "op": ">",
-          "value": 300
+          "value": 300,
+          "paint": "fill"
          }
         ]
        },
@@ -6985,9 +9832,10 @@ export const PROFILES = {
         "severity": "error",
         "all": [
          {
-          "prop": "stroke.totalInk",
+          "check": "color.total_ink",
           "op": ">",
-          "value": 300
+          "value": 300,
+          "paint": "stroke"
          }
         ]
        },
@@ -6996,25 +9844,30 @@ export const PROFILES = {
         "severity": "warning",
         "all": [
          {
-          "prop": "content.isText",
+          "check": "content.kind",
           "op": "==",
-          "value": true
+          "value": "text"
          },
          {
-          "prop": "text.size",
+          "check": "text.size",
           "op": "<",
           "value": 12
          },
          {
-          "prop": "paint.richBlackCmyPercent",
+          "check": "color.ink",
+          "op": ">=",
+          "value": 100,
+          "ink": "black"
+         },
+         {
+          "check": "color.ink",
           "op": ">",
-          "value": 0
+          "value": 0,
+          "ink": "cmy_max"
          }
         ]
        }
-      ],
-      "builtins": [],
-      "fixes": []
+      ]
      }
     },
     {
@@ -7030,7 +9883,7 @@ export const PROFILES = {
         "severity": "error",
         "all": [
          {
-          "prop": "stroke.width",
+          "check": "content.stroke_width",
           "op": "<=",
           "value": 0.125
          }
@@ -7041,12 +9894,12 @@ export const PROFILES = {
         "severity": "warning",
         "all": [
          {
-          "prop": "stroke.width",
+          "check": "content.stroke_width",
           "op": "<=",
           "value": 0.25
          },
          {
-          "prop": "stroke.width",
+          "check": "content.stroke_width",
           "op": ">",
           "value": 0.125
          }
@@ -7057,12 +9910,12 @@ export const PROFILES = {
         "severity": "error",
         "all": [
          {
-          "prop": "stroke.width",
+          "check": "content.stroke_width",
           "op": "<=",
           "value": 0.25
          },
          {
-          "prop": "paint.inkCount",
+          "check": "color.inks_used",
           "op": ">",
           "value": 1
          }
@@ -7073,12 +9926,12 @@ export const PROFILES = {
         "severity": "warning",
         "all": [
          {
-          "prop": "text.size",
+          "check": "text.size",
           "op": "<",
           "value": 5
          },
          {
-          "prop": "text.size",
+          "check": "text.size",
           "op": ">",
           "value": 0.01
          }
@@ -7089,17 +9942,17 @@ export const PROFILES = {
         "severity": "warning",
         "all": [
          {
-          "prop": "text.size",
+          "check": "text.size",
           "op": "<",
           "value": 8
          },
          {
-          "prop": "text.size",
+          "check": "text.size",
           "op": ">",
           "value": 0.01
          },
          {
-          "prop": "paint.inkCount",
+          "check": "color.inks_used",
           "op": ">",
           "value": 1
          }
@@ -7110,19 +9963,19 @@ export const PROFILES = {
         "severity": "warning",
         "all": [
          {
-          "prop": "text.size",
+          "check": "text.size",
           "op": "<",
           "value": 8
          },
          {
-          "prop": "text.size",
+          "check": "text.size",
           "op": ">",
           "value": 0.01
          },
          {
-          "prop": "paint.isWhite",
+          "check": "color.ink_mix",
           "op": "==",
-          "value": true
+          "value": "none"
          }
         ]
        },
@@ -7131,9 +9984,10 @@ export const PROFILES = {
         "severity": "error",
         "all": [
          {
-          "prop": "fill.totalInk",
+          "check": "color.total_ink",
           "op": ">",
-          "value": 300
+          "value": 300,
+          "paint": "fill"
          }
         ]
        },
@@ -7142,9 +9996,10 @@ export const PROFILES = {
         "severity": "error",
         "all": [
          {
-          "prop": "stroke.totalInk",
+          "check": "color.total_ink",
           "op": ">",
-          "value": 300
+          "value": 300,
+          "paint": "stroke"
          }
         ]
        },
@@ -7153,19 +10008,26 @@ export const PROFILES = {
         "severity": "warning",
         "all": [
          {
-          "prop": "content.isText",
+          "check": "content.kind",
           "op": "==",
-          "value": true
+          "value": "text"
          },
          {
-          "prop": "text.size",
+          "check": "text.size",
           "op": "<",
           "value": 12
          },
          {
-          "prop": "paint.richBlackCmyPercent",
+          "check": "color.ink",
+          "op": ">=",
+          "value": 100,
+          "ink": "black"
+         },
+         {
+          "check": "color.ink",
           "op": ">",
-          "value": 0
+          "value": 0,
+          "ink": "cmy_max"
          }
         ]
        },
@@ -7174,14 +10036,18 @@ export const PROFILES = {
         "severity": "error",
         "all": [
          {
-          "prop": "paint.isWhite",
+          "check": "color.ink_mix",
           "op": "==",
-          "value": true
+          "value": "none"
          },
          {
-          "prop": "fill.overprint",
-          "op": "==",
-          "value": true
+          "check": "color.overprint",
+          "op": "in",
+          "value": [
+           "on",
+           "on_nonzero_mode"
+          ],
+          "paint": "fill"
          }
         ]
        },
@@ -7190,19 +10056,20 @@ export const PROFILES = {
         "severity": "warning",
         "all": [
          {
-          "prop": "content.isText",
+          "check": "content.kind",
           "op": "==",
-          "value": true
+          "value": "text"
          },
          {
-          "prop": "paint.is100Black",
+          "check": "color.ink_mix",
           "op": "==",
-          "value": true
+          "value": "solid_black"
          },
          {
-          "prop": "fill.overprint",
+          "check": "color.overprint",
           "op": "==",
-          "value": false
+          "value": "off",
+          "paint": "fill"
          }
         ]
        },
@@ -7211,8 +10078,8 @@ export const PROFILES = {
         "severity": "info",
         "all": [
          {
-          "prop": "gstate.transparency",
-          "op": "==",
+          "check": "transparency.used",
+          "op": "is",
           "value": true
          }
         ]
@@ -7222,14 +10089,12 @@ export const PROFILES = {
         "severity": "info",
         "all": [
          {
-          "prop": "gstate.blendMode",
-          "op": "!=",
-          "value": "Normal"
-         },
-         {
-          "prop": "gstate.blendMode",
-          "op": "!=",
-          "value": "Compatible"
+          "check": "transparency.blend_mode",
+          "op": "not_in",
+          "value": [
+           "Normal",
+           "Compatible"
+          ]
          }
         ]
        },
@@ -7238,9 +10103,9 @@ export const PROFILES = {
         "severity": "info",
         "all": [
          {
-          "prop": "paint.isRgb",
+          "check": "color.space",
           "op": "==",
-          "value": true
+          "value": "DeviceRGB"
          }
         ]
        },
@@ -7249,9 +10114,13 @@ export const PROFILES = {
         "severity": "info",
         "all": [
          {
-          "prop": "paint.isSpot",
-          "op": "==",
-          "value": true
+          "check": "color.ink_mix",
+          "op": "in",
+          "value": [
+           "spot_only",
+           "spot_and_black",
+           "process_and_spot"
+          ]
          }
         ]
        },
@@ -7260,9 +10129,9 @@ export const PROFILES = {
         "severity": "info",
         "all": [
          {
-          "prop": "text.isInvisible",
+          "check": "text.rendering",
           "op": "==",
-          "value": true
+          "value": "invisible"
          }
         ]
        },
@@ -7271,9 +10140,10 @@ export const PROFILES = {
         "severity": "info",
         "all": [
          {
-          "prop": "layers.onLayer",
-          "op": "==",
-          "value": true
+          "check": "layer.membership",
+          "op": "count",
+          "value": 0,
+          "compare": ">"
          }
         ]
        },
@@ -7282,9 +10152,9 @@ export const PROFILES = {
         "severity": "info",
         "all": [
          {
-          "prop": "annot.prints",
-          "op": "==",
-          "value": true
+          "check": "annotation.flags",
+          "op": "includes",
+          "value": "print"
          }
         ]
        },
@@ -7293,57 +10163,105 @@ export const PROFILES = {
         "severity": "info",
         "all": [
          {
-          "prop": "page.isRotated",
+          "check": "page.rotation",
+          "op": "!=",
+          "value": 0
+         }
+        ]
+       },
+       {
+        "name": "Image below 300 ppi",
+        "severity": "warning",
+        "all": [
+         {
+          "check": "image.resolution",
+          "op": "<",
+          "value": 300,
+          "kind": "colour_or_grey"
+         }
+        ]
+       },
+       {
+        "name": "Image above 450 ppi",
+        "severity": "info",
+        "all": [
+         {
+          "check": "image.resolution",
+          "op": ">",
+          "value": 450,
+          "kind": "colour_or_grey"
+         }
+        ]
+       },
+       {
+        "name": "Font not embedded",
+        "severity": "error",
+        "all": [
+         {
+          "check": "font.embedding",
           "op": "==",
+          "value": "not_embedded"
+         }
+        ]
+       },
+       {
+        "name": "More than 2 spot colours on a page",
+        "severity": "info",
+        "all": [
+         {
+          "check": "print.plates",
+          "op": "count",
+          "value": 2,
+          "compare": ">",
+          "kind": "spot"
+         }
+        ]
+       },
+       {
+        "name": "Pages differ in size or orientation",
+        "severity": "info",
+        "all": [
+         {
+          "check": "document.pages_uniform",
+          "op": "is",
+          "value": false
+         }
+        ]
+       },
+       {
+        "name": "Empty page",
+        "severity": "info",
+        "all": [
+         {
+          "check": "page.empty",
+          "op": "is",
+          "value": true
+         }
+        ]
+       },
+       {
+        "name": "Document is encrypted",
+        "severity": "info",
+        "all": [
+         {
+          "check": "security.encryption",
+          "op": "!=",
+          "value": "none"
+         }
+        ]
+       },
+       {
+        "name": "Document is damaged",
+        "severity": "warning",
+        "all": [
+         {
+          "check": "document.damaged",
+          "op": "is",
           "value": true
          }
         ]
        }
-      ],
-      "builtins": [
-       {
-        "name": "imageResolutionBelow",
-        "severity": "warning",
-        "params": {
-         "ppi": 300
-        }
-       },
-       {
-        "name": "imageResolutionAbove",
-        "severity": "info",
-        "params": {
-         "ppi": 450
-        }
-       },
-       {
-        "name": "fontsNotEmbedded",
-        "severity": "error"
-       },
-       {
-        "name": "spotColoursMoreThan",
-        "severity": "info",
-        "params": {
-         "count": 2
-        }
-       },
-       {
-        "name": "pagesDifferInSize",
-        "severity": "info"
-       },
-       {
-        "name": "emptyPage",
-        "severity": "info"
-       },
-       {
-        "name": "encrypted",
-        "severity": "info"
-       },
-       {
-        "name": "damaged",
-        "severity": "warning"
-       }
-      ],
-      "fixes": []
+      ]
      }
     }
    ]
@@ -7359,75 +10277,49 @@ export const PROFILES = {
       "name": "Prepress cleanup",
       "description": "The safe prepress repairs in one step: trim and bleed boxes, hairlines, overprint, knockout, scaling, transparency groups.",
       "checks": [],
-      "builtins": [],
       "fixes": [
        {
-        "op": "setpagebox",
-        "params": [
-         "TrimBox",
-         "RelativeToCropBox",
-         "0",
-         "0",
-         "0",
-         "0",
-         "pt"
+        "fix": "page.set_box",
+        "box": "trim",
+        "from": "crop",
+        "when": "missing"
+       },
+       {
+        "fix": "bleed.generate",
+        "amount": "3mm"
+       },
+       {
+        "fix": "page.remove_user_unit"
+       },
+       {
+        "fix": "ink.min_line_width",
+        "width": "0.25pt"
+       },
+       {
+        "fix": "ink.overprint_black",
+        "objects": "text"
+       },
+       {
+        "fix": "ink.knockout_white"
+       },
+       {
+        "fix": "document.set_info",
+        "key": "Trapped",
+        "value": "False"
+       },
+       {
+        "fix": "graphics.remove",
+        "settings": [
+         "flatness",
+         "smoothness"
         ]
        },
        {
-        "op": "generatebleed",
-        "params": [
-         "Amount",
-         "3",
-         "mm"
-        ]
+        "fix": "transparency.remove_unneeded_groups"
        },
        {
-        "op": "removepagescaling",
-        "params": []
-       },
-       {
-        "op": "increaselinewidth",
-        "params": [
-         "0.25",
-         "",
-         "pt"
-        ]
-       },
-       {
-        "op": "overprintblack",
-        "params": [
-         "Text"
-        ]
-       },
-       {
-        "op": "knockoutwhite",
-        "params": [
-         ""
-        ]
-       },
-       {
-        "op": "trappedkey",
-        "params": [
-         "false"
-        ]
-       },
-       {
-        "op": "removeflatness",
-        "params": []
-       },
-       {
-        "op": "removesmoothness",
-        "params": []
-       },
-       {
-        "op": "removeunnecessarytransparencygroups",
-        "params": []
-       },
-       {
-        "op": "settransparencyblendcs",
-        "params": [
-         "CMYK"
-        ]
+        "fix": "transparency.set_blend_space",
+        "space": "CMYK"
        }
       ]
      }
@@ -7440,15 +10332,10 @@ export const PROFILES = {
       "name": "Thicken hairlines to 0.25 pt",
       "description": "Raises every stroke thinner than 0.25 pt to 0.25 pt.",
       "checks": [],
-      "builtins": [],
       "fixes": [
        {
-        "op": "increaselinewidth",
-        "params": [
-         "0.25",
-         "",
-         "pt"
-        ]
+        "fix": "ink.min_line_width",
+        "width": "0.25pt"
        }
       ]
      }
@@ -7461,13 +10348,10 @@ export const PROFILES = {
       "name": "Black text to overprint",
       "description": "Sets 100% black text to overprint.",
       "checks": [],
-      "builtins": [],
       "fixes": [
        {
-        "op": "overprintblack",
-        "params": [
-         "Text"
-        ]
+        "fix": "ink.overprint_black",
+        "objects": "text"
        }
       ]
      }
@@ -7480,13 +10364,10 @@ export const PROFILES = {
       "name": "All white objects to knockout",
       "description": "Switches overprint off for every white object.",
       "checks": [],
-      "builtins": [],
       "fixes": [
        {
-        "op": "knockoutwhite",
-        "params": [
-         ""
-        ]
+        "fix": "ink.knockout_white",
+        "objects": "all"
        }
       ]
      }
@@ -7499,19 +10380,16 @@ export const PROFILES = {
       "name": "Set trim box from crop box",
       "description": "Adds a trim box equal to the crop box on pages that lack one.",
       "checks": [],
-      "builtins": [],
       "fixes": [
        {
-        "op": "setpagebox",
-        "params": [
-         "TrimBox",
-         "RelativeToCropBox",
-         "0",
-         "0",
-         "0",
-         "0",
-         "pt"
-        ]
+        "fix": "page.set_box",
+        "box": "trim",
+        "from": "crop",
+        "left": "0mm",
+        "right": "0mm",
+        "top": "0mm",
+        "bottom": "0mm",
+        "when": "missing"
        }
       ]
      }
@@ -7524,15 +10402,15 @@ export const PROFILES = {
       "name": "Add 3 mm bleed box",
       "description": "Sets a bleed box 3 mm outside the trim box, limited by the media box.",
       "checks": [],
-      "builtins": [],
       "fixes": [
        {
-        "op": "generatebleed",
-        "params": [
-         "Amount",
-         "3",
-         "mm"
-        ]
+        "fix": "page.set_box",
+        "box": "bleed",
+        "from": "trim",
+        "left": "-3mm",
+        "right": "-3mm",
+        "top": "-3mm",
+        "bottom": "-3mm"
        }
       ]
      }
@@ -7545,11 +10423,9 @@ export const PROFILES = {
       "name": "Flatten layers",
       "description": "Discards hidden layers and merges the visible ones into the page.",
       "checks": [],
-      "builtins": [],
       "fixes": [
        {
-        "op": "dscdhdnlycntfltnvsblyrs",
-        "params": []
+        "fix": "layer.flatten"
        }
       ]
      }
@@ -7562,13 +10438,10 @@ export const PROFILES = {
       "name": "Make invisible text visible",
       "description": "Sets invisible text to plain fill so it shows and prints.",
       "checks": [],
-      "builtins": [],
       "fixes": [
        {
-        "op": "settextrendermode",
-        "params": [
-         "0"
-        ]
+        "fix": "text.set_render_mode",
+        "mode": "fill"
        }
       ]
      }
@@ -7581,36 +10454,28 @@ export const PROFILES = {
       "name": "Scale pages to A4",
       "description": "Scales every page proportionally to fit A4 (210 x 297 mm).",
       "checks": [],
-      "builtins": [],
       "fixes": [
        {
-        "op": "scalepagesex",
-        "params": [
-         "210",
-         "297",
-         "mm"
-        ]
+        "fix": "page.scale",
+        "width": "210mm",
+        "height": "297mm"
        }
       ]
      }
     },
     {
      "name": "Scale pages to US Letter",
-     "description": "Scales every page proportionally to fit US Letter (8.5 x 11 inch).",
+     "description": "Scales every page proportionally to fit US Letter (8.5 x 11 in).",
      "json": {
       "kura-profile": 1,
       "name": "Scale pages to US Letter",
-      "description": "Scales every page proportionally to fit US Letter (8.5 x 11 inch).",
+      "description": "Scales every page proportionally to fit US Letter (8.5 x 11 in).",
       "checks": [],
-      "builtins": [],
       "fixes": [
        {
-        "op": "scalepagesex",
-        "params": [
-         "8.5",
-         "11",
-         "inch"
-        ]
+        "fix": "page.scale",
+        "width": "8.5in",
+        "height": "11in"
        }
       ]
      }

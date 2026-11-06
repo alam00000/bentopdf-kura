@@ -53,8 +53,8 @@ assert(after.compliant === true && after.findings === 0, 'converted output check
 const ua = await convert(input, '2a', { ua: true, lang: 'en-US' });
 assert(ua.issues.some((i) => /STRUCT|TAG/.test(i.code)), 'PDF/A-2a with ua builds a structure tree');
 
-const analyzed = await check(input, '2b', { analyze: true, profile: JSON.stringify({ 'kura-profile': 1, name: 'Smoke', checks: [{ name: 'Wide page', severity: 'warning', scope: 'page', all: [{ prop: 'page.width', op: '>', value: 700 }] }] }) });
-assert(Array.isArray(analyzed.analysis), `check with a profile -> ${analyzed.analysis.length} analysis line(s)`);
+const analyzed = await check(input, '2b', { analyze: true, profile: JSON.stringify({ 'kura-profile': 1, name: 'Smoke', checks: [{ name: 'Wide page', severity: 'warning', scope: 'page', all: [{ check: 'page.box_size', box: 'media', dimension: 'width', op: '>', value: '700pt' }] }] }) });
+assert(Array.isArray(analyzed.analysis) && !analyzed.analysis.some((a) => a.code === 'PROFILE_INVALID'), `check with a profile -> ${analyzed.analysis.length} analysis line(s)`);
 
 let caught = null;
 try { await convert(new Uint8Array([0x25, 0x50, 0x44, 0x46, 1, 2, 3]), '2b'); } catch (e) { caught = e; }

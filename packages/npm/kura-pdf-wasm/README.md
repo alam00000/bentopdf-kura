@@ -70,7 +70,7 @@ interface KuraOptions {
   defaultCmyk?: Uint8Array;
   defaultGray?: Uint8Array;
   vtRecords?: string;           // PDF/VT record ranges, "1-3,4-6"
-  profile?: string;             // a preflight profile, JSON or XML text
+  profile?: string;             // a preflight profile, as JSON text
   analyze?: boolean;            // add the document census to `analysis`
 }
 

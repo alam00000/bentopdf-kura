@@ -75,7 +75,7 @@ The output path is optional. Leave it out and the result is written next to the 
 
 `--analyze` adds a document census to the report: page sizes, colour usage, transparency, fonts, images. Combines with `--check`.
 
-`--profile <file>` runs a preflight profile, in JSON or XML, and reports its hits under `analysis`. See [Preflight profiles](/preflight).
+`--profile <file>` runs a preflight profile and reports its hits under `analysis`; its fixes apply during a conversion. Without `--level`, the target comes from the profile's `convert` section. `--var name=value` sets a profile variable, `--var-file <json>` sets several. `--list-profiles <dir>` lists the profiles in a folder and `--list-vars <file>` the variables of one. See [Preflight profiles](/preflight).
 
 `--batch`, `-r`, `-d <dir>`, `-s <suffix>`, `-w` process a folder. The input argument is a directory, output is omitted, and the report becomes a JSON array with one object per file plus a one-line summary on stderr. `-r` recurses. Outputs go to `-d`, or beside the inputs with suffix `_pdfa` unless you give `-s` or `-w` to overwrite. Exit status is the worst of any file.
 
@@ -95,7 +95,7 @@ The output path is optional. Leave it out and the result is written next to the 
 
 `--output-condition <name>`, `--output-condition-info <text>`, `--registry <url>` identify the press characterization written into a PDF/X output intent. Defaults to the bundled profile with identifier `Custom`.
 
-`--dest-profile <icc>` supplies the ICC profile for the output intent and, at X-1a, for the CMYK conversion. The profile's colour space is checked against the target.
+`--dest-profile <icc>` names the ICC file used as the output intent and, at X-1a, as the CMYK conversion target. The profile's colour space is checked against the target.
 
 `--default-rgb <icc>`, `--default-cmyk <icc>`, `--default-gray <icc>` replace the bundled profiles used for default colour spaces.
 

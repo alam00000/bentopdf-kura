@@ -8,6 +8,15 @@ export default defineConfig({
   base: '/docs/',
   cleanUrls: true,
 
+  markdown: {
+    config(md) {
+      md.core.ruler.push('reference_plain_text', (state) => {
+        if (!state.env.relativePath?.startsWith('profile-checks')) return
+        for (const t of state.tokens) for (const c of t.children || []) if (c.type === 'html_inline') c.type = 'text'
+      })
+    },
+  },
+
   transformPageData(pageData) {
     const relPath = pageData.relativePath.replace(/\.md$/, '')
     const slug = relPath === 'index' ? '' : relPath.replace(/\/index$/, '/')
@@ -48,6 +57,7 @@ export default defineConfig({
           { text: 'HTTP API', link: '/http-api' },
           { text: 'C API', link: '/c-api' },
           { text: 'Rejection codes', link: '/rejections' },
+          { text: 'Profile checks and fixes', link: '/profile-checks' },
         ],
       },
       {

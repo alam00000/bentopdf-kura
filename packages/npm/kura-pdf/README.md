@@ -75,7 +75,7 @@ interface KuraOptions {
   defaultCmyk?: Uint8Array;
   defaultGray?: Uint8Array;
   vtRecords?: string;           // PDF/VT record ranges, "1-3,4-6"
-  profile?: string;             // a preflight profile, JSON or XML text
+  profile?: string;             // a preflight profile, as JSON text
   analyze?: boolean;            // add the document census to `analysis`
   sign?: { p12: Uint8Array | string; password?: string; name?: string; reason?: string; location?: string };
   ocr?: boolean;                // run tesseract on image-only pages

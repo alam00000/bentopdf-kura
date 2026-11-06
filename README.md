@@ -8,7 +8,7 @@
 
 Kura converts everyday PDFs into archival, print and accessible ones: every PDF/A level, PDF/UA, PDF/X, PDF/E and PDF/VT, from one engine. It repairs what is wrong, embeds what is missing, converts colour where the standard demands it, and writes a file that validates clean, or tells you exactly why it cannot.
 
-It is also a full print preflight engine: 396 bundled profiles check and repair what a press cares about, such as hairlines, rich black, low-resolution images, overprint, transparency, page boxes, fonts and colour, and you can write your own in JSON or bring the XML dialect you already use.
+It is also a full print preflight engine: 397 bundled profiles check and repair what a press cares about, such as hairlines, rich black, low-resolution images, overprint, transparency, page boxes, fonts and colour, and you can write your own in JSON from a published catalogue of checks and fixes.
 
 The name comes from the 蔵 (*kura*), the traditional Japanese storehouse where a family kept the things meant to outlast them.
 
@@ -54,7 +54,7 @@ Kura is built around solving those three.
 
 * **Every standard, one engine.** All eleven PDF/A levels, PDF/UA-1 and UA-2, PDF/X-1a through X-6, PDF/E-1 and PDF/VT, plus Factur-X, ZUGFeRD, XRechnung and Order-X e-invoices, with the same options and the same report everywhere.
 
-* **Preflight built in.** The same engine runs print preflight: 396 bundled profiles for hairlines, rich black, image resolution, overprint, transparency, page boxes, fonts and colour, each a set of checks with repairs where a repair exists, plus your own in JSON or the XML dialect you already use.
+* **Preflight built in.** The same engine runs print preflight: 397 bundled profiles for hairlines, rich black, image resolution, overprint, transparency, page boxes, fonts and colour, each a set of checks with repairs where a repair exists, plus your own in JSON.
 
 * **Runs anywhere.** The same engine powers the CLI, the C library, the npm package, the Docker image and the browser build, which runs entirely on your machine with nothing to install.
 
@@ -189,6 +189,8 @@ The same image doubles as the CLI: pass arguments and it converts instead of ser
 docker run --rm --user "$(id -u):$(id -g)" -v "$PWD:/work" ghcr.io/alam00000/bentopdf-kura:latest --check --level 2b in.pdf
 ```
 
+For more volume, the same image runs as a coordinator with any number of worker machines: a queue that survives restarts, automatic retries when a worker drops out, and watched folders.
+
 See [SELF-HOSTING.md](https://github.com/alam00000/bentopdf-kura/blob/main/SELF-HOSTING.md) for the complete API, configuration options, and deployment notes.
 
 ### C API
@@ -226,7 +228,7 @@ That is 25 targets. The [standards page](https://kura.bentopdf.com/docs/standard
 
 ## Preflight
 
-Kura is as much a preflight engine as a conversion engine. A preflight profile is a set of checks to run against a document, optionally with repairs to apply, and 396 of them ship under `pdfa-engine/profiles/`, every one written by BentoPDF from public sources and generated from one script:
+Kura is as much a preflight engine as a conversion engine. A preflight profile is a set of checks to run against a document, optionally with repairs to apply, and 397 of them ship under `pdfa-engine/profiles/`, every one written by BentoPDF from public sources and generated from one script:
 
 | Folder | Contents |
 |---|---|
@@ -239,7 +241,7 @@ Kura is as much a preflight engine as a conversion engine. A preflight profile i
 Run a profile in check mode to get findings without writing a file, or with a conversion to have its repairs applied in the same pass:
 
 ```bash
-kura --check --level 2b --profile pdfa-engine/profiles/report/report-hairlines.json in.pdf
+kura --check --profile pdfa-engine/profiles/report/report-hairlines.json in.pdf
 
 kura --level x4 --profile pdfa-engine/profiles/press/sheetfed-offset-cmyk-check-and-fix.json in.pdf out.pdf
 ```
@@ -247,10 +249,16 @@ kura --level x4 --profile pdfa-engine/profiles/press/sheetfed-offset-cmyk-check-
 Findings come back under `analysis`, separate from the conformance `issues`, with the severity, the check, the hit count and every page it hit:
 
 ```json
-{"code":"PROFILE_HIT","detail":"Error: Stroke thinner than 0.125 pt (11 hit(s), pages 1-8, 10-12)"}
+{"code":"CHECK_HIT","detail":"Error: Stroke thinner than 0.125 pt (11 hit(s), pages 1-8, 10-12)"}
 ```
 
-Profiles are plain JSON, so you can write your own, and the XML preflight dialect many print shops already have is accepted as well. `--analyze` adds the engine's own document analysis (colour usage, transparency, overprint, fonts, page sizes) to any run. The browser preflight tool at [kura.bentopdf.com](https://kura.bentopdf.com) (Preflight in the top bar) runs a curated set of profiles on a dropped file and can apply the repairs. The [preflight page](https://kura.bentopdf.com/docs/preflight) documents the profile format.
+Profiles are plain JSON, so you can write your own from the [catalogue of checks and fixes](https://kura.bentopdf.com/docs/profile-checks):
+
+```json
+{"kura-profile":1,"name":"Hairlines","checks":[{"name":"Stroke thinner than 0.125 pt","severity":"error","all":[{"check":"content.stroke_width","op":"<=","value":0.125}]}],"fixes":[{"fix":"ink.min_line_width","width":"0.25pt"}]}
+```
+
+`--analyze` adds the engine's own document analysis (colour usage, transparency, overprint, fonts, page sizes) to any run. The browser preflight tool at [kura.bentopdf.com](https://kura.bentopdf.com) (Preflight in the top bar) runs a curated set of profiles on a dropped file and can apply the repairs. The [preflight page](https://kura.bentopdf.com/docs/preflight) documents the profile format.
 
 ---
 
@@ -268,7 +276,7 @@ Depending on the document and the target, the engine can:
 * embed an e-invoice, derive its file name, relationship and XMP schema from the guideline it declares, and pull it back out later
 * lay an invisible OCR text layer over scanned pages so they become searchable
 * apply a PKCS#7 signature in the same pass, so the signed file is still conformant
-* run preflight profiles: 396 bundled checks and repairs, or your own in JSON or the XML dialect
+* run preflight profiles: 397 bundled checks and repairs, or your own in JSON
 * wrap a bare JPEG as a single-page PDF and convert that
 
 ---
