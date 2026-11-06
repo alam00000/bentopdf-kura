@@ -21,6 +21,9 @@ const CURATED = [
   ['Online publishing', [
     ['online', 'Online publishing: check'], ['online', 'Online publishing: check and fix'], ['online', 'Email attachment: check'],
   ]],
+  ['Accessibility checks', [
+    ['accessibility', 'Accessibility checklist (WCAG / Section 508)'], ['accessibility', 'Accessibility readiness: report'],
+  ]],
   ['Reports', [
     ['report', 'Report hairlines'], ['report', 'Report small text'], ['report', 'Report rich black'], ['report', 'Report white objects'],
     ['report', 'Report invisible text'], ['report', 'Report low resolution images'], ['report', 'Report high resolution images'],

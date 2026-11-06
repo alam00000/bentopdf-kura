@@ -36,6 +36,12 @@
     "@eslint/js": "^10.0.1",
     "eslint": "^10.9.1",
     "globals": "^17.11.0",
-    "vitepress": "^1.6.3"
+    "vitepress": "^1.6.4"
+  },
+  "overrides": {
+    "vitepress": {
+      "vite": "^6.4.5"
+    },
+    "minimatch": "^11.0.5"
   }
 }
