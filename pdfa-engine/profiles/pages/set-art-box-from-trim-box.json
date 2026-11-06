@@ -3,19 +3,16 @@
   "name": "Set art box from trim box",
   "description": "Adds an art box equal to the trim box where missing.",
   "checks": [],
-  "builtins": [],
   "fixes": [
     {
-      "op": "setpagebox",
-      "params": [
-        "ArtBox",
-        "RelativeToTrimBox",
-        "0",
-        "0",
-        "0",
-        "0",
-        "pt"
-      ]
+      "fix": "page.set_box",
+      "box": "art",
+      "from": "trim",
+      "left": "0mm",
+      "right": "0mm",
+      "top": "0mm",
+      "bottom": "0mm",
+      "when": "missing"
     }
   ]
 }

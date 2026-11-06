@@ -8,9 +8,13 @@
       "severity": "info",
       "all": [
         {
-          "prop": "fill.overprint",
-          "op": "==",
-          "value": true
+          "check": "color.overprint",
+          "op": "in",
+          "value": [
+            "on",
+            "on_nonzero_mode"
+          ],
+          "paint": "fill"
         }
       ]
     },
@@ -19,13 +23,15 @@
       "severity": "info",
       "all": [
         {
-          "prop": "stroke.overprint",
-          "op": "==",
-          "value": true
+          "check": "color.overprint",
+          "op": "in",
+          "value": [
+            "on",
+            "on_nonzero_mode"
+          ],
+          "paint": "stroke"
         }
       ]
     }
-  ],
-  "builtins": [],
-  "fixes": []
+  ]
 }

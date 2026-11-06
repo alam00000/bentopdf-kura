@@ -8,13 +8,11 @@
       "severity": "info",
       "all": [
         {
-          "prop": "paint.spotOnly",
+          "check": "color.ink_mix",
           "op": "==",
-          "value": true
+          "value": "spot_only"
         }
       ]
     }
-  ],
-  "builtins": [],
-  "fixes": []
+  ]
 }

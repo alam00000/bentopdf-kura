@@ -10,6 +10,7 @@
 #include <cstring>
 #include <exception>
 
+#include "colorconv.hh"
 #include "ctx.hh"
 #include "passes.hh"
 #include "ocr.hh"
@@ -134,7 +135,7 @@ void serialize(Ctx& ctx) {
     w.forcePDFVersion(ctx.pdf20Print() ? "2.0" : "1.6");
   } else {
     w.setObjectStreamMode(signing ? qpdf_o_disable : qpdf_o_generate);
-    w.forcePDFVersion(ctx.part >= 4 ? "2.0" : "1.7");
+    w.forcePDFVersion(ctx.part >= 4 ? "2.0" : ctx.dualX() ? "1.6" : "1.7");
   }
   w.write();
   auto buf = w.getBufferSharedPointer();
@@ -245,7 +246,49 @@ int issueSeverity(const std::string& code) {
   return 3;
 }
 
-Result convert(const unsigned char* data, std::size_t size, const Options& optIn) {
+Result convertOnce(const unsigned char* data, std::size_t size, const Options& optIn) {
+  static thread_local bool inDualPass = false;
+  Level dualA = optIn.level;
+  bool wantDual = optIn.dualPrint && levelFamily(optIn.level) == Family::PDFA;
+  if (wantDual && !inDualPass && !optIn.verifyOnly && (levelPart(dualA) == 2 || levelPart(dualA) == 4)) {
+    Options first = optIn;
+    first.dualPrint = true;
+    first.level = levelPart(dualA) == 4 ? Level::X6 : Level::X4;
+    first.signDocument = nullptr;
+    inDualPass = true;
+    Result r1;
+    try {
+      r1 = convert(data, size, first);
+    } catch (...) {
+      inDualPass = false;
+      throw;
+    }
+    inDualPass = false;
+    if (!r1.ok) return r1;
+    Options second = optIn;
+    second.level = dualA;
+    second.dualPrint = true;
+    second.preflightProfile.clear();
+    second.profileFixOps.clear();
+    second.colorJob = ColorJob();
+    second.rasterizePage = nullptr;
+    second.ocrPage = nullptr;
+    second.signDocument = optIn.signDocument;
+    std::vector<unsigned char> mid = r1.pdf;
+    inDualPass = true;
+    Result r2;
+    try {
+      r2 = convert(mid.data(), mid.size(), second);
+    } catch (...) {
+      inDualPass = false;
+      throw;
+    }
+    inDualPass = false;
+    r2.analysis.insert(r2.analysis.begin(), r1.analysis.begin(), r1.analysis.end());
+    r2.issues.insert(r2.issues.begin(), r1.issues.begin(), r1.issues.end());
+    if (r2.ok) r2.level = levelToString(dualA) + "+" + levelToString(first.level);
+    return r2;
+  }
   Result res;
   Options opt = optIn;
   std::string wrapped;
@@ -256,6 +299,8 @@ Result convert(const unsigned char* data, std::size_t size, const Options& optIn
   }
   try {
     if (!opt.preflightProfile.empty() && !opt.verifyOnly) applyProfileFixes(opt, res.analysis);
+    if (opt.colorJob.enabled && !opt.verifyOnly) prepareColorJob(opt, res.analysis);
+    res.level = levelToString(opt.level);
     if (size > 4 && data[0] == 0xFF && data[1] == 0xD8) {
       wrapped = wrapJpegAsPdf(data, size);
       if (!wrapped.empty()) {
@@ -313,7 +358,9 @@ Result convert(const unsigned char* data, std::size_t size, const Options& optIn
       res.suggestedLevel = "2u";
       return res;
     }
-    if (levelVerifyOnly(opt.level) && !opt.verifyOnly) {
+    bool externalReady = opt.level == Level::X5N && !opt.externalProfileUrl.empty() &&
+                         opt.destProfile.size() >= 20 && opt.destProfile.substr(17, 3) == "CLR";
+    if (levelVerifyOnly(opt.level) && !opt.verifyOnly && !externalReady) {
       res.errorCode = "LEVEL_VERIFY_ONLY";
       res.error = "this flavour relies on externally referenced press assets, so Kura checks "
                   "files against it but cannot produce one; convert to the self-contained "
@@ -372,6 +419,7 @@ Result convert(const unsigned char* data, std::size_t size, const Options& optIn
     const bool timing = std::getenv("PDFA_TIMING") != nullptr;
     auto tmark = std::chrono::steady_clock::now();
     auto lap = [&](const char* name) {
+      if (opt.trace) opt.trace(std::string("stage ") + name + " done");
       if (!timing) return;
       auto now = std::chrono::steady_clock::now();
       std::fprintf(stderr, "[timing] %-12s %.2fs\n", name,
@@ -383,6 +431,7 @@ Result convert(const unsigned char* data, std::size_t size, const Options& optIn
     if (!opt.profileFixOps.empty() && !opt.verifyOnly) passProfileFixups(ctx);
     lap("analyze");
     passStructure(ctx);
+    if (opt.verifyOnly && ctx.isA()) checkFileSyntax(ctx, data, size, wasEncrypted);
     lap("structure");
     if (!ctx.failed()) passPages(ctx);
     if (!ctx.failed()) passImageResolution(ctx);
@@ -391,6 +440,8 @@ Result convert(const unsigned char* data, std::size_t size, const Options& optIn
     lap("ocr");
     if (!ctx.failed()) passCompleteResources(ctx);
     lap("resources");
+    if (!ctx.failed()) passColorConvert(ctx);
+    lap("colorconvert");
     if (!ctx.failed()) passColor(ctx);
     lap("color");
     if (!ctx.failed()) passPrint(ctx);
@@ -404,6 +455,7 @@ Result convert(const unsigned char* data, std::size_t size, const Options& optIn
     if (!ctx.failed()) passTagging(ctx);
     lap("tagging");
     if (!ctx.failed() && !opt.verifyOnly && opt.signDocument) addSignaturePlaceholder(ctx);
+    if (!ctx.failed() && !opt.verifyOnly) passBookmarks(ctx);
     if (!ctx.failed()) passMetadata(ctx);
     lap("metadata");
     if (!ctx.failed()) passLimits(ctx);

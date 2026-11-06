@@ -1,4 +1,6 @@
+#include <cctype>
 #include "ocr.hh"
+#include "textextract.hh"
 
 #include <qpdf/QPDFPageDocumentHelper.hh>
 #include <qpdf/QPDFPageObjectHelper.hh>
@@ -74,6 +76,12 @@ void passOcr(Ctx& ctx) {
 
   for (size_t i = 0; i < pages.size(); ++i) {
     PageScope kuraScope(ctx, static_cast<int>(i) + 1);
+    bool hasText = false;
+    for (const TextRun& r : extractPageText(pages[i])) {
+      for (char c : r.text) hasText = hasText || !std::isspace(static_cast<unsigned char>(c));
+      if (hasText) break;
+    }
+    if (hasText) continue;
     int w = 0, h = 0;
     std::string rgb;
     if (!ctx.opt.rasterizePage(static_cast<int>(i), ctx.opt.rasterDpi, w, h, rgb)) continue;

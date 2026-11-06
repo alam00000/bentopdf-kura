@@ -19,9 +19,20 @@ add_library(pdfa_core STATIC
   src/outline.cpp
   src/profile.cpp
   src/profile_parse.cpp
+  src/check_registry.cpp
   src/profile_fixups.cpp
   src/profile_scan.cpp
   src/profile_eval.cpp
+  src/profile_eval_obj.cpp
+  src/profile_eval_ext.cpp
+  src/profile_xmpcheck.cpp
+  src/profile_check_ext_struct.cpp
+  src/profile_vars.cpp
+  src/profile_spatial.cpp
+  src/objlayer.cpp
+  src/htmlshim.cpp
+  src/jobs.cpp
+  src/vflatten.cpp
   src/semantics.cpp
   src/einvoice.cpp
   src/einvoice_read.cpp
@@ -33,6 +44,11 @@ add_library(pdfa_core STATIC
   src/pages.cpp
   src/color.cpp
   src/colorx.cpp
+  src/colorconv.cpp
+  src/pdffunc.cpp
+  src/textextract.cpp
+  src/uacheck.cpp
+  src/barcode.cpp
   src/printx.cpp
   src/fonts.cpp
   src/fonts_glyph.cpp
@@ -129,5 +145,25 @@ else()
     target_link_libraries(pdfa_core
       PUBLIC qpdf::libqpdf
       PRIVATE Freetype::Freetype openjp2 JPEG::JPEG ZLIB::ZLIB ${LCMS2_LIBRARY})
+  endif()
+endif()
+
+option(KURA_WITH_ZXING "Use zxing-cpp for barcode creation and reading" ON)
+if(KURA_WITH_ZXING AND NOT EMSCRIPTEN)
+  find_package(ZXing CONFIG QUIET)
+  if(ZXing_FOUND)
+    target_link_libraries(pdfa_core PUBLIC ZXing::ZXing)
+    target_compile_definitions(pdfa_core PRIVATE KURA_WITH_ZXING)
+  endif()
+endif()
+
+option(KURA_WITH_QUICKJS "Use QuickJS for profile variable scripts and process plans" ON)
+if(KURA_WITH_QUICKJS AND NOT EMSCRIPTEN)
+  find_path(KURA_QUICKJS_INCLUDE quickjs/quickjs.h HINTS /opt/homebrew/opt/quickjs/include /usr/local/include)
+  find_library(KURA_QUICKJS_LIB NAMES quickjs HINTS /opt/homebrew/opt/quickjs/lib/quickjs /opt/homebrew/opt/quickjs/lib /usr/local/lib/quickjs)
+  if(KURA_QUICKJS_INCLUDE AND KURA_QUICKJS_LIB)
+    target_include_directories(pdfa_core SYSTEM PRIVATE ${KURA_QUICKJS_INCLUDE})
+    target_link_libraries(pdfa_core PUBLIC ${KURA_QUICKJS_LIB})
+    target_compile_definitions(pdfa_core PRIVATE KURA_WITH_QUICKJS)
   endif()
 endif()

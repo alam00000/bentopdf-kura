@@ -8,9 +8,10 @@
       "severity": "error",
       "all": [
         {
-          "prop": "fill.totalInk",
+          "check": "color.total_ink",
           "op": ">",
-          "value": 300
+          "value": 300,
+          "paint": "fill"
         }
       ]
     },
@@ -19,13 +20,12 @@
       "severity": "error",
       "all": [
         {
-          "prop": "stroke.totalInk",
+          "check": "color.total_ink",
           "op": ">",
-          "value": 300
+          "value": 300,
+          "paint": "stroke"
         }
       ]
     }
-  ],
-  "builtins": [],
-  "fixes": []
+  ]
 }

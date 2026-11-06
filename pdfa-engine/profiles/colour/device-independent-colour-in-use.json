@@ -2,12 +2,19 @@
   "kura-profile": 1,
   "name": "Device-independent colour in use",
   "description": "Reports Lab, calibrated and ICC-based colour.",
-  "checks": [],
-  "builtins": [
+  "checks": [
     {
-      "name": "deviceIndependentColour",
-      "severity": "info"
+      "name": "Device-independent colour",
+      "severity": "info",
+      "all": [
+        {
+          "check": "color.space",
+          "op": "in",
+          "value": [
+            "device_independent"
+          ]
+        }
+      ]
     }
-  ],
-  "fixes": []
+  ]
 }

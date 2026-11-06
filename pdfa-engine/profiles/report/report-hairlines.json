@@ -1,14 +1,14 @@
 {
   "kura-profile": 1,
   "name": "Report hairlines",
-  "description": "Finds strokes too thin to print reliably, graded by rendered width.",
+  "description": "Finds strokes too thin to print reliably, graded by width.",
   "checks": [
     {
       "name": "Stroke thinner than 0.125 pt",
       "severity": "error",
       "all": [
         {
-          "prop": "stroke.width",
+          "check": "content.stroke_width",
           "op": "<=",
           "value": 0.125
         }
@@ -19,12 +19,12 @@
       "severity": "warning",
       "all": [
         {
-          "prop": "stroke.width",
+          "check": "content.stroke_width",
           "op": "<=",
           "value": 0.25
         },
         {
-          "prop": "stroke.width",
+          "check": "content.stroke_width",
           "op": ">",
           "value": 0.125
         }
@@ -35,12 +35,12 @@
       "severity": "error",
       "all": [
         {
-          "prop": "stroke.width",
+          "check": "content.stroke_width",
           "op": "<=",
           "value": 0.25
         },
         {
-          "prop": "paint.inkCount",
+          "check": "color.inks_used",
           "op": ">",
           "value": 1
         }
@@ -51,18 +51,16 @@
       "severity": "info",
       "all": [
         {
-          "prop": "stroke.width",
+          "check": "content.stroke_width",
           "op": "<=",
           "value": 0.5
         },
         {
-          "prop": "stroke.width",
+          "check": "content.stroke_width",
           "op": ">",
           "value": 0.25
         }
       ]
     }
-  ],
-  "builtins": [],
-  "fixes": []
+  ]
 }

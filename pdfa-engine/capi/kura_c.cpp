@@ -8,6 +8,7 @@
 
 #include "pdfa/einvoice.hh"
 #include "pdfa/pdfa.hh"
+#include "../core/src/profile_types.hh"
 #ifdef KURA_WITH_PDFIUM
 #include "kura/raster.hh"
 #endif
@@ -129,6 +130,13 @@ void applyOptions(const kura_options* options, pdfa::Options& opt) {
   }
   opt.rasterizeAllPages = options->rasterize_all_pages != 0;
   if (options->preflight_profile) opt.preflightProfile = options->preflight_profile;
+  if (options->profile_vars) {
+    pdfa::Json vars;
+    std::string err;
+    if (pdfa::parseJson(options->profile_vars, vars, err)) {
+      for (const auto& kv : vars.obj) opt.profileVars[kv.first] = kv.second.text();
+    }
+  }
   if (options->embed_source && options->embed_source_len > 0) {
     opt.embedSource.assign(reinterpret_cast<const char*>(options->embed_source),
                            options->embed_source_len);

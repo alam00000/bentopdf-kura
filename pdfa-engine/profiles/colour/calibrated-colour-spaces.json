@@ -8,13 +8,14 @@
       "severity": "info",
       "all": [
         {
-          "prop": "paint.isCalibrated",
-          "op": "==",
-          "value": true
+          "check": "color.space",
+          "op": "in",
+          "value": [
+            "CalGray",
+            "CalRGB"
+          ]
         }
       ]
     }
-  ],
-  "builtins": [],
-  "fixes": []
+  ]
 }

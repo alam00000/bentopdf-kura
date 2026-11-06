@@ -8,9 +8,9 @@
       "severity": "error",
       "all": [
         {
-          "prop": "font.notEmbedded",
+          "check": "font.embedding",
           "op": "==",
-          "value": true
+          "value": "not_embedded"
         }
       ]
     },
@@ -19,9 +19,9 @@
       "severity": "info",
       "all": [
         {
-          "prop": "font.isType3",
+          "check": "font.type",
           "op": "==",
-          "value": true
+          "value": "type3"
         }
       ]
     },
@@ -30,9 +30,13 @@
       "severity": "info",
       "all": [
         {
-          "prop": "font.isTrueType",
-          "op": "==",
-          "value": true
+          "check": "font.type",
+          "op": "in",
+          "value": [
+            "truetype",
+            "cid_truetype",
+            "opentype_truetype"
+          ]
         }
       ]
     },
@@ -41,9 +45,12 @@
       "severity": "info",
       "all": [
         {
-          "prop": "font.isCid",
-          "op": "==",
-          "value": true
+          "check": "font.type",
+          "op": "in",
+          "value": [
+            "cid_type0",
+            "cid_truetype"
+          ]
         }
       ]
     },
@@ -52,9 +59,9 @@
       "severity": "info",
       "all": [
         {
-          "prop": "font.notSubset",
+          "check": "font.embedding",
           "op": "==",
-          "value": true
+          "value": "embedded_full"
         }
       ]
     },
@@ -63,9 +70,9 @@
       "severity": "error",
       "all": [
         {
-          "prop": "font.subsetComplete",
-          "op": "==",
-          "value": false
+          "check": "font.problem",
+          "op": "includes",
+          "value": "subset_missing_glyph"
         }
       ]
     },
@@ -74,8 +81,8 @@
       "severity": "warning",
       "all": [
         {
-          "prop": "font.unicodeComplete",
-          "op": "==",
+          "check": "font.all_text_unicode",
+          "op": "is",
           "value": false
         }
       ]
@@ -85,9 +92,9 @@
       "severity": "error",
       "all": [
         {
-          "prop": "font.invalid",
-          "op": "==",
-          "value": true
+          "check": "font.problem",
+          "op": "includes",
+          "value": "invalid_program"
         }
       ]
     },
@@ -96,13 +103,11 @@
       "severity": "error",
       "all": [
         {
-          "prop": "font.notdefUsed",
+          "check": "text.glyph",
           "op": "==",
-          "value": true
+          "value": "notdef"
         }
       ]
     }
-  ],
-  "builtins": [],
-  "fixes": []
+  ]
 }

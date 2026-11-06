@@ -8,13 +8,11 @@
       "severity": "error",
       "all": [
         {
-          "prop": "font.subsetComplete",
-          "op": "==",
-          "value": false
+          "check": "font.problem",
+          "op": "includes",
+          "value": "subset_missing_glyph"
         }
       ]
     }
-  ],
-  "builtins": [],
-  "fixes": []
+  ]
 }

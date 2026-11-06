@@ -1,20 +1,22 @@
 {
   "kura-profile": 1,
   "name": "TrueType fonts",
-  "description": "Reports truetype fonts.",
+  "description": "Reports truetype fonts in use.",
   "checks": [
     {
       "name": "TrueType fonts",
       "severity": "info",
       "all": [
         {
-          "prop": "font.isTrueType",
-          "op": "==",
-          "value": true
+          "check": "font.type",
+          "op": "in",
+          "value": [
+            "truetype",
+            "cid_truetype",
+            "opentype_truetype"
+          ]
         }
       ]
     }
-  ],
-  "builtins": [],
-  "fixes": []
+  ]
 }

@@ -8,13 +8,12 @@
       "severity": "info",
       "all": [
         {
-          "prop": "image.hasSoftMask",
+          "check": "image.property",
           "op": "==",
-          "value": true
+          "value": "true",
+          "property": "soft_mask"
         }
       ]
     }
-  ],
-  "builtins": [],
-  "fixes": []
+  ]
 }

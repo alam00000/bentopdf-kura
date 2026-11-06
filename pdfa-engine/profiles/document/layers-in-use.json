@@ -8,13 +8,12 @@
       "severity": "info",
       "all": [
         {
-          "prop": "layers.onLayer",
-          "op": "==",
-          "value": true
+          "check": "layer.membership",
+          "op": "count",
+          "value": 0,
+          "compare": ">"
         }
       ]
     }
-  ],
-  "builtins": [],
-  "fixes": []
+  ]
 }

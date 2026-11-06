@@ -1,14 +1,22 @@
 {
   "kura-profile": 1,
   "name": "Check PDF/A-2u",
-  "description": "Reports every deviation from PDF/A-2u; convert with --level 2u to fix them.",
-  "checks": [],
-  "builtins": [
+  "description": "Reports whether the file meets PDF/A-2u; convert with --level 2u to fix it.",
+  "convert": {
+    "level": "pdfa-2u"
+  },
+  "checks": [
     {
-      "name": "conformsTo",
+      "name": "Does not meet PDF/A-2u",
       "severity": "error",
-      "level": "2u"
+      "all": [
+        {
+          "check": "conformance.meets",
+          "op": "is",
+          "value": false,
+          "standard": "pdfa-2u"
+        }
+      ]
     }
-  ],
-  "fixes": []
+  ]
 }

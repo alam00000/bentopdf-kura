@@ -8,18 +8,17 @@
       "severity": "warning",
       "all": [
         {
-          "prop": "layers.onLayer",
-          "op": "==",
-          "value": true
+          "check": "layer.membership",
+          "op": "count",
+          "value": 0,
+          "compare": ">"
         },
         {
-          "prop": "layers.visible",
-          "op": "==",
+          "check": "layer.visible",
+          "op": "is",
           "value": false
         }
       ]
     }
-  ],
-  "builtins": [],
-  "fixes": []
+  ]
 }

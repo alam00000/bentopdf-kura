@@ -8,14 +8,17 @@
       "severity": "info",
       "all": [
         {
-          "prop": "paint.isWhite",
+          "check": "color.ink_mix",
           "op": "==",
-          "value": true
+          "value": "none"
         },
         {
-          "prop": "content.isFilled",
-          "op": "==",
-          "value": true
+          "check": "content.painting",
+          "op": "in",
+          "value": [
+            "fill",
+            "fill_and_stroke"
+          ]
         }
       ]
     },
@@ -24,14 +27,17 @@
       "severity": "info",
       "all": [
         {
-          "prop": "paint.isWhite",
+          "check": "color.ink_mix",
           "op": "==",
-          "value": true
+          "value": "none"
         },
         {
-          "prop": "content.isStroked",
-          "op": "==",
-          "value": true
+          "check": "content.painting",
+          "op": "in",
+          "value": [
+            "stroke",
+            "fill_and_stroke"
+          ]
         }
       ]
     },
@@ -40,18 +46,20 @@
       "severity": "error",
       "all": [
         {
-          "prop": "paint.isWhite",
+          "check": "color.ink_mix",
           "op": "==",
-          "value": true
+          "value": "none"
         },
         {
-          "prop": "fill.overprint",
-          "op": "==",
-          "value": true
+          "check": "color.overprint",
+          "op": "in",
+          "value": [
+            "on",
+            "on_nonzero_mode"
+          ],
+          "paint": "fill"
         }
       ]
     }
-  ],
-  "builtins": [],
-  "fixes": []
+  ]
 }

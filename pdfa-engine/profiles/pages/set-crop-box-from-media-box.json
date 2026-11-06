@@ -3,19 +3,16 @@
   "name": "Set crop box from media box",
   "description": "Adds a crop box equal to the media box where missing.",
   "checks": [],
-  "builtins": [],
   "fixes": [
     {
-      "op": "setpagebox",
-      "params": [
-        "CropBox",
-        "RelativeToMediaBox",
-        "0",
-        "0",
-        "0",
-        "0",
-        "pt"
-      ]
+      "fix": "page.set_box",
+      "box": "crop",
+      "from": "media",
+      "left": "0mm",
+      "right": "0mm",
+      "top": "0mm",
+      "bottom": "0mm",
+      "when": "missing"
     }
   ]
 }

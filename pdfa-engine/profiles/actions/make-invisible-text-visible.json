@@ -3,13 +3,10 @@
   "name": "Make invisible text visible",
   "description": "Sets invisible text to plain fill so it shows and prints.",
   "checks": [],
-  "builtins": [],
   "fixes": [
     {
-      "op": "settextrendermode",
-      "params": [
-        "0"
-      ]
+      "fix": "text.set_render_mode",
+      "mode": "fill"
     }
   ]
 }

@@ -8,13 +8,11 @@
       "severity": "info",
       "all": [
         {
-          "prop": "layers.hasConfigs",
-          "op": "==",
-          "value": true
+          "check": "layer.configuration",
+          "op": "includes",
+          "value": "has_alternate_configs"
         }
       ]
     }
-  ],
-  "builtins": [],
-  "fixes": []
+  ]
 }

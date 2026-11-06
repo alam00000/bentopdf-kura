@@ -2,15 +2,18 @@
   "kura-profile": 1,
   "name": "Images below 96 ppi",
   "description": "Reports colour and grayscale images whose effective resolution is below 96 ppi.",
-  "checks": [],
-  "builtins": [
+  "checks": [
     {
-      "name": "imageResolutionBelow",
+      "name": "Image below 96 ppi",
       "severity": "warning",
-      "params": {
-        "ppi": 96
-      }
+      "all": [
+        {
+          "check": "image.resolution",
+          "op": "<",
+          "value": 96,
+          "kind": "colour_or_grey"
+        }
+      ]
     }
-  ],
-  "fixes": []
+  ]
 }

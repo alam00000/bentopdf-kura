@@ -8,18 +8,14 @@
       "severity": "info",
       "all": [
         {
-          "prop": "gstate.blendMode",
-          "op": "!=",
-          "value": "Normal"
-        },
-        {
-          "prop": "gstate.blendMode",
-          "op": "!=",
-          "value": "Compatible"
+          "check": "transparency.blend_mode",
+          "op": "not_in",
+          "value": [
+            "Normal",
+            "Compatible"
+          ]
         }
       ]
     }
-  ],
-  "builtins": [],
-  "fixes": []
+  ]
 }

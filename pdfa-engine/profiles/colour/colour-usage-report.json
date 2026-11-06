@@ -8,9 +8,9 @@
       "severity": "info",
       "all": [
         {
-          "prop": "paint.isRgb",
+          "check": "color.space",
           "op": "==",
-          "value": true
+          "value": "DeviceRGB"
         }
       ]
     },
@@ -19,9 +19,9 @@
       "severity": "info",
       "all": [
         {
-          "prop": "paint.isLab",
+          "check": "color.space",
           "op": "==",
-          "value": true
+          "value": "Lab"
         }
       ]
     },
@@ -30,9 +30,9 @@
       "severity": "info",
       "all": [
         {
-          "prop": "paint.isIccBased",
+          "check": "color.space",
           "op": "==",
-          "value": true
+          "value": "ICCBased"
         }
       ]
     },
@@ -41,9 +41,13 @@
       "severity": "info",
       "all": [
         {
-          "prop": "paint.isSpot",
-          "op": "==",
-          "value": true
+          "check": "color.ink_mix",
+          "op": "in",
+          "value": [
+            "spot_only",
+            "spot_and_black",
+            "process_and_spot"
+          ]
         }
       ]
     },
@@ -52,9 +56,12 @@
       "severity": "info",
       "all": [
         {
-          "prop": "paint.deviceNColorants",
-          "op": ">",
-          "value": 0
+          "check": "color.space",
+          "op": "in",
+          "value": [
+            "DeviceN",
+            "NChannel"
+          ]
         }
       ]
     },
@@ -63,9 +70,9 @@
       "severity": "info",
       "all": [
         {
-          "prop": "paint.isPattern",
+          "check": "color.space",
           "op": "==",
-          "value": true
+          "value": "Pattern"
         }
       ]
     },
@@ -74,13 +81,11 @@
       "severity": "warning",
       "all": [
         {
-          "prop": "paint.isRegistration",
+          "check": "color.ink_mix",
           "op": "==",
-          "value": true
+          "value": "registration"
         }
       ]
     }
-  ],
-  "builtins": [],
-  "fixes": []
+  ]
 }

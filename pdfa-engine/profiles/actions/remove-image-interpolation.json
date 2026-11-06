@@ -3,13 +3,10 @@
   "name": "Remove image interpolation",
   "description": "Removes the interpolation flag from every image.",
   "checks": [],
-  "builtins": [],
   "fixes": [
     {
-      "op": "modifyinterpolateentry",
-      "params": [
-        "Remove"
-      ]
+      "fix": "image.set_interpolation",
+      "value": "remove"
     }
   ]
 }

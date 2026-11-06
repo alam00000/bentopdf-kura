@@ -8,21 +8,28 @@
       "severity": "info",
       "all": [
         {
-          "prop": "paint.isSpot",
-          "op": "==",
-          "value": true
+          "check": "color.ink_mix",
+          "op": "in",
+          "value": [
+            "spot_only",
+            "spot_and_black",
+            "process_and_spot"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "More than 2 spot colours on a page",
+      "severity": "warning",
+      "all": [
+        {
+          "check": "print.plates",
+          "op": "count",
+          "value": 2,
+          "compare": ">",
+          "kind": "spot"
         }
       ]
     }
-  ],
-  "builtins": [
-    {
-      "name": "spotColoursMoreThan",
-      "severity": "warning",
-      "params": {
-        "count": 2
-      }
-    }
-  ],
-  "fixes": []
+  ]
 }

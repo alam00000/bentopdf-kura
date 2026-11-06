@@ -3,13 +3,10 @@
   "name": "All white objects to knockout",
   "description": "Switches overprint off for every white object.",
   "checks": [],
-  "builtins": [],
   "fixes": [
     {
-      "op": "knockoutwhite",
-      "params": [
-        ""
-      ]
+      "fix": "ink.knockout_white",
+      "objects": "all"
     }
   ]
 }

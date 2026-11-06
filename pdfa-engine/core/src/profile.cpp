@@ -15,10 +15,15 @@
 #include <cstdio>
 #include <functional>
 #include <map>
+#include <optional>
 #include <set>
 #include <string>
+#include <string_view>
 #include <vector>
 
+#include "barcode.hh"
+#include "colorconv.hh"
+#include "uacheck.hh"
 #include "fonts_ft.hh"
 #include "images.hh"
 #include "passes.hh"
@@ -26,6 +31,8 @@
 #include "profile_types.hh"
 #include "profile_eval.hh"
 #include "profile_events.hh"
+#include "profile_ext.hh"
+#include "profile_spatial.hh"
 #include "util.hh"
 
 namespace pdfa {
@@ -44,6 +51,113 @@ std::string lower(std::string s) {
 
 const char* const kSevName[] = {"", "Info", "Warning", "Error"};
 
+void scanSyntax(Ctx& ctx, const unsigned char* data, std::size_t size, Events& ev) {
+  auto isEol = [](unsigned char c) { return c == '\r' || c == '\n'; };
+  auto isDigit = [](unsigned char c) { return c >= '0' && c <= '9'; };
+  std::string_view f(reinterpret_cast<const char*>(data), size);
+  std::map<QPDFObjGen, QPDFXRefEntry> xref = ctx.pdf.getXRefTable();
+  std::vector<std::pair<qpdf_offset_t, QPDFObjGen>> offs;
+  for (const auto& [og, e] : xref) {
+    if (e.getType() == 1 && e.getOffset() > 0 && static_cast<std::size_t>(e.getOffset()) < size) offs.push_back({e.getOffset(), og});
+  }
+  std::sort(offs.begin(), offs.end());
+  if (offs.size() > 500000) return;
+  ev.syntaxScanned = true;
+  for (size_t i = 0; i < offs.size(); ++i) {
+    std::size_t o = static_cast<std::size_t>(offs[i].first);
+    std::size_t end = i + 1 < offs.size() ? static_cast<std::size_t>(offs[i + 1].first) : size;
+    std::size_t p = o;
+    while (p < end && (data[p] == ' ' || data[p] == '\t')) ++p;
+    if (p > 0 && !isEol(data[p - 1])) ev.syntaxIssues.insert("objNotPrecededByEol");
+    while (p < end && isDigit(data[p])) ++p;
+    std::size_t s1 = p;
+    while (p < end && (data[p] == ' ' || data[p] == '\t' || isEol(data[p]))) ++p;
+    if (p - s1 != 1 || data[s1] != ' ') ev.syntaxIssues.insert("objNumSep");
+    while (p < end && isDigit(data[p])) ++p;
+    std::size_t s2 = p;
+    while (p < end && (data[p] == ' ' || data[p] == '\t' || isEol(data[p]))) ++p;
+    if (p - s2 != 1 || data[s2] != ' ') ev.syntaxIssues.insert("objKeySep");
+    if (f.compare(p, 3, "obj") != 0) continue;
+    p += 3;
+    if (p < end && !isEol(data[p])) ev.syntaxIssues.insert("objNotFollowedByEol");
+    QPDFObjectHandle obj = ctx.pdf.getObjectByObjGen(offs[i].second);
+    std::size_t from = p;
+    if (obj.isStream()) {
+      std::size_t sk = f.find("stream", p);
+      while (sk != std::string_view::npos && sk < end) {
+        std::size_t b = sk;
+        while (b > p && (data[b - 1] == ' ' || isEol(data[b - 1]) || data[b - 1] == '\t')) --b;
+        if (b >= p + 2 && data[b - 1] == '>' && data[b - 2] == '>') break;
+        sk = f.find("stream", sk + 6);
+      }
+      if (sk == std::string_view::npos || sk >= end) continue;
+      std::size_t ds = sk + 6;
+      bool kwOk = true;
+      if (ds < size && data[ds] == '\r' && ds + 1 < size && data[ds + 1] == '\n') ds += 2;
+      else if (ds < size && data[ds] == '\n') ds += 1;
+      else kwOk = false;
+      if (!kwOk) ev.syntaxIssues.insert("streamKeyword");
+      QPDFObjectHandle len = obj.getDict().getKey("/Length");
+      std::size_t hint = ds;
+      if (len.isInteger() && len.getIntValue() > 0 && ds + static_cast<std::size_t>(len.getIntValue()) <= size) {
+        hint = ds + static_cast<std::size_t>(len.getIntValue()) - std::min<std::size_t>(static_cast<std::size_t>(len.getIntValue()), 16);
+        if (f.find("endstream", hint) == std::string_view::npos) hint = ds;
+      }
+      std::size_t es = f.find("endstream", hint);
+      if (es == std::string_view::npos) continue;
+      if (!isEol(data[es - 1])) ev.syntaxIssues.insert("streamKeyword");
+      if (kwOk && len.isInteger()) {
+        std::size_t actual = es - ds;
+        if (actual >= 2 && data[es - 2] == '\r' && data[es - 1] == '\n') actual -= 2;
+        else if (actual >= 1 && isEol(data[es - 1])) actual -= 1;
+        if (static_cast<long long>(actual) != len.getIntValue()) ev.syntaxIssues.insert("streamLength");
+      }
+      from = es + 9;
+    }
+    std::size_t eo = f.find("endobj", from);
+    if (eo == std::string_view::npos) continue;
+    if (!isEol(data[eo - 1])) ev.syntaxIssues.insert("endobjNotPrecededByEol");
+    if (eo + 6 < size && !isEol(data[eo + 6])) ev.syntaxIssues.insert("endobjNotFollowedByEol");
+  }
+  std::size_t sx = f.rfind("startxref");
+  if (sx != std::string_view::npos) {
+    std::size_t p = sx + 9;
+    while (p < size && (data[p] == ' ' || isEol(data[p]))) ++p;
+    std::size_t xo = 0;
+    while (p < size && isDigit(data[p])) xo = xo * 10 + (data[p++] - '0');
+    if (xo < size && f.compare(xo, 4, "xref") == 0) {
+      std::size_t q = xo + 4;
+      if (q < size && data[q] == '\r' && q + 1 < size && data[q + 1] == '\n') q += 2;
+      else if (q < size && isEol(data[q])) q += 1;
+      else ev.syntaxIssues.insert("xrefEol");
+      for (int guard = 0; guard < 100000 && q < size; ++guard) {
+        while (q < size && isEol(data[q])) ++q;
+        if (q >= size || f.compare(q, 7, "trailer") == 0) break;
+        std::size_t a = q;
+        while (q < size && isDigit(data[q])) ++q;
+        if (q == a || q >= size || data[q] != ' ') {
+          ev.syntaxIssues.insert("xrefHeader");
+          break;
+        }
+        ++q;
+        std::size_t b = q, cnt = 0;
+        while (q < size && isDigit(data[q])) cnt = cnt * 10 + (data[q++] - '0');
+        if (q == b) {
+          ev.syntaxIssues.insert("xrefHeader");
+          break;
+        }
+        if (q < size && data[q] == '\r' && q + 1 < size && data[q + 1] == '\n') q += 2;
+        else if (q < size && isEol(data[q])) q += 1;
+        else {
+          ev.syntaxIssues.insert("xrefHeader");
+          break;
+        }
+        q += cnt * 20;
+      }
+    }
+  }
+}
+
 void gatherFileFacts(Ctx& ctx, const unsigned char* inputData, std::size_t inputSize, Events& ev) {
   if (inputData && inputSize > 5) {
     std::string tailBytes(reinterpret_cast<const char*>(inputData) +
@@ -61,26 +175,53 @@ void gatherFileFacts(Ctx& ctx, const unsigned char* inputData, std::size_t input
       ev.dataAfterEof = after < tailBytes.size();
     }
   }
+  ev.filesize = static_cast<double>(inputSize);
   try {
-    ev.qpdfWarnings = static_cast<int>(ctx.pdf.getWarnings().size());
+    for (QPDFObjectHandle o : ctx.pdf.getAllObjects()) o.getTypeCode();
+    for (const QPDFExc& w : ctx.pdf.getWarnings()) {
+      ev.qpdfWarningText.push_back(w.what());
+      std::string m = w.getMessageDetail();
+      ev.damaged = ev.damaged || m.find("reconstruct") != std::string::npos;
+    }
+    ev.qpdfWarnings = static_cast<int>(ev.qpdfWarningText.size());
   } catch (...) {
+  }
+  if (inputData && inputSize > 8) {
+    try {
+      scanSyntax(ctx, inputData, inputSize, ev);
+    } catch (...) {
+    }
   }
 }
 
 void gatherDocumentFacts(Ctx& ctx, Events& ev) {
+  ev.root = ctx.pdf.getRoot();
+  ev.raster = ctx.opt.rasterizePage;
+  ev.trailer = ctx.pdf.getTrailer();
+  ev.header = ctx.pdf.getPDFVersion();
+  for (QPDFObjectHandle o : ctx.pdf.getAllObjects()) {
+    if (!o.isStream()) continue;
+    QPDFObjectHandle d = o.getDict();
+    std::string st = nameOf(d.getKey("/Subtype"));
+    if (!nameIs(d.getKey("/Type"), "/EmbeddedFile") && st.find("cxf") == std::string::npos) continue;
+    std::string data;
+    try {
+      auto b = o.getStreamData(qpdf_dl_all);
+      data.assign(reinterpret_cast<const char*>(b->getBuffer()), std::min<size_t>(b->getSize(), 1 << 20));
+    } catch (...) {
+      continue;
+    }
+    if (data.find("CxF") == std::string::npos) continue;
+    for (const char* lvl : {"CxF/X-4a", "CxF/X-4b"}) {
+      if (data.find(lvl) != std::string::npos) ev.cxfLevels.push_back(lvl);
+    }
+    if (data.find("CxF/X-4") != std::string::npos) ev.cxfLevels.push_back("CxF/X-4");
+  }
   {
     QPDFObjectHandle root = ctx.pdf.getRoot();
     QPDFObjectHandle oi = root.getKey("/OutputIntents");
     ev.hasOutputIntent = oi.isArray() && oi.getArrayNItems() > 0;
     ev.outputIntentCount = oi.isArray() ? oi.getArrayNItems() : 0;
-    if (oi.isArray()) {
-      for (int i = 0; i < oi.getArrayNItems(); ++i) {
-        QPDFObjectHandle o = oi.getArrayItem(i);
-        if (o.isDictionary() && !o.getKey("/MixingHints").isNull()) {
-          ev.docIssues.insert("oiMixingHints");
-        }
-      }
-    }
     if (oi.isArray() && oi.getArrayNItems() > 0 && oi.getArrayItem(0).isDictionary()) {
       QPDFObjectHandle oiProf = oi.getArrayItem(0).getKey("/DestOutputProfile");
       if (oiProf.isStream()) {
@@ -232,6 +373,7 @@ void gatherPageFacts(Ctx& ctx, Events& ev) {
       QPDFObjectHandle mb = ph.getAttribute("/MediaBox", true);
       QPDFObjectHandle cb = ph.getAttribute("/CropBox", false);
       PageFacts pf;
+      pf.obj = ph.getObjectHandle();
       pf.page = pageNum;
       pf.hasMediaBox = mb.isArray();
       pf.hasCropBox = cb.isArray();
@@ -253,6 +395,8 @@ void gatherPageFacts(Ctx& ctx, Events& ev) {
       pf.trim = readBox(ph.getAttribute("/TrimBox", false));
       pf.bleed = readBox(ph.getAttribute("/BleedBox", false));
       pf.art = readBox(ph.getAttribute("/ArtBox", false));
+      pf.crop = readBox(ph.getAttribute("/CropBox", false));
+      if (!pf.crop.valid) pf.crop = pf.media;
       if (pf.media.valid) {
         pf.wPt = pf.media.x1 - pf.media.x0;
         pf.hPt = pf.media.y1 - pf.media.y0;
@@ -286,6 +430,7 @@ void gatherPageFacts(Ctx& ctx, Events& ev) {
           if (an.isDictionary()) {
             std::string st = nameOf(an.getKey("/Subtype"));
             AnnotFacts af;
+            af.obj = an;
             af.page = pageNum;
             if (st.size() > 1) {
               af.subtype = st.substr(1);
@@ -302,7 +447,7 @@ void gatherPageFacts(Ctx& ctx, Events& ev) {
             QPDFObjectHandle fl = an.getKey("/F");
             if (fl.isInteger()) af.printFlag = (fl.getIntValue() & 4) != 0;
             af.rect = readBox(an.getKey("/Rect"));
-            if (af.subtype == "Widget" || af.subtype == "Popup") continue;
+            if (af.subtype == "Popup") continue;
             ev.annots.push_back(af);
           }
         }
@@ -313,7 +458,8 @@ void gatherPageFacts(Ctx& ctx, Events& ev) {
       QPDFObjectHandle res = ph.getAttribute("/Resources", true);
       Visited seen;
       Gs initial;
-      if (pf.hasTransGroup) initial.x.inTransGroup = true;
+      enterGroup(initial.x, grp, res);
+      initial.x.resInherited = !page.getKey("/Resources").isDictionary();
       scanEvents(page.getKey("/Contents"), res, initial, pageNum, 0, seen, ev);
       QPDFObjectHandle pannots = page.getKey("/Annots");
       if (pannots.isArray()) {
@@ -430,7 +576,7 @@ void gatherPageFacts(Ctx& ctx, Events& ev) {
         const ImageEvent& ie = ev.images[i];
         const ColorInfo& ci = ie.color;
         if (ie.mask) {
-          addPlates({0.0}, ColorInfo{"gray", "", "", {}, 1, false});
+          addPlates({0.0}, ColorInfo{"gray", "", "", {}, 1, false, {}, QPDFObjectHandle(), false});
         } else if (ci.cls == "gray" || (ci.cls == "icc" && ci.declaredComps == 1)) {
           pf.plates.insert("Black");
         } else if (ci.cls == "separation" || ci.cls == "devicen") {
@@ -452,260 +598,13 @@ void gatherPageFacts(Ctx& ctx, Events& ev) {
 
 }
 
-void gatherInkFacts(Ctx& ctx, const PfProfile& prof, Events& ev) {
-  {
-    bool needInk = false;
-    for (const auto& [cid, cond] : prof.conds) {
-      for (const PfAtom& a : cond.atoms) {
-        if (a.token.rfind("print.ink_coverage", 0) == 0) needInk = true;
-      }
-    }
-    if (needInk) {
-      cmsHPROFILE rgbP = cmsOpenProfileFromMem(kSrgbIcc, kSrgbIccLen);
-      cmsHPROFILE cmykP = cmsOpenProfileFromMem(kCmykIcc, kCmykIccLen);
-      cmsHTRANSFORM tDbl = nullptr, t8 = nullptr;
-      if (rgbP && cmykP) {
-        tDbl = cmsCreateTransform(rgbP, TYPE_RGB_DBL, cmykP, TYPE_CMYK_DBL,
-                                  INTENT_RELATIVE_COLORIMETRIC,
-                                  cmsFLAGS_BLACKPOINTCOMPENSATION);
-        t8 = cmsCreateTransform(rgbP, TYPE_RGB_8, cmykP, TYPE_CMYK_8,
-                                INTENT_RELATIVE_COLORIMETRIC,
-                                cmsFLAGS_BLACKPOINTCOMPENSATION);
-      }
-      auto rgbInk = [&](double r, double g, double b) {
-        double sum;
-        if (!tDbl) {
-          sum = (3.0 - r - g - b) * 100.0;
-        } else {
-          double in[3] = {r, g, b};
-          double out[4] = {0, 0, 0, 0};
-          cmsDoTransform(tDbl, in, out, 1);
-          sum = out[0] + out[1] + out[2] + out[3];
-        }
-        return std::min(sum, 300.0);
-      };
-      auto inkOf = [&](const std::vector<double>& c, const ColorInfo& ci) -> double {
-        if (c.empty()) return 0;
-        if (ci.cls == "cmyk" || (ci.cls == "icc" && ci.declaredComps == 4 && c.size() == 4)) {
-          double sum = 0;
-          for (double v : c) sum += v;
-          return sum * 100.0;
-        }
-        if (ci.cls == "gray" || (ci.cls == "icc" && ci.declaredComps == 1) ||
-            (ci.cls == "cal" && c.size() == 1)) {
-          return (1.0 - c[0]) * 100.0;
-        }
-        if (ci.cls == "separation" || ci.cls == "devicen") {
-          double sum = 0;
-          for (double v : c) sum += v;
-          return sum * 100.0;
-        }
-        if ((ci.cls == "rgb" || ci.cls == "cal" || ci.cls == "icc") && c.size() >= 3) {
-          return rgbInk(c[0], c[1], c[2]);
-        }
-        return 0;
-      };
-      struct InkObj {
-        double ink;
-        Box bbox;
-        bool cmyk;
-        std::vector<double> comps;
-        bool overprint;
-        int opm;
-        bool spot;
-      };
-      std::map<int, std::vector<InkObj>> perPage;
-      for (const PaintEvent& e : ev.paints) {
-        if (e.noPaint || e.x.alphaFill <= 0.001) continue;
-        perPage[e.page].push_back({inkOf(e.comps, e.color), e.bbox,
-                                   e.color.cls == "cmyk", e.comps, e.overprint, e.opm,
-                                   e.color.cls == "separation" || e.color.cls == "devicen"});
-      }
-      for (const TextEvent& e : ev.texts) {
-        if (e.renderMode == 3) continue;
-        perPage[e.page].push_back({inkOf(e.comps, e.color), e.bbox,
-                                   e.color.cls == "cmyk", e.comps, e.overprint, false,
-                                   e.color.cls == "separation" || e.color.cls == "devicen"});
-      }
-      for (const ImageEvent& e : ev.images) {
-        double best = 0;
-        RawImage raw = e.obj.isStream() ? decodeImage(e.obj) : RawImage();
-        if (raw.ok && raw.width > 0 && raw.height > 0 && raw.comps > 0) {
-          size_t px = static_cast<size_t>(raw.width) * raw.height;
-          size_t stride = px > 20000 ? px / 20000 : 1;
-          const unsigned char* d =
-              reinterpret_cast<const unsigned char*>(raw.samples.data());
-          size_t avail = raw.samples.size() / raw.comps;
-          for (size_t i = 0; i < avail && i < px; i += stride) {
-            const unsigned char* p = d + i * raw.comps;
-            double ink = 0;
-            if (raw.comps == 4) ink = (p[0] + p[1] + p[2] + p[3]) / 255.0 * 100.0;
-            else if (raw.comps == 3) ink = rgbInk(p[0] / 255.0, p[1] / 255.0, p[2] / 255.0);
-            else if (raw.comps == 1) {
-              ink = e.color.cls == "separation" ? p[0] / 255.0 * 100.0
-                                                : (255 - p[0]) / 255.0 * 100.0;
-            }
-            best = std::max(best, ink);
-          }
-        } else if (e.color.cls == "cmyk" || (e.color.cls == "icc" && e.color.declaredComps == 4)) {
-          best = -1;
-        }
-        if (best >= 0) {
-          perPage[e.page].push_back({best, e.bbox, false, {}, e.overprint, 0, false});
-        }
-      }
-      for (PageFacts& pf : ev.pages) {
-        double maxTac = 0;
-        auto& objs = perPage[pf.page];
-        for (const InkObj& o : objs) maxTac = std::max(maxTac, o.ink);
-        if (objs.size() <= 2000) {
-          for (const InkObj& o : objs) {
-            if (!o.overprint) continue;
-            for (const InkObj& u : objs) {
-              if (&o == &u || !boxesIntersect(o.bbox, u.bbox)) continue;
-              double combined;
-              if (o.spot) {
-                combined = o.ink + u.ink;
-              } else if (o.cmyk && o.opm == 1 && u.cmyk && o.comps.size() == 4 &&
-                         u.comps.size() == 4) {
-                combined = 0;
-                for (int ch = 0; ch < 4; ++ch) {
-                  combined += (o.comps[ch] > 0.001 ? o.comps[ch] : u.comps[ch]) * 100.0;
-                }
-              } else {
-                continue;
-              }
-              maxTac = std::max(maxTac, std::min(combined, 400.0));
-            }
-          }
-        }
-        pf.inkCoverage = maxTac;
-      }
-      std::set<int> shadePages;
-      for (const PaintEvent& e : ev.paints) {
-        if (e.shade || e.color.cls == "pattern") shadePages.insert(e.page);
-      }
-      if (ctx.opt.rasterizePage && t8) {
-        for (PageFacts& pf : ev.pages) {
-          if (!shadePages.count(pf.page)) continue;
-          int w = 0, h = 0;
-          std::string rgb;
-          if (!ctx.opt.rasterizePage(pf.page - 1, 72.0, w, h, rgb)) continue;
-          if (w <= 0 || h <= 0 || rgb.size() < static_cast<size_t>(w) * h * 3) continue;
-          std::vector<unsigned char> cmykRow(static_cast<size_t>(w) * 4);
-          double maxTac = pf.inkCoverage < 0 ? 0 : pf.inkCoverage;
-          const unsigned char* px = reinterpret_cast<const unsigned char*>(rgb.data());
-          for (int row = 0; row < h; ++row) {
-            cmsDoTransform(t8, px + static_cast<size_t>(row) * w * 3, cmykRow.data(),
-                           static_cast<cmsUInt32Number>(w));
-            for (int i = 0; i < w; ++i) {
-              double ink = (cmykRow[i * 4] + cmykRow[i * 4 + 1] + cmykRow[i * 4 + 2] +
-                            cmykRow[i * 4 + 3]) / 255.0 * 100.0;
-              if (ink > maxTac) maxTac = ink;
-            }
-          }
-          pf.inkCoverage = maxTac;
-        }
-      }
-      if (tDbl) cmsDeleteTransform(tDbl);
-      if (t8) cmsDeleteTransform(t8);
-      if (rgbP) cmsCloseProfile(rgbP);
-      if (cmykP) cmsCloseProfile(cmykP);
-    }
-    auto finish = [&](auto& vec) {
-      for (auto& e : vec) {
-        const PageFacts* p = pageFor(ev, e.page);
-        bool vis = true;
-        if (e.bbox.valid && e.clip.valid) {
-          e.clippedFull = !boxesIntersect(e.bbox, e.clip);
-          e.clippedPart = !e.clippedFull && !boxContains(e.clip, e.bbox, 0.01);
-        }
-        if (e.clippedFull) vis = false;
-        if (p && p->media.valid && e.bbox.valid && !boxesIntersect(e.bbox, p->media)) {
-          vis = false;
-        }
-        e.visible = vis;
-      }
-    };
-    finish(ev.paints);
-    finish(ev.texts);
-    finish(ev.images);
-    for (TextEvent& e : ev.texts) {
-      if (e.renderMode == 3) e.visible = false;
-    }
-    for (PaintEvent& e : ev.paints) {
-      if (e.noPaint || e.x.alphaFill <= 0.001) e.visible = false;
-    }
-    size_t total = ev.paints.size() + ev.texts.size() + ev.images.size();
-    if (total > 0 && total <= 6000) {
-      struct Occ {
-        Box bbox;
-        int page;
-        long seq;
-        bool opaque;
-        bool areaFill;
-        bool* coversOut;
-        bool* visibleOut;
-      };
-      std::vector<Occ> objs;
-      long seq = 0;
-      auto opaqueOf = [](const GsExtra& x, bool fill) {
-        double a = fill ? x.alphaFill : x.alphaStroke;
-        return a >= 0.999 && (x.blendMode == "Normal" || x.blendMode == "Compatible") &&
-               !x.hasSMask;
-      };
-      for (PaintEvent& e : ev.paints) {
-        bool areaFill = e.fillOp && !e.shade && !e.noPaint;
-        objs.push_back({e.bbox, e.page, seq++, opaqueOf(e.x, true) && !e.overprint,
-                        areaFill, &e.covers, &e.visible});
-      }
-      for (TextEvent& e : ev.texts) {
-        objs.push_back({e.bbox, e.page, seq++, opaqueOf(e.x, true), false, &e.covers,
-                        &e.visible});
-      }
-      for (ImageEvent& e : ev.images) {
-        bool opaque = !e.hasSMask && !e.mask;
-        objs.push_back({e.bbox, e.page, seq++, opaque, true, &e.covers, &e.visible});
-      }
-      for (Occ& o : objs) {
-        bool covers = false, occluded = false;
-        for (const Occ& u : objs) {
-          if (&o == &u || u.page != o.page || !boxesIntersect(o.bbox, u.bbox)) continue;
-          if (o.seq > u.seq && o.opaque && o.areaFill) covers = true;
-          if (u.seq > o.seq && u.opaque && u.areaFill &&
-              boxContains(u.bbox, o.bbox, 0.5)) {
-            occluded = true;
-          }
-        }
-        *o.coversOut = covers;
-        if (occluded) *o.visibleOut = false;
-      }
-    }
-  }
-
-}
-
 void gatherResourceFacts(Ctx& ctx, const PfProfile& prof, Events& ev) {
   {
-    bool needGlyphs = false, needStruct = false, needXmp = false;
+    static const std::set<std::string> glyphChecks = {"text.glyph", "text.unicode", "font.license", "font.problem",
+                                                      "page.unmappable_text"};
+    bool needGlyphs = false;
     for (const auto& [cid, cond] : prof.conds) {
-      for (const PfAtom& a : cond.atoms) {
-        const std::string& t = a.token;
-        if (t.rfind("groups:font,text", 0) == 0 || t.find("Glyph") != std::string::npos ||
-            t.find("glyph") != std::string::npos || t.find("Unicode") != std::string::npos ||
-            t.find("Embedding") != std::string::npos || t.find("Subset") != std::string::npos) {
-          needGlyphs = true;
-        }
-        if (t.rfind("groups:structure", 0) == 0 || t.rfind("groups:syntax", 0) == 0 ||
-            t.rfind("groups:syntax", 0) == 0 || t.rfind("groups:attachment,structure", 0) == 0 ||
-            t == "syntax.unknown_operator" ||
-            t == "REMOVED") {
-          needStruct = true;
-        }
-        if (t.rfind("groups:seal", 0) == 0 || t.find("CxF") != std::string::npos) {
-          needXmp = true;
-        }
-      }
+      for (const PfAtom& a : cond.atoms) needGlyphs = needGlyphs || glyphChecks.count(a.token) > 0;
     }
     if (needGlyphs) {
       FT_Library lib = nullptr;
@@ -945,57 +844,7 @@ void gatherResourceFacts(Ctx& ctx, const PfProfile& prof, Events& ev) {
         FT_Done_FreeType(lib);
       }
     }
-    if (needStruct) {
-      QPDFObjectHandle root = ctx.pdf.getRoot();
-      QPDFObjectHandle str = root.getKey("/StructTreeRoot");
-      if (!str.isDictionary()) {
-        ev.docIssues.insert("noStructTree");
-      } else {
-        if (!str.getKey("/ParentTree").isDictionary()) ev.docIssues.insert("noParentTree");
-        static const std::set<std::string> kStd = {
-            "Document", "Part", "Art", "Sect", "Div", "BlockQuote", "Caption", "TOC",
-            "TOCI", "Index", "NonStruct", "Private", "P", "H", "H1", "H2", "H3", "H4",
-            "H5", "H6", "L", "LI", "Lbl", "LBody", "Table", "TR", "TH", "TD", "THead",
-            "TBody", "TFoot", "Span", "Quote", "Note", "Reference", "BibEntry", "Code",
-            "Link", "Annot", "Ruby", "RB", "RT", "RP", "Warichu", "WT", "WP", "Figure",
-            "Formula", "Form"};
-        QPDFObjectHandle roleMap = str.getKey("/RoleMap");
-        bool hasClassRef = false;
-        std::vector<QPDFObjectHandle> stack{str};
-        Visited seen;
-        int guard = 0;
-        while (!stack.empty() && ++guard < 200000) {
-          QPDFObjectHandle n = stack.back();
-          stack.pop_back();
-          if (!n.isDictionary() || !seen.enter(n)) continue;
-          QPDFObjectHandle st = n.getKey("/S");
-          if (st.isName()) {
-            std::string ty = st.getName().substr(1);
-            bool mapped = roleMap.isDictionary() && !roleMap.getKey("/" + ty).isNull();
-            if (!kStd.count(ty) && !mapped) ev.docIssues.insert("notStandardType");
-            bool utf = true;
-            for (unsigned char c : ty) {
-              if (c >= 0x80) utf = false;
-            }
-            if (!utf) ev.docIssues.insert("structTypeNameIsUTF8Encoded");
-          }
-          if (!n.getKey("/C").isNull() && !str.getKey("/ClassMap").isDictionary()) {
-            hasClassRef = true;
-          }
-          QPDFObjectHandle kids = n.getKey("/K");
-          if (kids.isArray()) {
-            for (int i = 0; i < kids.getArrayNItems(); ++i) {
-              stack.push_back(kids.getArrayItem(i));
-            }
-          } else if (kids.isDictionary()) {
-            stack.push_back(kids);
-          }
-        }
-        if (hasClassRef) ev.docIssues.insert("noClassMap");
-      }
-      if (ev.qpdfWarnings > 0) ev.docIssues.insert("parserWarnings");
-    }
-    if (needXmp) {
+    {
       QPDFObjectHandle md = ctx.pdf.getRoot().getKey("/Metadata");
       if (md.isStream()) {
         try {
@@ -1011,506 +860,183 @@ void gatherResourceFacts(Ctx& ctx, const PfProfile& prof, Events& ev) {
 
 }
 
-void reportBuiltinHits(Ctx& ctx, const PfProfile& prof, const unsigned char* inputData, std::size_t inputSize, Events& ev) {
-  {
-    auto sevLabel = [](int sev) {
-      if (sev >= 3) return "Error";
-      return sev == 2 ? "Warning" : "Info";
-    };
-    auto emitB = [&](const PfBuiltin& b, long long n, const std::set<int>& pages,
-                     const std::string& what) {
-      if (n <= 0) return;
-      std::string detail = std::string(sevLabel(b.severity)) + ": " + what + " (" +
-                           std::to_string(n) + " hit(s)";
-      if (!pages.empty()) detail += ", page " + std::to_string(*pages.begin());
-      detail += ")";
-      Issue hit;
-      hit.code = "PROFILE_HIT";
-      hit.detail = detail;
-      hit.severity = b.severity >= 3 ? 3 : (b.severity == 2 ? 2 : 1);
-      hit.pages.assign(pages.begin(), pages.end());
-      ctx.res.analysis.push_back(std::move(hit));
-    };
-    auto isDevIndep = [](const ColorInfo& ci) {
-      return ci.cls == "icc" || ci.cls == "cal" || ci.cls == "lab";
-    };
-    auto onColourPlates = [](const ColorInfo& ci, const std::vector<double>& comps) {
-      if (ci.cls == "rgb" || ci.cls == "lab") return true;
-      if (ci.cls == "icc" || ci.cls == "cal") return true;
-      if (ci.cls == "cmyk") {
-        if (comps.size() == 4) {
-          return comps[0] > 0.001 || comps[1] > 0.001 || comps[2] > 0.001;
-        }
-        return true;
-      }
-      if (ci.cls == "separation" || ci.cls == "devicen") {
-        for (const std::string& c : ci.colorants) {
-          if (c != "Black" && c != "Gray" && c != "None") return true;
-        }
-      }
-      return false;
-    };
-    std::set<std::string> notedWizard;
-    auto xcompLevels = [](const PfBuiltin& b) {
-      static const std::vector<std::pair<const char*, const char*>> flags = {
-          {"PDFA1b2005", "1b"}, {"PDFA1a2005", "1a"}, {"PDFA2b", "2b"},
-          {"PDFA2u", "2u"},     {"PDFA2a", "2a"},     {"PDFA3ZFeRD", "3b"},
-          {"PDFA3b", "3b"},     {"PDFA3u", "3u"},     {"PDFA3a", "3a"},
-          {"PDFA4", "4"},       {"PDFA4f", "4f"},     {"PDFA4e", "4e"},
-          {"PDFX1A2001", "x1a"}, {"PDFX1A2003", "x1a"}, {"PDFX32002", "x3"},
-          {"PDFX32003", "x3"},  {"PDFX4", "x4"},      {"PDFX4p", "x4p"},
-          {"PDFX5g", "x5g"},    {"PDFX5n", "x5n"},    {"PDFX5pg", "x5pg"},
-          {"PDFX6", "x6"},      {"PDFX6n", "x6n"},    {"PDFX6p", "x6p"},
-          {"PDFE12008", "e1"},  {"PDFVT1", "vt1"},    {"PDFVT2", "vt2"},
-          {"PDFVT3", "vt3"},
-      };
-      std::vector<std::string> out;
-      for (const auto& [flag, lvl] : flags) {
-        auto it = b.params.find(flag);
-        if (it != b.params.end() && it->second > 0.5 &&
-            std::find(out.begin(), out.end(), lvl) == out.end()) {
-          out.push_back(lvl);
-        }
-      }
-      return out;
-    };
-    auto prettyLevel = [](const std::string& ls) {
-      if (ls == "e1") return std::string("PDF/E-1");
-      if (ls.rfind("vt", 0) == 0) return "PDF/VT-" + ls.substr(2);
-      if (ls.rfind("x", 0) == 0) {
-        std::string tail = ls.substr(1);
-        if (tail == "1a") return std::string("PDF/X-1a");
-        return "PDF/X-" + tail;
-      }
-      return "PDF/A-" + ls;
-    };
-    auto prettyLevelList = [&](const std::vector<std::string>& lvls) {
-      std::string out;
-      for (size_t i = 0; i < lvls.size(); ++i) {
-        if (i) out += lvls.size() == 2 ? " or " : (i + 1 == lvls.size() ? ", or " : ", ");
-        out += prettyLevel(lvls[i]);
-      }
-      return out;
-    };
-    struct VerifyResult {
-      bool pass = false;
-      long long count = 0;
-      std::string detail;
-    };
-    auto verifyCache = std::make_shared<std::map<std::pair<const void*, std::string>,
-                                                 VerifyResult>>();
-    auto verifyBytes = [&](const unsigned char* data, std::size_t size,
-                           const std::vector<std::string>& lvls, std::string& failDetail,
-                           long long& worst) {
-      worst = -1;
-      for (const std::string& ls : lvls) {
-        Level lv;
-        if (!levelFromString(ls, lv)) continue;
-        auto ckey = std::make_pair(static_cast<const void*>(data), ls);
-        auto cached = verifyCache->find(ckey);
-        if (cached != verifyCache->end()) {
-          if (cached->second.pass) {
-            worst = 0;
-            failDetail.clear();
-            return true;
-          }
-          if (worst < 0 || cached->second.count < worst) {
-            worst = cached->second.count;
-            failDetail = cached->second.detail;
-          }
-          continue;
-        }
-        Options o;
-        o.level = lv;
-        o.verifyOnly = true;
-        o.password = ctx.opt.password;
-        Result r = convert(data, size, o);
-        if (r.ok && r.compliant) {
-          (*verifyCache)[ckey] = {true, 0, std::string()};
-          worst = 0;
-          failDetail.clear();
-          return true;
-        }
-        long long cnt = 0;
-        std::string first;
-        if (!r.ok) {
-          cnt = 1;
-          first = r.error;
-        } else {
-          for (const Issue& i : r.issues) {
-            if (i.fixed && !issueIsNormalization(i.code)) {
-              ++cnt;
-              if (first.empty()) first = i.detail;
-            }
-          }
-          if (cnt == 0) cnt = 1;
-        }
-        (*verifyCache)[ckey] = {false, cnt, first};
-        if (worst < 0 || cnt < worst) {
-          worst = cnt;
-          failDetail = first;
-        }
-      }
-      if (worst < 0) worst = 1;
-      return false;
-    };
-    auto verifyAgainst = [&](const std::vector<std::string>& lvls, std::string& failDetail,
-                             long long& worst) {
-      if (!inputData || !inputSize) {
-        worst = 0;
-        return true;
-      }
-      return verifyBytes(inputData, inputSize, lvls, failDetail, worst);
-    };
-    auto embeddedPdfPayloads = [&]() {
-      std::vector<std::string> out;
-      Visited walkSeen;
-      std::function<void(QPDFObjectHandle, int)> walk = [&](QPDFObjectHandle node,
-                                                            int depth) {
-        if (depth > 8 || out.size() >= 16 || !node.isDictionary()) return;
-        if (node.isIndirect() && !walkSeen.enter(node)) return;
-        QPDFObjectHandle kids = node.getKey("/Kids");
-        if (kids.isArray()) {
-          for (int i = 0; i < kids.getArrayNItems(); ++i) walk(kids.getArrayItem(i), depth + 1);
-        }
-        QPDFObjectHandle names = node.getKey("/Names");
-        if (!names.isArray()) return;
-        for (int i = 0; i + 1 < names.getArrayNItems(); i += 2) {
-          QPDFObjectHandle fs = names.getArrayItem(i + 1);
-          if (!fs.isDictionary()) continue;
-          QPDFObjectHandle ef = fs.getKey("/EF");
-          if (!ef.isDictionary()) continue;
-          QPDFObjectHandle f = ef.getKey("/F");
-          if (!f.isStream()) f = ef.getKey("/UF");
-          if (!f.isStream()) continue;
-          try {
-            auto buf = f.getStreamData(qpdf_dl_all);
-            std::string bytes(reinterpret_cast<const char*>(buf->getBuffer()),
-                              buf->getSize());
-            if (bytes.compare(0, 4, "%PDF") == 0) out.push_back(std::move(bytes));
-          } catch (...) {
-            ctx.scanIncomplete("an embedded PDF attachment");
-          }
-          if (out.size() >= 16) return;
-        }
-      };
-      QPDFObjectHandle namesDict = ctx.pdf.getRoot().getKey("/Names");
-      if (namesDict.isDictionary()) walk(namesDict.getKey("/EmbeddedFiles"), 0);
-      return out;
-    };
-    for (const PfBuiltin& b : prof.builtins) {
-      const std::string& nm = b.name;
-      long long n = 0;
-      std::set<int> pg;
-      if (nm == "document.pages_uniform") {
-        for (size_t i = 1; i < ev.pages.size(); ++i) {
-          if (std::abs(ev.pages[i].wPt - ev.pages[0].wPt) > 3 ||
-              std::abs(ev.pages[i].hPt - ev.pages[0].hPt) > 3) {
-            ++n;
-            pg.insert(ev.pages[i].page);
-          }
-        }
-        emitB(b, n, pg, "Pages differ in size or orientation");
-      } else if (nm == "page.empty") {
-        for (const PageFacts& p : ev.pages) {
-          if (p.empty) {
-            ++n;
-            pg.insert(p.page);
-          }
-        }
-        emitB(b, n, pg, "Empty page");
-      } else if (nm == "image.resolution" || nm == "image.resolution" ||
-                 nm == "image.resolution" || nm == "image.resolution") {
-        bool bmp = nm.find("Bmp") != std::string::npos;
-        bool lower = nm.find("Lower") != std::string::npos;
-        double ppi = 0;
-        auto it = b.params.find("PixelsPerInch");
-        if (it != b.params.end()) ppi = it->second;
-        if (ppi > 0) {
-          for (const ImageEvent& e : ev.images) {
-            bool isBmp = e.bpc == 1 || e.mask;
-            if (isBmp != bmp || e.ppi <= 0) continue;
-            if ((lower && e.ppi < ppi) || (!lower && e.ppi > ppi)) {
-              ++n;
-              pg.insert(e.page);
-            }
-          }
-          emitB(b, n, pg,
-                std::string(bmp ? "Bitmap" : "Image") + " resolution " +
-                    (lower ? "below " : "above ") + std::to_string((int)ppi) + " ppi");
-        }
-      } else if (nm == "print.plates") {
-        for (const PaintEvent& e : ev.paints) {
-          if (!e.noPaint && onColourPlates(e.color, e.comps)) { ++n; pg.insert(e.page); }
-        }
-        for (const TextEvent& e : ev.texts) {
-          if (e.renderMode != 3 && onColourPlates(e.color, e.comps)) { ++n; pg.insert(e.page); }
-        }
-        for (const ImageEvent& e : ev.images) {
-          if (!e.mask && onColourPlates(e.color, {})) { ++n; pg.insert(e.page); }
-        }
-        emitB(b, n, pg, "Objects produce colour plate output (CMY)");
-      } else if (nm == "color.space") {
-        for (const PaintEvent& e : ev.paints) {
-          if (!e.noPaint && isDevIndep(e.color)) { ++n; pg.insert(e.page); }
-        }
-        for (const TextEvent& e : ev.texts) {
-          if (e.renderMode != 3 && isDevIndep(e.color)) { ++n; pg.insert(e.page); }
-        }
-        for (const ImageEvent& e : ev.images) {
-          if (isDevIndep(e.color)) { ++n; pg.insert(e.page); }
-        }
-        emitB(b, n, pg, "Device-independent colour in use");
-      } else if (nm == "color.space") {
-        for (const PaintEvent& e : ev.paints) {
-          if (!e.noPaint && e.color.cls == "rgb") { ++n; pg.insert(e.page); }
-        }
-        for (const TextEvent& e : ev.texts) {
-          if (e.renderMode != 3 && e.color.cls == "rgb") { ++n; pg.insert(e.page); }
-        }
-        for (const ImageEvent& e : ev.images) {
-          if (e.color.cls == "rgb") { ++n; pg.insert(e.page); }
-        }
-        emitB(b, n, pg, "Object uses RGB");
-      } else if (nm == "print.plates") {
-        double lim = 0;
-        auto it = b.params.find("SpotColorSepsOnPage");
-        if (it != b.params.end()) lim = it->second;
-        if (static_cast<double>(ev.spotPlates.size()) > lim) {
-          n = static_cast<long long>(ev.spotPlates.size());
-          emitB(b, n, pg, "More spot colour separations than allowed");
-        }
-      } else if (nm == "font.embedding") {
-        for (const FontFacts& f : ev.fonts) {
-          if (!f.embedded) ++n;
-        }
-        emitB(b, n, pg, "Font not embedded");
-      } else if (nm == "font.type") {
-        for (const FontFacts& f : ev.fonts) {
-          if (f.cid0) ++n;
-        }
-        emitB(b, n, pg, "Uses CID Type 1 font");
-      } else if (nm == "font.type") {
-        for (const FontFacts& f : ev.fonts) {
-          if (f.cid && f.trueType) ++n;
-        }
-        emitB(b, n, pg, "Uses CID Type 2 font");
-      } else if (nm == "font.type") {
-        for (const FontFacts& f : ev.fonts) {
-          if (f.openType) ++n;
-        }
-        emitB(b, n, pg, "Uses OpenType font");
-      } else if (nm == "print.spot_naming") {
-        for (const auto& [name, alts] : ev.spotAlternates) {
-          if (alts.size() > 1) ++n;
-        }
-        emitB(b, n, pg, "Spot colour with inconsistent representation");
-      } else if (nm == "security.encryption") {
-        emitB(b, ev.encrypted ? 1 : 0, pg, "Document is encrypted");
-      } else if (nm == "document.damaged") {
-        emitB(b, ev.qpdfWarnings > 0 ? 1 : 0, pg, "Document structure needed repair");
-      } else if (nm == "syntax.dictionary_error") {
-        emitB(b, ev.qpdfWarnings, pg, "PDF syntax issue");
-      } else if (nm == "document.pdf_version") {
-        double want = 0;
-        auto it = b.params.find("AcroVers");
-        if (it != b.params.end()) want = it->second;
-        double have = 0;
-        if (!ev.pdfVersion.empty()) {
-          double v = std::atof(ev.pdfVersion.c_str());
-          have = v >= 2.0 ? 8 : (v >= 1.7 ? 8 : (v - 1.0) * 10 + 1);
-        }
-        emitB(b, have < want ? 1 : 0, pg, "Requires a newer PDF version");
-      } else if (nm == "font.embedding") {
-        for (const FontFacts& f : ev.fonts) {
-          if (f.embedded) ++n;
-        }
-        emitB(b, n, pg, "Font is embedded");
-      } else if (nm == "image.property") {
-        for (const ImageEvent& e : ev.images) {
-          if (!e.filters.empty()) ++n;
-        }
-        emitB(b, n, pg, "Image is compressed");
-      } else if (nm == "document.page_count") {
-        emitB(b, ev.pageCount, pg, "Document page count");
-      } else if (nm == "print.rendering_functions") {
-        emitB(b, ev.hasTransferCurve ? 1 : 0, pg, "Transfer curve in use");
-      } else if (nm == "print.halftone") {
-        emitB(b, ev.hasHalftoneDict ? 1 : 0, pg, "Halftone screening in use");
-      } else if (nm == "syntax.postscript") {
-        emitB(b, ev.hasPostScriptXObject ? 1 : 0, pg, "PostScript XObject in use");
-      } else if (nm == "transparency.used") {
-        for (const PaintEvent& e : ev.paints) {
-          if (e.transparency) { ++n; pg.insert(e.page); }
-        }
-        for (const TextEvent& e : ev.texts) {
-          if (e.transparency) { ++n; pg.insert(e.page); }
-        }
-        emitB(b, n, pg, "Transparency in use");
-      } else if (nm == "content.stroke_width") {
-        double pts = 0.14;
-        auto it = b.params.find("Points");
-        if (it != b.params.end()) pts = it->second;
-        for (const PaintEvent& e : ev.paints) {
-          if (e.stroke && e.width > 0 && e.width < pts) { ++n; pg.insert(e.page); }
-        }
-        emitB(b, n, pg, "Line thickness below the minimum");
-      } else if (nm == "conformance.meets" || nm == "conformance.meets" ||
-                 nm == "conformance.meets" || nm == "conformance.meets") {
-        std::vector<std::string> lvls = xcompLevels(b);
-        if (lvls.empty()) {
-          if (notedWizard.insert(nm).second) {
-            ctx.res.analysis.push_back(
-                {"PROFILE_CHECK_UNSUPPORTED",
-                 nm + ": no recognizable standard flavour is switched on", false});
-          }
-        } else {
-          std::string failDetail;
-          long long worst = 0;
-          if (!verifyAgainst(lvls, failDetail, worst)) {
-            emitB(b, worst, pg,
-                  "Document does not conform to " + prettyLevelList(lvls) +
-                      (failDetail.empty() ? "" : " - first deviation: " + failDetail));
-          }
-        }
-      } else if (nm == "conformance.meets") {
-        std::vector<std::string> lvls = xcompLevels(b);
-        long long bad = 0;
-        for (const std::string& att : embeddedPdfPayloads()) {
-          std::string failDetail;
-          long long worst = 0;
-          if (!verifyBytes(reinterpret_cast<const unsigned char*>(att.data()), att.size(),
-                           lvls.empty() ? std::vector<std::string>{"2b"} : lvls,
-                           failDetail, worst)) {
-            ++bad;
-          }
-        }
-        emitB(b, bad, pg, "Embedded document does not conform to the archival standard");
-      } else {
-        if (notedWizard.insert(nm).second) {
-          ctx.res.analysis.push_back(
-              {"PROFILE_CHECK_UNSUPPORTED",
-               nm + ": uses a built-in check Kura cannot evaluate yet", false});
-        }
-      }
-    }
-    if (ctx.opt.preflightProfile.find("conformance.meets") != std::string::npos) {
-      ctx.res.analysis.push_back(
-          {"PROFILE_CHECK_UNSUPPORTED",
-           "this profile requests the PDF/UA-1 accessibility check, which Kura does not "
-           "run in analysis mode yet",
-           false});
-    }
+void gatherBarcodeFacts(Ctx& ctx, const PfProfile& prof, Events& ev) {
+  bool wanted = false;
+  for (const auto& kv : prof.conds) {
+    for (const PfAtom& a : kv.second.atoms) wanted = wanted || (a.check >= 0 && std::string(checkDef(a.check).group) == "barcode");
   }
-
+  if (!wanted || !ctx.opt.rasterizePage || !barcodeReaderAvailable()) return;
+  ev.barcodesScanned = true;
+  const double dpi = 300;
+  QPDFPageDocumentHelper dh(ctx.pdf);
+  int idx = 0;
+  for (auto& ph : dh.getAllPages()) {
+    int w = 0, h = 0;
+    std::string rgb;
+    if (!ctx.opt.rasterizePage(idx, dpi, w, h, rgb) || w <= 0 || h <= 0) {
+      ++idx;
+      continue;
+    }
+    QPDFObjectHandle cb = ph.getAttribute("/CropBox", false);
+    if (!cb.isArray()) cb = ph.getAttribute("/MediaBox", true);
+    double cx = cb.isArray() ? numOf(cb.getArrayItem(0), 0) : 0, cy2 = cb.isArray() ? numOf(cb.getArrayItem(3), 792) : 792;
+    double s = 72.0 / dpi;
+    auto lum = [&](int x, int y) {
+      const unsigned char* p = reinterpret_cast<const unsigned char*>(rgb.data()) + (static_cast<size_t>(y) * w + x) * 3;
+      return 0.299 * p[0] + 0.587 * p[1] + 0.114 * p[2];
+    };
+    for (const BarcodeHit& b : readBarcodes(rgb, w, h)) {
+      Events::BarcodeFact f;
+      f.page = idx + 1;
+      f.format = b.format;
+      f.text = b.text;
+      f.rotation = b.rotation;
+      f.linear = b.linear;
+      f.box = {cx + b.x0 * s, cy2 - b.y1 * s, cx + b.x1 * s, cy2 - b.y0 * s, true};
+      int x0 = std::max(0, static_cast<int>(b.x0)), x1 = std::min(w - 1, static_cast<int>(b.x1));
+      int y0 = std::max(0, static_cast<int>(b.y0)), y1 = std::min(h - 1, static_cast<int>(b.y1));
+      double darkSum = 0, lightSum = 0;
+      int darkN = 0, lightN = 0, minRun = 1 << 30;
+      for (int y = y0; y <= y1; ++y) {
+        int run = 0;
+        for (int x = x0; x <= x1; ++x) {
+          double l = lum(x, y);
+          if (l < 128) {
+            darkSum += l;
+            ++darkN;
+            ++run;
+          } else {
+            lightSum += l;
+            ++lightN;
+            if (run > 0) minRun = std::min(minRun, run);
+            run = 0;
+          }
+        }
+      }
+      if (darkN && lightN) f.contrast = (lightSum / lightN - darkSum / darkN) / 255.0 * 100.0;
+      if (minRun < (1 << 30)) f.moduleWidthPt = minRun * s;
+      int quiet = 0;
+      for (int q = 1; q < 400; ++q) {
+        bool clear = true;
+        for (int y = y0; y <= y1 && clear; y += 2) {
+          if (x0 - q < 0 || x1 + q >= w || lum(x0 - q, y) < 128 || lum(x1 + q, y) < 128) clear = false;
+        }
+        if (!b.linear) {
+          for (int x = x0; x <= x1 && clear; x += 2) {
+            if (y0 - q < 0 || y1 + q >= h || lum(x, y0 - q) < 128 || lum(x, y1 + q) < 128) clear = false;
+          }
+        }
+        if (!clear) break;
+        quiet = q;
+      }
+      f.quietZonePt = quiet * s;
+      {
+        double redSum = 0, modSum = 0;
+        int rows = 0;
+        for (int y = y0 + (y1 - y0) / 4; y <= y1 - (y1 - y0) / 4; y += std::max(1, (y1 - y0) / 16)) {
+          std::vector<int> runs;
+          bool firstDark = lum(x0, y) < 128;
+          bool cur = firstDark;
+          int len = 0;
+          for (int x = x0; x <= x1; ++x) {
+            bool dk = lum(x, y) < 128;
+            if (dk == cur) {
+              ++len;
+            } else {
+              runs.push_back(len);
+              cur = dk;
+              len = 1;
+            }
+          }
+          runs.push_back(len);
+          if (!cur && !runs.empty()) runs.pop_back();
+          double mod = 0;
+          double red = barWidthReduction(runs, firstDark, mod);
+          if (mod > 0) {
+            redSum += red;
+            modSum += mod;
+            ++rows;
+          }
+        }
+        if (rows) {
+          f.barReductionKnown = true;
+          f.barReductionPt = redSum / rows * s;
+          f.barReductionPct = redSum / modSum * 100.0;
+        }
+      }
+      ev.barcodes.push_back(f);
+    }
+    ++idx;
+  }
 }
 
 void gatherEvents(Ctx& ctx, const unsigned char* inputData, std::size_t inputSize,
                   const PfProfile& prof, Events& ev) {
+  ev.inputPath = ctx.opt.inputPath;
+  ev.inputData = inputData;
+  ev.inputSize = inputSize;
+  static const std::set<std::string> sourceChecks = {"layer.membership", "layer.property", "layer.visibility_policy", "layer.processing_step", "structure.artifact", "structure.content_tagging", "content.contrast_sufficient"};
+  for (const auto& kv : prof.conds) {
+    for (const PfAtom& a : kv.second.atoms) ev.trackSrc = ev.trackSrc || sourceChecks.count(a.token) > 0;
+  }
+  gatherBarcodeFacts(ctx, prof, ev);
   gatherFileFacts(ctx, inputData, inputSize, ev);
   gatherDocumentFacts(ctx, ev);
   gatherPageFacts(ctx, ev);
-  gatherInkFacts(ctx, prof, ev);
+  auto clipFlags = [](auto& vec) {
+    for (auto& e : vec) {
+      if (!e.bbox.valid || !e.clip.valid) continue;
+      e.clippedFull = !boxesIntersect(e.bbox, e.clip);
+      const Box& b = e.bbox;
+      const Box& c = e.clip;
+      bool inside = b.x0 >= c.x0 - 0.01 && b.y0 >= c.y0 - 0.01 && b.x1 <= c.x1 + 0.01 && b.y1 <= c.y1 + 0.01;
+      e.clippedPart = !e.clippedFull && !inside;
+    }
+  };
+  clipFlags(ev.paints);
+  clipFlags(ev.texts);
+  clipFlags(ev.images);
   gatherResourceFacts(ctx, prof, ev);
-  reportBuiltinHits(ctx, prof, inputData, inputSize, ev);
 }
 
 
+bool hitsSatisfy(long long n, const std::string& rule) {
+  std::string op;
+  size_t k = 0;
+  while (k < rule.size() && std::strchr("<>=!", rule[k])) op += rule[k++];
+  double v = std::atof(rule.c_str() + k);
+  double x = static_cast<double>(n);
+  if (op == "<") return x < v;
+  if (op == "<=") return x <= v;
+  if (op == ">") return x > v;
+  if (op == ">=") return x >= v;
+  if (op == "!=") return x != v;
+  return x == v;
+}
+
+bool kindIs(const PfAtom& a, const char* kind) {
+  if (a.token != "content.kind" || a.negate) return false;
+  if (a.op == "==") return !a.vals.empty() && a.vals[0] == kind;
+  if (a.op == "in") return a.vals.size() == 1 && a.vals[0] == kind;
+  return false;
+}
+
 void reportRuleHits(Ctx& ctx, const PfProfile& prof, const Events& ev) {
-  auto humanTail = [](const std::string& token) {
-    size_t p = token.find("::");
-    std::string t = p == std::string::npos ? token : token.substr(p + 2);
-    std::string out;
-    for (size_t i = 0; i < t.size(); ++i) {
-      char c = t[i];
-      if (i && std::isupper(static_cast<unsigned char>(c)) &&
-          std::islower(static_cast<unsigned char>(t[i - 1]))) {
-        out += ' ';
-      }
-      out += (i == 0) ? c : static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
-    }
-    for (char& c : out) {
-      if (c == '_') c = ' ';
-    }
-    return out;
-  };
-  auto opPhrase = [](const std::string& op) {
-    if (op == "less") return std::string("below");
-    if (op == "less_or_equal") return std::string("at most");
-    if (op == "greater") return std::string("above");
-    if (op == "greater_or_equal") return std::string("at least");
-    if (op == "equal") return std::string("of");
-    if (op == "unequal") return std::string("other than");
-    if (op == "is_not_true") return std::string("not");
-    return std::string();
-  };
-  auto displayName = [&](const PfRule& rule,
-                         const std::vector<const PfCondition*>& conds) {
-    if (rule.name.rfind("R_", 0) != 0 && rule.name.rfind("RR", 0) != 0 &&
-        rule.name.rfind("P_", 0) != 0) {
-      return rule.name;
-    }
-    std::vector<std::string> parts;
-    for (const PfCondition* c : conds) {
-      for (const PfAtom& a : c->atoms) {
-        if (parts.size() >= 3) break;
-        std::string p = humanTail(a.token);
-        std::string ph = opPhrase(a.op);
-        if (a.op == "is_true" || a.op == "is_not_true") {
-          parts.push_back(ph.empty() ? p : ph + " " + p);
-        } else if (!a.vals.empty() && !a.vals[0].empty()) {
-          parts.push_back(p + (ph.empty() ? " " : " " + ph + " ") + a.vals[0]);
-        } else {
-          parts.push_back(p);
-        }
-      }
-    }
-    if (parts.empty()) return rule.name;
-    std::string out = parts[0];
-    for (size_t i = 1; i < parts.size() && i < 3; ++i) out += "; " + parts[i];
-    if (!out.empty()) out[0] = static_cast<char>(std::toupper(static_cast<unsigned char>(out[0])));
-    if (out.size() > 90) out = out.substr(0, 87) + "...";
-    return out;
-  };
-  std::vector<bool> usedPaint(ev.paints.size(), false);
-  std::vector<bool> usedText(ev.texts.size(), false);
-  std::vector<bool> usedImage(ev.images.size(), false);
-  auto presenceHit = [&](const PfRule& rule) -> int {
-    std::vector<const PfAtom*> at;
-    for (const std::string& cid : rule.condIds) {
-      auto it = prof.conds.find(cid);
-      if (it == prof.conds.end()) continue;
-      for (const PfAtom& a : it->second.atoms) at.push_back(&a);
-    }
-    if (at.size() != 1) return -1;
-    const std::string& t = at[0]->token;
-    const std::string& op = at[0]->op;
-    bool pos = op == "is_true";
-    bool listNot = op == "is_not_contained_in" || op == "not_contains";
-    if (t == "image.property" && pos && ev.tpSMaskImg) return 1;
-    if (t == "transparency.used" && pos && ev.tpSMaskGs) return 1;
-    if (t == "transparency.blend_mode" && listNot && ev.tpBlend) return 1;
-    return -1;
-  };
   for (const PfRule& rule : prof.rules) {
-    {
-      int ph = presenceHit(rule);
-      if (ph >= 0) {
-        if (ph > 0) {
-          std::vector<const PfCondition*> pc;
-          for (const std::string& cid : rule.condIds) {
-            auto it = prof.conds.find(cid);
-            if (it != prof.conds.end()) pc.push_back(&it->second);
-          }
-          const char* sv[] = {"", "Info", "Warning", "Error"};
-          int s = rule.severity < 4 && rule.severity > 0 ? rule.severity : 1;
-          ctx.res.analysis.push_back(
-              {"PROFILE_HIT",
-               std::string(sv[s]) + ": " + displayName(rule, pc) + " (1 hit(s))", false});
+    struct HitCapture {
+      Ctx& c;
+      const PfRule& r;
+      size_t start;
+      ~HitCapture() {
+        auto& a = c.res.analysis;
+        for (size_t i = start; i < a.size(); ++i) {
+          if (a[i].code != "CHECK_HIT") continue;
+          if (a[i].pages.empty()) c.ruleHitPages[r.id].insert(0);
+          c.ruleHitPages[r.id].insert(a[i].pages.begin(), a[i].pages.end());
         }
-        continue;
+        if (r.silent && start < a.size()) a.erase(a.begin() + static_cast<long>(start), a.end());
       }
-    }
+    } capture{ctx, rule, ctx.res.analysis.size()};
     std::vector<const PfCondition*> conds;
     std::vector<const PfAtom*> atoms;
     for (const std::string& cid : rule.condIds) {
@@ -1525,7 +1051,7 @@ void reportRuleHits(Ctx& ctx, const PfProfile& prof, const Events& ev) {
     bool sawAny = false;
     bool sawFont = false;
     for (const PfAtom* a : atoms) {
-      Domain d = atomDomain(a->token);
+      Domain d = domainOf(*a);
       if (d == Domain::kNone) mixed = true;
       else if (d == Domain::kDoc) continue;
       else if (d == Domain::kAny) sawAny = true;
@@ -1535,6 +1061,7 @@ void reportRuleHits(Ctx& ctx, const PfProfile& prof, const Events& ev) {
       else if (dom != d && dom == Domain::kPage) dom = d;
       else if (dom != d) mixed = true;
     }
+    if (dom == Domain::kPage && sawAny) dom = Domain::kNone;
     if (sawFont) {
       if (dom == Domain::kNone) dom = sawAny ? Domain::kText : Domain::kFont;
       else if (dom != Domain::kText) mixed = true;
@@ -1544,18 +1071,18 @@ void reportRuleHits(Ctx& ctx, const PfProfile& prof, const Events& ev) {
       dom = Domain::kPaint;
       anyFallback = true;
       for (const PfAtom* a : atoms) {
-        bool positive = a->op == "is_true";
-        if (positive && a->token == "content.kind") {
+        if (kindIs(*a, "text")) {
           dom = Domain::kText;
           anyFallback = false;
         }
-        if (positive && (a->token == "content.kind" || a->token == "content.kind" ||
-                         a->token == "content.kind")) {
+        if (kindIs(*a, "image") || kindIs(*a, "image_mask")) {
           dom = Domain::kImage;
           anyFallback = false;
         }
       }
     }
+    long long pageCap = rule.maxHitsPerPage;
+    if (ctx.opt.hitsPerPage > 0 && (pageCap <= 0 || ctx.opt.hitsPerPage < pageCap)) pageCap = ctx.opt.hitsPerPage;
     bool supported = !mixed;
     long long hits = 0;
     std::set<int> pages;
@@ -1564,40 +1091,16 @@ void reportRuleHits(Ctx& ctx, const PfProfile& prof, const Events& ev) {
     std::string unsupTok;
     auto evalAtom = [&](const PfAtom& a, const void* e) -> bool {
       bool wasSupported = supported;
-      if (atomDomain(a.token) == Domain::kDoc) return evalDocAtom(a, ev, supported);
-      if (atomDomain(a.token) == Domain::kPage && dom != Domain::kPage) {
-        const PageFacts* p = pageFor(ev, curPage);
-        return p ? evalPageAtom(a, *p, supported) : false;
-      }
-      switch (dom) {
-        case Domain::kPaint: {
-          bool r = evalPaintAtom(a, *static_cast<const PaintEvent*>(e), ev, supported);
-          if (wasSupported && !supported) unsupTok = a.token;
-          return r;
-        }
-        case Domain::kText: {
-          bool r = evalTextAtom(a, *static_cast<const TextEvent*>(e), ev, supported);
-          if (wasSupported && !supported) unsupTok = a.token;
-          return r;
-        }
-        case Domain::kImage: {
-          bool r = evalImageAtom(a, *static_cast<const ImageEvent*>(e), ev, supported);
-          if (wasSupported && !supported) unsupTok = a.token;
-          return r;
-        }
-        case Domain::kPage:
-          return evalPageAtom(a, *static_cast<const PageFacts*>(e), supported);
-        case Domain::kAnnot:
-          return evalAnnotAtom(a, *static_cast<const AnnotFacts*>(e), ev, supported);
-        case Domain::kFont:
-          return evalFontAtom(a, *static_cast<const FontFacts*>(e), ev, supported);
-        default:
-          return evalDocAtom(a, ev, supported);
-      }
+      bool r = evalCheck(a, subjectFor(dom, e, curPage, ev), ev, supported) > 0;
+      if (wasSupported && !supported) unsupTok = a.token;
+      return r;
     };
     auto ruleMatches = [&](const void* e) -> bool {
       bool combined = rule.logic != 1;
+      XmpNodeScope ruleNodes;
       for (const PfCondition* c : conds) {
+        std::optional<XmpNodeScope> condNodes;
+        if (rule.logic == 1) condNodes.emplace();
         bool condResult = true;
         for (const PfAtom& a : c->atoms) {
           if (!evalAtom(a, e)) { condResult = false; break; }
@@ -1633,6 +1136,7 @@ void reportRuleHits(Ctx& ctx, const PfProfile& prof, const Events& ev) {
         default: return none;
       }
     };
+    std::map<int, long long> perPage;
     auto sweep = [&](auto& collection, std::vector<bool>* used) {
       for (size_t i = 0; i < collection.size(); ++i) {
         if (!supported) return;
@@ -1643,10 +1147,14 @@ void reportRuleHits(Ctx& ctx, const PfProfile& prof, const Events& ev) {
             !inScope(bboxOf(&e), e.page)) {
           continue;
         }
+        if (ctx.opt.visibleLayersOnly && e.layerHidden) continue;
         if (ruleMatches(&e)) {
+          if (used) (*used)[i] = true;
+          if (ctx.opt.hitsPerDoc > 0 && hits >= ctx.opt.hitsPerDoc) continue;
+          if (pageCap > 0 && perPage[e.page] >= pageCap) continue;
+          ++perPage[e.page];
           ++hits;
           pages.insert(e.page);
-          if (used) (*used)[i] = true;
         }
       }
     };
@@ -1669,7 +1177,10 @@ void reportRuleHits(Ctx& ctx, const PfProfile& prof, const Events& ev) {
     else if (supported && dom == Domain::kAnnot) {
       for (const auto& e : ev.annots) {
         if (!supported) break;
+        curPage = e.page;
         if (ruleMatches(&e)) {
+          if (pageCap > 0 && perPage[e.page] >= pageCap) continue;
+          ++perPage[e.page];
           ++hits;
           pages.insert(e.page);
         }
@@ -1683,25 +1194,49 @@ void reportRuleHits(Ctx& ctx, const PfProfile& prof, const Events& ev) {
     else if (supported && dom == Domain::kNone) {
       if (ruleMatches(nullptr)) hits = 1;
     }
+    if (supported) {
+      bool formRule = false;
+      for (const PfAtom* a : atoms) formRule = formRule || kindIs(*a, "form_xobject");
+      if (formRule) {
+        std::map<int, long long> fp;
+        hits += sweepFormObjects(conds, rule.logic, ev, fp, supported);
+        for (const auto& [pg, n] : fp) {
+          perPage[pg] += n;
+          pages.insert(pg);
+        }
+      }
+    }
     if (!supported) {
       ctx.res.analysis.push_back(
-          {"PROFILE_RULE_UNSUPPORTED",
-           rule.name + ": uses checks Kura cannot evaluate yet" +
-               (unsupTok.empty() ? "" : " (" + unsupTok + ")"),
+          {"CHECK_NOT_EVALUATED",
+           rule.name + ": uses checks Kura cannot evaluate for this file" + (unsupTok.empty() ? "" : " (" + unsupTok + ")"),
            false});
       continue;
     }
+    if (!rule.reportPageHits.empty()) {
+      hits = 0;
+      pages.clear();
+      for (const auto& [pg, n] : perPage) {
+        if (n > 0 && hitsSatisfy(n, rule.reportPageHits)) {
+          hits += n;
+          pages.insert(pg);
+        }
+      }
+    }
+    if (!rule.reportDocHits.empty() && !hitsSatisfy(hits, rule.reportDocHits)) {
+      hits = 0;
+      pages.clear();
+    }
     if (hits) {
-      std::string detail = std::string(kSevName[rule.severity < 4 && rule.severity > 0
-                                                   ? rule.severity : 1]) +
-                           ": " + displayName(rule, conds) + " (" + std::to_string(hits) +
-                           " hit(s)";
+      int sev = rule.severity < 4 && rule.severity > 0 ? rule.severity : 1;
+      std::string detail = std::string(kSevName[sev]) + ": " + rule.name + " (" + std::to_string(hits) + " hit(s)";
       if (!pages.empty()) detail += ", " + pageRangeList(pages);
       detail += ")";
+      if (!rule.description.empty()) detail += " - " + rule.description;
       Issue hit;
-      hit.code = "PROFILE_HIT";
+      hit.code = "CHECK_HIT";
       hit.detail = detail;
-      hit.severity = rule.severity < 4 && rule.severity > 0 ? rule.severity : 1;
+      hit.severity = sev;
       hit.pages.assign(pages.begin(), pages.end());
       ctx.res.analysis.push_back(std::move(hit));
     }
@@ -1711,154 +1246,172 @@ void reportRuleHits(Ctx& ctx, const PfProfile& prof, const Events& ev) {
 void passProfile(Ctx& ctx, const unsigned char* inputData, std::size_t inputSize) {
   if (ctx.opt.preflightProfile.empty()) return;
   PfProfile prof;
-  size_t firstCh = ctx.opt.preflightProfile.find_first_not_of(" \t\r\n");
-  bool isJson = firstCh != std::string::npos && ctx.opt.preflightProfile[firstCh] == '{';
-  bool parsed = isJson ? parseKuraJson(ctx.opt.preflightProfile, prof)
-                       : parsePreflightXml(ctx.opt.preflightProfile, prof);
-  if (!parsed) {
-    bool looksLikeXml = ctx.opt.preflightProfile.find("<pdfpreflight") != std::string::npos;
-    bool hasFixes = ctx.opt.preflightProfile.find("<fcfg>") != std::string::npos;
-    if (looksLikeXml && hasFixes) {
-      ctx.res.analysis.push_back(
-          {"PROFILE_NO_CHECKS",
-           "this profile only converts or repairs documents; it defines no checks to "
-           "run in analysis mode",
-           false});
-    } else if (looksLikeXml) {
-      ctx.res.analysis.push_back(
-          {"PROFILE_NO_CHECKS", "this profile defines no checks Kura can run", false});
-    } else {
-      ctx.res.analysis.push_back(
-          {"PROFILE_UNREADABLE", "the preflight profile could not be parsed", false});
-    }
+  if (!parseKuraJson(ctx.opt.preflightProfile, prof)) {
+    ctx.res.analysis.push_back({"PROFILE_INVALID", prof.error, false});
+    return;
+  }
+  if (prof.rules.empty()) {
+    if (ctx.opt.verifyOnly) ctx.res.analysis.push_back({"PROFILE_EMPTY", "this profile defines no checks to run", false});
     return;
   }
   Events ev;
   gatherEvents(ctx, inputData, inputSize, prof, ev);
+  ev.prof = &prof;
+  loadProfileShapes(prof, ev);
   reportRuleHits(ctx, prof, ev);
 }
 
-void applyProfileFixes(Options& opt, std::vector<Issue>& notes) {
-  std::vector<PfFix> fixes = collectFixes(opt.preflightProfile);
-  if (fixes.empty()) return;
-  static const std::set<std::string> coveredByConversion = {
-      "removenotdef", "embeddoutputintent", "correctpageboxes", "fixglyphwidthinfo",
-      "removenoncompliantpdfametadata", "pdfversion", "usflttencdnnencddstrms",
-      "objctcmprssnoptns", "removejavascript", "halftones", "embedmissingfonts",
-      "embedfonts", "subsetfonts", "syncdocinfo", "removecidset", "fixcidset",
-      "fixcharset", "removecharset", "insertcmapforcidfonts", "fixcidtogidmap",
-      "correctcidsysteminfo", "removeembeddedpostscript", "removeopi",
-      "removealternateimages", "dscrdembdddthmbnls", "dscrdprvtdtofothrapps",
-      "removejobtickets", "rmvunrfrncdnmddstntns", "rmvinvldbkmrks", "rmvinvldlnks",
-      "removeactions", "dscrdfrmactns", "reduceimagebitdepth", "rcmprsslzwtflt",
-      "removepdfakeys", "removepdfxkeys", "removepdfekeys", "removeembeddedfiles",
-      "removeoutputintent", "disambiguateapproxj2k", "makefontnameunique",
-      "addmissingspaceglyphs", "removeinvalidglyph", "removeaddcmapsfromsymttf",
-      "repairfs", "setpdfua_1entry", "setdoclangfromtagging", "settabordertodocstruct",
-      "marknonstructasartifact", "markheadfootaspagartifact", "mergeadjacentheadings",
-      "correctlangforlistlable", "setlabelsinunorderedlists", "adduniqueidtonotese",
-      "removeemptyble", "createcontentinlinkannot", "createbookmarkfromheading",
-      "setstructelemtype", "repairtaggingidtree", "removerolemapdeftags",
-      "convertallnamestoutf8", "removeallxmpmanifest", "adjustlayersforpdfx4", "forms",
-      "flattentransparency",
-  };
-  static const std::set<std::string> colourEngine = {
-      "ccsettings", "ccpolicy", "ccdestination", "devicelinkconversion",
-      "managecolorandmodifyoi", "quickcolorconversion", "mapcolors", "adjustdotgain",
-  };
-  static const std::set<std::string> directOps = {
-      "rotatepages", "scalepagesex", "removepagescaling", "setpagebox",
-      "setpageboxesbasedonmarks", "generatebleed", "settitle", "trappedkey",
-      "setinitialviewdocumentoptions", "setinitialviewuioptions",
-      "setinitialviewwindowoptions", "modifyinterpolateentry", "removeflatness",
-      "removesmoothness", "transfercurves", "removebg", "removeucr",
-      "removerenderingintents", "setrenderingintent",
-      "removeunnecessarytransparencygroups", "mergespotcolornames",
-      "makecustomspotcolornamesconsistent", "mksptclrappcnsistent", "mapspotcolors",
-      "convertregistrationcolortoblack", "convertnchtodevn", "knockoutwhite",
-      "overprintblack", "setoverprintandknockout", "increaselinewidth",
-      "settextrendermode", "removeobjectsoutofbox", "placetext", "annotation",
-      "putobjectsonlayer", "putobjpsteps", "dscdhdnlycntfltnvsblyrs",
-      "removepdfuakeys", "settransparencyblendcs",
-  };
-  static const std::set<std::string> partialOps = {
-      "duplicatetextasinvisible", "removecontentbyimage", "dtctandmrgimgfrgmnts",
-      "bringtofront",
-  };
-  std::map<std::string, int> unsupported;
-  std::set<std::string> notedCovered, notedColour, notedPartial, notedDirect;
-  double dsTarget = 0;
-  bool outline = false;
-  for (const PfFix& f : fixes) {
-    std::string op = lower(f.op);
-    if (op == "dsrcmpclrimgs" || op == "dsrcmpgscimgs" || op == "dsrcmpmchimgs") {
-      double target = f.params.size() > 1 ? std::atof(f.params[1].c_str()) : 0;
-      if (target > 0) dsTarget = std::max(dsTarget, target);
+namespace {
+void addColorRule(ColorJob& j, const std::string& text) {
+  static const std::map<std::string, unsigned> objects = {
+      {"all", ColorRule::kAllObjects}, {"images", ColorRule::kImageLossy | ColorRule::kImageLossless},
+      {"lossy_images", ColorRule::kImageLossy}, {"lossless_images", ColorRule::kImageLossless},
+      {"vector", ColorRule::kVector}, {"text", ColorRule::kText}, {"shadings", ColorRule::kShading}};
+  static const std::map<std::string, unsigned> sources = {
+      {"device_rgb", ColorRule::kUncRgb}, {"calibrated_rgb", ColorRule::kCalRgb}, {"device_cmyk", ColorRule::kUncCmyk},
+      {"calibrated_cmyk", ColorRule::kCalCmyk}, {"device_gray", ColorRule::kUncGray}, {"calibrated_gray", ColorRule::kCalGray},
+      {"lab", ColorRule::kLab}, {"spot", ColorRule::kSpot}, {"registration", ColorRule::kRegistration}};
+  static const std::map<std::string, ColorRule::Action> actions = {
+      {"convert", ColorRule::kConvert}, {"keep", ColorRule::kNone}, {"decalibrate", ColorRule::kDecalibrate},
+      {"convert_alternate", ColorRule::kConvertAlternate}, {"decalibrate_and_convert", ColorRule::kDecalibrateConvert},
+      {"tag", ColorRule::kTag}};
+  static const std::map<std::string, int> intents = {
+      {"perceptual", 0}, {"relativecolorimetric", 1}, {"relative_colorimetric", 1}, {"saturation", 2},
+      {"absolutecolorimetric", 3}, {"absolute_colorimetric", 3}};
+  ColorRule r;
+  unsigned obj = 0, src = 0;
+  std::string tok;
+  for (size_t k = 0; k <= text.size(); ++k) {
+    char c = k < text.size() ? text[k] : ' ';
+    if (c != ' ' && c != ',' && c != ';' && c != '\t') {
+      tok += c;
       continue;
     }
-    if (op == "convertfontstooutlines" || op == "converttruetypetocff") {
-      outline = true;
-      continue;
-    }
-    if (op == "optmzefrfstwbvw") {
-      opt.linearize = true;
-      notes.push_back({"PROFILE_FIX_APPLIED",
-                       "fast web view enabled (output will be linearized)", true});
-      continue;
-    }
-    if (coveredByConversion.count(op)) {
-      if (notedCovered.insert(op).second) {
-        notes.push_back({"PROFILE_FIX_COVERED",
-                         f.op + ": performed as part of standard conversion", true});
-      }
-      continue;
-    }
-    if (colourEngine.count(op)) {
-      if (notedColour.insert(op).second) {
-        notes.push_back(
-            {"PROFILE_FIX_COVERED",
-             f.op + ": colour normalization performed by conversion for the target "
-                    "standard (device-link profiles approximated by ICC pairs)",
-             true});
-      }
-      continue;
-    }
-    if (directOps.count(op)) {
-      opt.profileFixOps.push_back({op, f.params});
-      if (notedDirect.insert(op).second) {
-        notes.push_back({"PROFILE_FIX_APPLIED", f.op + ": scheduled", true});
-      }
-      continue;
-    }
-    if (partialOps.count(op)) {
-      if (notedPartial.insert(op).second) {
-        notes.push_back({"PROFILE_FIX_PARTIAL",
-                         f.op + ": content-level rewrite not performed; closest "
-                                "normalization applied by conversion",
-                         false});
-      }
-      continue;
-    }
-    ++unsupported[f.op];
+    size_t eq = tok.find_first_of("=:");
+    std::string v = lower(eq == std::string::npos ? tok : tok.substr(eq + 1));
+    tok.clear();
+    if (v.empty()) continue;
+    if (objects.count(v)) obj |= objects.at(v);
+    else if (sources.count(v)) src |= sources.at(v);
+    else if (actions.count(v)) r.action = actions.at(v);
+    else if (intents.count(v)) r.intent = intents.at(v);
   }
-  if (dsTarget > 0) {
-    if (opt.imageMaxPpi <= 0 || dsTarget < opt.imageMaxPpi) opt.imageMaxPpi = dsTarget;
-    char buf[120];
-    std::snprintf(buf, sizeof(buf),
-                  "image downsampling enabled at %g ppi from the profile's fix steps",
-                  dsTarget);
-    notes.push_back({"PROFILE_FIX_APPLIED", buf, true});
+  if (obj) r.objects = obj;
+  r.sources = src ? src : ColorRule::kAnySource & ~(ColorRule::kSpot | ColorRule::kRegistration);
+  j.rules.push_back(r);
+}
+
+void scheduleColorConvert(Options& opt, const PfFix& f) {
+  ColorJob& j = opt.colorJob;
+  j.enabled = true;
+  const std::string& dest = fixParam(f, "destination");
+  if (!dest.empty() && dest != "output_intent") j.destName = dest;
+  const std::string& embed = fixParam(f, "embed");
+  j.embed = embed == "none" ? ColorJob::kEmbedNone : embed == "source" ? ColorJob::kEmbedSource : ColorJob::kEmbedOutputIntent;
+  j.preserveBlack = fixParamBool(f, "preserve_black");
+  j.blackPointCompensation = fixParamBool(f, "black_point_compensation");
+  j.processSeparationsAsCmyk = fixParamBool(f, "process_separations_as_cmyk");
+  j.grayToBlackOnly = fixParamBool(f, "grey_to_black");
+  if (!fixParam(f, "rgb_grey_to_black_tolerance").empty()) {
+    j.rgbGrayToBlackOnly = true;
+    for (double& t : j.rgbGrayTolerance) t = fixParamNum(f, "rgb_grey_to_black_tolerance") / 100.0;
   }
-  if (outline) {
-    opt.outlineFonts = true;
-    notes.push_back({"PROFILE_FIX_APPLIED",
-                     "font outlining enabled from the profile's fix steps", true});
+  for (const std::string& rule : fixParamList(f, "rules")) addColorRule(j, rule);
+  if (!fixParam(f, "device_link").empty()) {
+    std::string bytes;
+    if (resolveIccByName(opt, fixParam(f, "device_link"), bytes)) j.deviceLink = bytes;
+    j.embed = ColorJob::kEmbedNone;
   }
-  for (const auto& [op, n] : unsupported) {
-    notes.push_back({"PROFILE_FIX_UNSUPPORTED",
-                     op + ": fix operation Kura cannot run yet" +
-                         (n > 1 ? " (x" + std::to_string(n) + ")" : ""),
-                     false});
+  if (fixParamBool(f, "quick")) {
+    j.quick = true;
+    if (!fixParam(f, "black_generation").empty()) j.quickBlackGeneration = fixParamNum(f, "black_generation") / 100.0;
+    if (!fixParam(f, "undercolour_removal").empty()) j.quickUnderColorRemoval = fixParamNum(f, "undercolour_removal") / 100.0;
+    if (j.rules.empty()) {
+      ColorRule r;
+      r.sources = ColorRule::kUncRgb | ColorRule::kCalRgb;
+      j.rules.push_back(r);
+    }
+    j.embed = ColorJob::kEmbedNone;
   }
 }
+
+bool scheduleOutputIntent(Options& opt, const PfFix& f, std::vector<Issue>& notes) {
+  if (!fixParam(f, "pages").empty()) {
+    const std::string& pages = fixParam(f, "pages");
+    opt.pageOutputIntents = pages;
+  }
+  const std::string& name = fixParam(f, "profile");
+  if (!name.empty()) {
+    std::string bytes;
+    if (!resolveIccByName(opt, name, bytes)) {
+      notes.push_back({"ICC_PROFILE_MISSING",
+                       "output intent profile \"" + name + "\" was not found; the output intent was left to the standard conversion",
+                       false});
+      return false;
+    }
+    opt.destProfile = bytes;
+    std::string desc = iccDescription(bytes);
+    opt.outputConditionInfo = desc.empty() ? name : desc;
+  }
+  if (!fixParam(f, "identifier").empty()) opt.outputConditionIdentifier = fixParam(f, "identifier");
+  else if (opt.outputConditionIdentifier.empty() && !opt.outputConditionInfo.empty()) {
+    opt.outputConditionIdentifier = opt.outputConditionInfo;
+  }
+  if (!fixParam(f, "condition").empty()) opt.outputConditionInfo = fixParam(f, "condition");
+  if (!fixParam(f, "registry").empty()) opt.outputConditionRegistry = fixParam(f, "registry");
+  return !name.empty() || !fixParam(f, "identifier").empty() || !fixParam(f, "condition").empty();
+}
+}
+
+void applyProfileFixes(Options& opt, std::vector<Issue>& notes) {
+  PfProfile prof;
+  if (!parseKuraJson(opt.preflightProfile, prof) || prof.fixes.empty()) return;
+  std::set<std::string> noted;
+  auto scheduled = [&](const PfFix& f, const std::string& what) {
+    if (noted.insert(f.id).second) notes.push_back({"FIX_SCHEDULED", f.id + ": " + what, true});
+  };
+  for (const PfFix& f : prof.fixes) {
+    if (f.fix < 0) {
+      notes.push_back({"FIX_UNKNOWN", f.id + ": not a Kura fix", false});
+      continue;
+    }
+    if (f.id == "color.convert") {
+      scheduleColorConvert(opt, f);
+      scheduled(f, "colour conversion scheduled");
+    } else if (f.id == "image.downsample") {
+      double target = fixParamNum(f, "target");
+      double above = fixParamNum(f, "above");
+      if (target > 0 && (opt.imageMaxPpi <= 0 || target < opt.imageMaxPpi)) opt.imageMaxPpi = target;
+      opt.imageDownsampleAbovePpi = std::max(above, opt.imageMaxPpi);
+      opt.imageDownsampleKind = fixParam(f, "kind");
+      scheduled(f, "images above " + fmtFixed(opt.imageDownsampleAbovePpi, 0) + " ppi are reduced to " + fmtFixed(target, 0) + " ppi");
+    } else if (f.id == "image.upsample") {
+      double target = fixParamNum(f, "target"), below = fixParamNum(f, "below");
+      if (target > 0) {
+        opt.imageUpsampleToPpi = target;
+        opt.imageUpsampleBelowPpi = below > 0 ? below : target;
+      }
+      scheduled(f, "images below " + fmtFixed(opt.imageUpsampleBelowPpi, 0) + " ppi are raised");
+    } else if (f.id == "font.to_outlines") {
+      opt.outlineFonts = true;
+      scheduled(f, "text will be drawn as outlines");
+    } else if (f.id == "document.linearize") {
+      opt.linearize = true;
+      scheduled(f, "output will be linearized for fast web view");
+    } else if (isContentFix(f.id)) {
+      if (f.id == "output_intent.set" && !scheduleOutputIntent(opt, f, notes)) continue;
+      std::vector<std::string> ruleIds;
+      for (const std::string& name : f.onlyWhere) {
+        auto it = prof.ruleIndex.find(name);
+        if (it != prof.ruleIndex.end()) ruleIds.push_back(it->second.id);
+      }
+      if (!ruleIds.empty()) opt.profileFixRules[opt.profileFixOps.size()] = ruleIds;
+      opt.profileFixOps.push_back({f.id, f.args});
+      scheduled(f, "scheduled");
+    } else {
+      notes.push_back({"FIX_UNKNOWN", f.id + ": Kura cannot run this fix yet", false});
+    }
+  }
+}
+
 }

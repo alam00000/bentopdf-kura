@@ -8,9 +8,10 @@
       "severity": "info",
       "all": [
         {
-          "prop": "image.filter",
+          "check": "image.property",
           "op": "contains",
-          "value": "DCT"
+          "value": "DCTDecode",
+          "property": "filter"
         }
       ]
     },
@@ -19,9 +20,10 @@
       "severity": "info",
       "all": [
         {
-          "prop": "image.filter",
+          "check": "image.property",
           "op": "contains",
-          "value": "JPX"
+          "value": "JPXDecode",
+          "property": "filter"
         }
       ]
     },
@@ -30,9 +32,10 @@
       "severity": "info",
       "all": [
         {
-          "prop": "image.filter",
+          "check": "image.property",
           "op": "contains",
-          "value": "CCITT"
+          "value": "CCITTFaxDecode",
+          "property": "filter"
         }
       ]
     },
@@ -41,9 +44,10 @@
       "severity": "info",
       "all": [
         {
-          "prop": "image.filter",
+          "check": "image.property",
           "op": "contains",
-          "value": "JBIG2"
+          "value": "JBIG2Decode",
+          "property": "filter"
         }
       ]
     },
@@ -52,9 +56,10 @@
       "severity": "info",
       "all": [
         {
-          "prop": "image.bitsPerComponent",
+          "check": "image.property",
           "op": "==",
-          "value": 16
+          "value": "16",
+          "property": "bits_per_component"
         }
       ]
     },
@@ -63,13 +68,12 @@
       "severity": "info",
       "all": [
         {
-          "prop": "image.bitsPerComponent",
+          "check": "image.property",
           "op": "==",
-          "value": 1
+          "value": "1",
+          "property": "bits_per_component"
         }
       ]
     }
-  ],
-  "builtins": [],
-  "fixes": []
+  ]
 }

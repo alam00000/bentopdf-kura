@@ -8,13 +8,11 @@
       "severity": "info",
       "all": [
         {
-          "prop": "annot.type",
+          "check": "annotation.type",
           "op": "==",
           "value": "3D"
         }
       ]
     }
-  ],
-  "builtins": [],
-  "fixes": []
+  ]
 }

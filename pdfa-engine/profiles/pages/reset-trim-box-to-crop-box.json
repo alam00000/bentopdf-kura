@@ -3,20 +3,16 @@
   "name": "Reset trim box to crop box",
   "description": "Replaces the trim box with the crop box on every page.",
   "checks": [],
-  "builtins": [],
   "fixes": [
     {
-      "op": "setpagebox",
-      "params": [
-        "TrimBox",
-        "RelativeToCropBox",
-        "0",
-        "0",
-        "0",
-        "0",
-        "pt",
-        "Always"
-      ]
+      "fix": "page.set_box",
+      "box": "trim",
+      "from": "crop",
+      "left": "0mm",
+      "right": "0mm",
+      "top": "0mm",
+      "bottom": "0mm",
+      "when": "always"
     }
   ]
 }

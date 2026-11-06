@@ -2,12 +2,34 @@
   "kura-profile": 1,
   "name": "RGB in use",
   "description": "Reports every object painted in RGB.",
-  "checks": [],
-  "builtins": [
+  "checks": [
     {
-      "name": "rgbUsed",
-      "severity": "warning"
+      "name": "RGB colour",
+      "severity": "warning",
+      "any": [
+        {
+          "all": [
+            {
+              "check": "color.space",
+              "op": "in",
+              "value": [
+                "DeviceRGB",
+                "CalRGB"
+              ]
+            }
+          ]
+        },
+        {
+          "all": [
+            {
+              "check": "color.space",
+              "op": "==",
+              "value": "ICCBased",
+              "icc_components": 3
+            }
+          ]
+        }
+      ]
     }
-  ],
-  "fixes": []
+  ]
 }

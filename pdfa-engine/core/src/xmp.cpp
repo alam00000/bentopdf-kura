@@ -3,6 +3,8 @@
 #include <cctype>
 #include <cstdio>
 #include <ctime>
+#include <map>
+#include <set>
 #include <string>
 #include <vector>
 
@@ -160,7 +162,7 @@ std::string xVersionString(Ctx& ctx) {
     case Level::X6P: return "PDF/X-6p";
     default: break;
   }
-  if (ctx.pdf20Print()) return "PDF/X-6";
+  if (ctx.pdf20Print() || (ctx.dualX() && ctx.part >= 4)) return "PDF/X-6";
   return "PDF/X-4";
 }
 
@@ -236,7 +238,7 @@ InfoData collectInfo(Ctx& ctx) {
   QPDFObjectHandle info = trailer.getKey("/Info");
   if (!info.isDictionary()) {
     if (!info.isNull()) trailer.removeKey("/Info");
-    if (!ctx.isX()) return d;
+    if (!ctx.isX() && !ctx.dualX()) return d;
     info = QPDFObjectHandle::newDictionary();
   }
   QPDFObjectHandle clean = QPDFObjectHandle::newDictionary();
@@ -277,10 +279,11 @@ InfoData collectInfo(Ctx& ctx) {
   if (dropped) {
     ctx.issue("DOCINFO_DATE_DROPPED", "dropped unparseable date from document info", true);
   }
-  if (ctx.isX()) {
+  if (ctx.isX() || ctx.dualX()) {
+    const bool x20 = ctx.pdf20Print() || (ctx.dualX() && ctx.part >= 4);
     std::string declared = cleanText(info.getKey("/GTS_PDFXVersion"));
     std::string declaredVt = cleanText(info.getKey("/GTS_PDFVTVersion"));
-    if (ctx.pdf20Print()) {
+    if (x20) {
       std::string xmpOld = oldXmpText(ctx);
       declared = xmpElementText(xmpOld, "GTS_PDFXVersion");
       declaredVt = xmpElementText(xmpOld, "GTS_PDFVTVersion");
@@ -342,7 +345,7 @@ InfoData collectInfo(Ctx& ctx) {
                           vtVersionString(ctx),
                 true);
     }
-    if (ctx.pdf20Print()) {
+    if (x20) {
       QPDFObjectHandle pinfo = trailer.getKey("/Info");
       bool hadInfo = pinfo.isDictionary() && !pinfo.getKeys().empty();
       if (ctx.pdf.getRoot().getKey("/PieceInfo").isDictionary() && !d.modifyIso.empty() &&
@@ -386,13 +389,19 @@ InfoData collectInfo(Ctx& ctx) {
   }
   if (ctx.isA() && ctx.part >= 4) {
     QPDFObjectHandle root = ctx.pdf.getRoot();
+    QPDFObjectHandle origInfo = trailer.getKey("/Info");
+    bool infoBad = !ctx.opt.verifyOnly;
+    for (const std::string& k : origInfo.isDictionary() ? origInfo.getKeys() : std::set<std::string>()) {
+      infoBad = infoBad || k != "/ModDate";
+    }
     if (root.getKey("/PieceInfo").isDictionary() && !d.modifyIso.empty() &&
         !canonModify.empty()) {
       QPDFObjectHandle keep = QPDFObjectHandle::newDictionary();
       keep.replaceKey("/ModDate", QPDFObjectHandle::newString(canonModify));
       trailer.replaceKey("/Info", ctx.pdf.makeIndirectObject(keep));
       ctx.issue("DOCINFO_REDUCED",
-                "kept only /ModDate in document info (required alongside /PieceInfo)", true);
+                "kept only /ModDate in document info (required alongside /PieceInfo)",
+                infoBad);
     } else {
       if (root.getKey("/PieceInfo").isDictionary()) {
         root.removeKey("/PieceInfo");
@@ -400,15 +409,16 @@ InfoData collectInfo(Ctx& ctx) {
                   "removed catalog /PieceInfo (no valid /ModDate to pair with it)", true);
       }
       trailer.removeKey("/Info");
-      if (!clean.getKeys().empty()) {
+      if (!clean.getKeys().empty() || (ctx.opt.verifyOnly && origInfo.isDictionary())) {
         ctx.issue("DOCINFO_MIGRATED",
-                  "migrated document info dictionary into XMP (deprecated in PDF 2.0)", true);
+                  "migrated document info dictionary into XMP (deprecated in PDF 2.0)",
+                  !ctx.opt.verifyOnly || origInfo.isDictionary());
       }
     }
     return d;
   }
   if (hadCustom) {
-    ctx.issue("DOCINFO_CUSTOM_REMOVED", "removed nonstandard document info entries", true);
+    ctx.issue("DOCINFO_CUSTOM_REMOVED", "removed nonstandard document info entries", !ctx.opt.verifyOnly);
   }
   if (clean.getKeys().empty()) {
     trailer.removeKey("/Info");
@@ -437,8 +447,44 @@ void appendSeq(std::string& xmp, const std::string& tag, const std::string& valu
 }
 }
 
+std::string pdfaXmpProblem(const std::string& packet, int part, char conf, const std::string* mainPacket);
+std::string xmpInfoMismatch(const std::string& packet, const std::map<std::string, std::string>& info);
+
+namespace {
+bool streamText(QPDFObjectHandle s, std::string& out) {
+  try {
+    auto buf = s.getStreamData(qpdf_dl_generalized);
+    out.assign(reinterpret_cast<const char*>(buf->getBuffer()), buf->getSize());
+    return true;
+  } catch (const std::exception&) {
+    return false;
+  }
+}
+}
+
 void passMetadata(Ctx& ctx) {
   QPDFObjGen rootGen = ctx.pdf.getRoot().getObjGen();
+  const bool checkXmp = ctx.opt.verifyOnly && ctx.isA();
+  std::string mainXmp;
+  if (checkXmp) {
+    QPDFObjectHandle md = ctx.pdf.getRoot().getKey("/Metadata");
+    std::string why = "document has no XMP metadata stream";
+    if (md.isStream()) {
+      why = streamText(md, mainXmp) ? pdfaXmpProblem(mainXmp, ctx.part, ctx.conf, nullptr)
+                                    : "XMP metadata stream cannot be decoded";
+    }
+    QPDFObjectHandle infoDict = ctx.pdf.getTrailer().getKey("/Info");
+    if (why.empty() && ctx.part == 1 && infoDict.isDictionary()) {
+      std::map<std::string, std::string> info;
+      for (const char* k : {"Title", "Author", "Subject", "Keywords", "Creator", "Producer", "CreationDate", "ModDate"}) {
+        QPDFObjectHandle v = infoDict.getKey(std::string("/") + k);
+        if (v.isString()) info[k] = v.getUTF8Value();
+        else if (!v.isNull()) info[k] = std::string(1, '\0');
+      }
+      why = xmpInfoMismatch(mainXmp, info);
+    }
+    if (!why.empty()) ctx.issue("XMP_NONCONFORMING", why, true);
+  }
   int stripped = 0;
   {
     Visited visited;
@@ -455,8 +501,14 @@ void passMetadata(Ctx& ctx) {
         bool refForm = ctx.allowRefXObjects() && d.getKey("/Ref").isDictionary() &&
                        nameIs(d.getKey("/Subtype"), "/Form");
         if (o.getObjGen() != rootGen && d.getKey("/Metadata").isStream() && !refForm) {
-          d.removeKey("/Metadata");
-          ++stripped;
+          std::string packet;
+          if (!checkXmp) {
+            d.removeKey("/Metadata");
+            ++stripped;
+          } else if (!streamText(d.getKey("/Metadata"), packet) ||
+                     !pdfaXmpProblem(packet, ctx.part, ctx.conf, &mainXmp).empty()) {
+            ++stripped;
+          }
         }
         for (const std::string& k : d.getKeys()) {
           QPDFObjectHandle v = d.getKey(k);
@@ -492,7 +544,7 @@ void passMetadata(Ctx& ctx) {
   if (ctx.opt.ua) {
     xmp += "        xmlns:pdfuaid=\"http://www.aiim.org/pdfua/ns/id/\"\n";
   }
-  if (ctx.isX()) {
+  if (ctx.isX() || ctx.dualX()) {
     xmp += "        xmlns:pdfxid=\"http://www.npes.org/pdfx/ns/id/\"\n";
   }
   if (ctx.isVT()) {
@@ -506,7 +558,7 @@ void passMetadata(Ctx& ctx) {
   }
   xmp += "        xmlns:dc=\"http://purl.org/dc/elements/1.1/\"\n";
   xmp += "        xmlns:xmp=\"http://ns.adobe.com/xap/1.0/\"\n";
-  if (ctx.isX()) {
+  if (ctx.isX() || ctx.dualX()) {
     xmp += "        xmlns:xmpMM=\"http://ns.adobe.com/xap/1.0/mm/\"\n";
   }
   xmp += "        xmlns:pdf=\"http://ns.adobe.com/pdf/1.3/\">\n";
@@ -529,7 +581,7 @@ void passMetadata(Ctx& ctx) {
       xmp += "      <pdfuaid:part>1</pdfuaid:part>\n";
     }
   }
-  if (ctx.isX()) {
+  if (ctx.isX() || ctx.dualX()) {
     xmp += "      <pdfxid:GTS_PDFXVersion>" + xVersionString(ctx) +
            "</pdfxid:GTS_PDFXVersion>\n";
     xmp += "      <pdf:Trapped>" + (info.trapped.empty() ? std::string("False") : info.trapped) +
@@ -579,7 +631,7 @@ void passMetadata(Ctx& ctx) {
   appendSimple(xmp, "pdf:Producer", info.producer);
   appendSimple(xmp, "xmp:CreateDate", info.createIso);
   appendSimple(xmp, "xmp:ModifyDate", info.modifyIso);
-  if (ctx.isX()) {
+  if (ctx.isX() || ctx.dualX()) {
     appendSimple(xmp, "xmp:MetadataDate", info.modifyIso);
     uint32_t hash = fnv1a32(info.createIso + info.modifyIso + levelToString(ctx.opt.level));
     char idbuf[64];
@@ -593,7 +645,8 @@ void passMetadata(Ctx& ctx) {
   xmp += "    </rdf:Description>\n";
   bool wantUaSchema = ctx.opt.ua && ctx.part <= 3;
   bool wantFxSchema = !ctx.opt.attachXml.empty() && ctx.isA() && ctx.part <= 3;
-  if (wantUaSchema || wantFxSchema) {
+  bool wantXSchema = ctx.dualX() && ctx.part <= 3;
+  if (wantUaSchema || wantFxSchema || wantXSchema) {
     xmp += "    <rdf:Description rdf:about=\"\"\n";
     xmp += "        xmlns:pdfaExtension=\"http://www.aiim.org/pdfa/ns/extension/\"\n";
     xmp += "        xmlns:pdfaSchema=\"http://www.aiim.org/pdfa/ns/schema#\"\n";
@@ -612,6 +665,38 @@ void passMetadata(Ctx& ctx) {
       xmp += "                  <pdfaProperty:valueType>Integer</pdfaProperty:valueType>\n";
       xmp += "                  <pdfaProperty:category>internal</pdfaProperty:category>\n";
       xmp += "                  <pdfaProperty:description>Indicates, which part of ISO 14289 standard is followed</pdfaProperty:description>\n";
+      xmp += "                </rdf:li>\n";
+      xmp += "              </rdf:Seq>\n";
+      xmp += "            </pdfaSchema:property>\n";
+      xmp += "          </rdf:li>\n";
+    }
+    if (wantXSchema) {
+      xmp += "          <rdf:li rdf:parseType=\"Resource\">\n";
+      xmp += "            <pdfaSchema:schema>PDF/X ID Schema</pdfaSchema:schema>\n";
+      xmp += "            <pdfaSchema:namespaceURI>http://www.npes.org/pdfx/ns/id/</pdfaSchema:namespaceURI>\n";
+      xmp += "            <pdfaSchema:prefix>pdfxid</pdfaSchema:prefix>\n";
+      xmp += "            <pdfaSchema:property>\n";
+      xmp += "              <rdf:Seq>\n";
+      xmp += "                <rdf:li rdf:parseType=\"Resource\">\n";
+      xmp += "                  <pdfaProperty:name>GTS_PDFXVersion</pdfaProperty:name>\n";
+      xmp += "                  <pdfaProperty:valueType>Text</pdfaProperty:valueType>\n";
+      xmp += "                  <pdfaProperty:category>internal</pdfaProperty:category>\n";
+      xmp += "                  <pdfaProperty:description>ID of PDF/X standard</pdfaProperty:description>\n";
+      xmp += "                </rdf:li>\n";
+      xmp += "              </rdf:Seq>\n";
+      xmp += "            </pdfaSchema:property>\n";
+      xmp += "          </rdf:li>\n";
+      xmp += "          <rdf:li rdf:parseType=\"Resource\">\n";
+      xmp += "            <pdfaSchema:schema>Adobe PDF Schema</pdfaSchema:schema>\n";
+      xmp += "            <pdfaSchema:namespaceURI>http://ns.adobe.com/pdf/1.3/</pdfaSchema:namespaceURI>\n";
+      xmp += "            <pdfaSchema:prefix>pdf</pdfaSchema:prefix>\n";
+      xmp += "            <pdfaSchema:property>\n";
+      xmp += "              <rdf:Seq>\n";
+      xmp += "                <rdf:li rdf:parseType=\"Resource\">\n";
+      xmp += "                  <pdfaProperty:name>Trapped</pdfaProperty:name>\n";
+      xmp += "                  <pdfaProperty:valueType>Text</pdfaProperty:valueType>\n";
+      xmp += "                  <pdfaProperty:category>external</pdfaProperty:category>\n";
+      xmp += "                  <pdfaProperty:description>Indication if the document has been modified to include trapping information</pdfaProperty:description>\n";
       xmp += "                </rdf:li>\n";
       xmp += "              </rdf:Seq>\n";
       xmp += "            </pdfaSchema:property>\n";

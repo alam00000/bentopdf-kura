@@ -8,18 +8,14 @@
       "severity": "warning",
       "all": [
         {
-          "prop": "docinfo.trapped",
-          "op": "!=",
-          "value": "True"
-        },
-        {
-          "prop": "docinfo.trapped",
-          "op": "!=",
-          "value": "False"
+          "check": "print.trapped",
+          "op": "in",
+          "value": [
+            "Unknown",
+            "missing"
+          ]
         }
       ]
     }
-  ],
-  "builtins": [],
-  "fixes": []
+  ]
 }

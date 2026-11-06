@@ -1,13 +1,16 @@
 {
   "kura-profile": 1,
   "name": "Merge spot colour names",
-  "description": "Merges spot colours whose names differ only in case, spacing or suffix.",
+  "description": "Writes Pantone and HKS spot names in one standard spelling, so one ink is not split across names that differ only in case, spacing or suffix.",
   "checks": [],
-  "builtins": [],
   "fixes": [
     {
-      "op": "mergespotcolornames",
-      "params": []
+      "fix": "spot.normalise_names",
+      "system": "pantone"
+    },
+    {
+      "fix": "spot.normalise_names",
+      "system": "hks"
     }
   ]
 }

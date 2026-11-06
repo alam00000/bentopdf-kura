@@ -74,18 +74,17 @@ def deep_dict(path, n=6000):
     write_pdf(path, o)
 
 def profile_seeds(d):
-    open(os.path.join(d, "profile_flat.xml"), "wb").write(
-        b'<?xml version="1.0"?><pdfpreflight><profile><name>p</name>'
-        b'<check name="page.empty" check_severity="0"></check>'
-        b'</profile></pdfpreflight>')
-    open(os.path.join(d, "profile_deep_ruleset.xml"), "wb").write(
-        b'<?xml version="1.0"?><pdfpreflight>' + b'<ruleset><id1>a</id1>' * 400 +
-        b'</ruleset>' * 400 + b'</pdfpreflight>')
-    open(os.path.join(d, "profile_unterminated.xml"), "wb").write(
-        b'<?xml version="1.0"?><pdfpreflight><profile><name>x' + b'A' * 4096)
     open(os.path.join(d, "profile_flat.json"), "wb").write(
-        b'{"name":"p","checks":[{"name":"c","severity":"error","atoms":'
-        b'[{"property":"color.total_ink","op":">","value":300}]}]}')
+        b'{"kura-profile":1,"name":"p","checks":[{"name":"c","severity":"error","all":'
+        b'[{"check":"color.total_ink","paint":"fill","op":">","value":300}]}],'
+        b'"fixes":[{"fix":"ink.min_line_width","width":"0.25pt","only_where":["c"]}]}')
+    open(os.path.join(d, "profile_plan.json"), "wb").write(
+        b'{"kura-profile":1,"name":"p","variables":[{"name":"n","default":"1","script":"kura.variable(\'n\', 2)"}],'
+        b'"checks":[{"name":"c","severity":"warning","any":[{"all":[{"check":"page.number","op":">","value":"{n}"}]}]}],'
+        b'"plan":{"steps":[{"id":"a","do":"check","check":"c","next":{"pass":"end","default":"a"}}]},'
+        b'"convert":{"level":"pdfa-2b","raster_fallback":{"resolution":"150ppi"}}}')
+    open(os.path.join(d, "profile_bad_check.json"), "wb").write(
+        b'{"kura-profile":1,"checks":[{"name":"c","severity":"info","all":[{"check":"no.such","op":"==","value":1}]}]}')
     open(os.path.join(d, "profile_deep.json"), "wb").write(
         b'{"a":' * 300 + b'1' + b'}' * 300)
 

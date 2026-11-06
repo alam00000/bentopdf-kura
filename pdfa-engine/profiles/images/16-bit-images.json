@@ -8,13 +8,12 @@
       "severity": "warning",
       "all": [
         {
-          "prop": "image.bitsPerComponent",
+          "check": "image.property",
           "op": "==",
-          "value": 16
+          "value": "16",
+          "property": "bits_per_component"
         }
       ]
     }
-  ],
-  "builtins": [],
-  "fixes": []
+  ]
 }

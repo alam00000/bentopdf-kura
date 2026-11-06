@@ -3,15 +3,14 @@
   "name": "Stamp the conversion date",
   "description": "Places the conversion date on every page.",
   "checks": [],
-  "builtins": [],
   "fixes": [
     {
-      "op": "placetext",
-      "params": [
-        "Date",
-        "",
-        "9"
-      ]
+      "fix": "place.text",
+      "text": "{date}",
+      "size": "9pt",
+      "anchor": "lower_right",
+      "x": "-10mm",
+      "y": "5mm"
     }
   ]
 }

@@ -2,15 +2,18 @@
   "kura-profile": 1,
   "name": "Bitmaps below 800 ppi",
   "description": "Reports 1-bit images whose effective resolution is below 800 ppi.",
-  "checks": [],
-  "builtins": [
+  "checks": [
     {
-      "name": "bitmapResolutionBelow",
+      "name": "Bitmap below 800 ppi",
       "severity": "warning",
-      "params": {
-        "ppi": 800
-      }
+      "all": [
+        {
+          "check": "image.resolution",
+          "op": "<",
+          "value": 800,
+          "kind": "bitmap"
+        }
+      ]
     }
-  ],
-  "fixes": []
+  ]
 }

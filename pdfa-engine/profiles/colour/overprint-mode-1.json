@@ -1,0 +1,18 @@
+{
+  "kura-profile": 1,
+  "name": "Overprint mode 1",
+  "description": "Reports objects drawn with the non-zero overprint mode, where zero ink values leave the inks below untouched.",
+  "checks": [
+    {
+      "name": "Overprint mode 1",
+      "severity": "info",
+      "all": [
+        {
+          "check": "color.overprint",
+          "op": "==",
+          "value": "on_nonzero_mode"
+        }
+      ]
+    }
+  ]
+}

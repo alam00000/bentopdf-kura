@@ -4,13 +4,24 @@
   "description": "Reports fonts not embedded, Type 3 fonts, missing glyphs and text without Unicode.",
   "checks": [
     {
+      "name": "Font not embedded",
+      "severity": "warning",
+      "all": [
+        {
+          "check": "font.embedding",
+          "op": "==",
+          "value": "not_embedded"
+        }
+      ]
+    },
+    {
       "name": "Type 3 font in use",
       "severity": "warning",
       "all": [
         {
-          "prop": "font.isType3",
+          "check": "font.type",
           "op": "==",
-          "value": true
+          "value": "type3"
         }
       ]
     },
@@ -19,9 +30,9 @@
       "severity": "error",
       "all": [
         {
-          "prop": "font.notdefUsed",
+          "check": "text.glyph",
           "op": "==",
-          "value": true
+          "value": "notdef"
         }
       ]
     },
@@ -30,9 +41,9 @@
       "severity": "error",
       "all": [
         {
-          "prop": "font.invalid",
-          "op": "==",
-          "value": true
+          "check": "font.problem",
+          "op": "includes",
+          "value": "invalid_program"
         }
       ]
     },
@@ -41,18 +52,11 @@
       "severity": "info",
       "all": [
         {
-          "prop": "font.unicodeComplete",
-          "op": "==",
+          "check": "font.all_text_unicode",
+          "op": "is",
           "value": false
         }
       ]
     }
-  ],
-  "builtins": [
-    {
-      "name": "fontsNotEmbedded",
-      "severity": "warning"
-    }
-  ],
-  "fixes": []
+  ]
 }

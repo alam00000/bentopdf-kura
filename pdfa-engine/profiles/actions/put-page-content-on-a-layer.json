@@ -1,16 +1,12 @@
 {
   "kura-profile": 1,
   "name": "Put page content on a layer",
-  "description": "Wraps every page's content in a layer named Content.",
+  "description": "Moves every page's content onto a layer named Content.",
   "checks": [],
-  "builtins": [],
   "fixes": [
     {
-      "op": "putobjectsonlayer",
-      "params": [
-        "Content",
-        "Content"
-      ]
+      "fix": "layer.move_objects",
+      "layer": "Content"
     }
   ]
 }

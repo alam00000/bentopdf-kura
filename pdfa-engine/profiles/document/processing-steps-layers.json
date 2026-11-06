@@ -8,13 +8,12 @@
       "severity": "info",
       "all": [
         {
-          "prop": "layers.hasProcessingSteps",
-          "op": "==",
-          "value": true
+          "check": "layer.processing_step",
+          "op": "count",
+          "value": 0,
+          "compare": ">"
         }
       ]
     }
-  ],
-  "builtins": [],
-  "fixes": []
+  ]
 }

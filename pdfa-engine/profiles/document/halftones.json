@@ -2,12 +2,18 @@
   "kura-profile": 1,
   "name": "Halftones",
   "description": "Reports custom halftone settings.",
-  "checks": [],
-  "builtins": [
+  "checks": [
     {
-      "name": "halftones",
-      "severity": "info"
+      "name": "Custom halftone",
+      "severity": "info",
+      "all": [
+        {
+          "check": "print.halftone",
+          "op": "==",
+          "value": "true",
+          "property": "present"
+        }
+      ]
     }
-  ],
-  "fixes": []
+  ]
 }

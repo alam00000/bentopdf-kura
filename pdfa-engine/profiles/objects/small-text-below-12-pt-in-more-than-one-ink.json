@@ -8,23 +8,21 @@
       "severity": "warning",
       "all": [
         {
-          "prop": "text.size",
+          "check": "text.size",
           "op": "<",
           "value": 12
         },
         {
-          "prop": "text.size",
+          "check": "text.size",
           "op": ">",
           "value": 0.01
         },
         {
-          "prop": "paint.inkCount",
+          "check": "color.inks_used",
           "op": ">",
           "value": 1
         }
       ]
     }
-  ],
-  "builtins": [],
-  "fixes": []
+  ]
 }

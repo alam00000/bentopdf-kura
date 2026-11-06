@@ -3,19 +3,16 @@
   "name": "Set trim box 3 mm inside the media box",
   "description": "Adds a trim box inset 3 mm from the media box on pages that lack one, for files delivered with bleed but no boxes.",
   "checks": [],
-  "builtins": [],
   "fixes": [
     {
-      "op": "setpagebox",
-      "params": [
-        "TrimBox",
-        "RelativeToMediaBox",
-        "3",
-        "3",
-        "3",
-        "3",
-        "mm"
-      ]
+      "fix": "page.set_box",
+      "box": "trim",
+      "from": "media",
+      "left": "3mm",
+      "right": "3mm",
+      "top": "3mm",
+      "bottom": "3mm",
+      "when": "missing"
     }
   ]
 }

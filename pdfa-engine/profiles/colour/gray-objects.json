@@ -8,13 +8,11 @@
       "severity": "info",
       "all": [
         {
-          "prop": "paint.isGray",
+          "check": "color.space",
           "op": "==",
-          "value": true
+          "value": "DeviceGray"
         }
       ]
     }
-  ],
-  "builtins": [],
-  "fixes": []
+  ]
 }

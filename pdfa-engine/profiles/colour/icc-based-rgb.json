@@ -8,13 +8,12 @@
       "severity": "info",
       "all": [
         {
-          "prop": "paint.usesIccRgb",
+          "check": "color.space",
           "op": "==",
-          "value": true
+          "value": "ICCBased",
+          "icc_components": 3
         }
       ]
     }
-  ],
-  "builtins": [],
-  "fixes": []
+  ]
 }

@@ -8,13 +8,11 @@
       "severity": "info",
       "all": [
         {
-          "prop": "doc.dataAfterEof",
-          "op": "==",
+          "check": "document.data_after_eof",
+          "op": "is",
           "value": true
         }
       ]
     }
-  ],
-  "builtins": [],
-  "fixes": []
+  ]
 }

@@ -8,13 +8,12 @@
       "severity": "warning",
       "all": [
         {
-          "prop": "doc.fileSizeBytes",
+          "check": "document.file_size",
           "op": ">",
-          "value": 20971520
+          "value": 20,
+          "unit": "mb"
         }
       ]
     }
-  ],
-  "builtins": [],
-  "fixes": []
+  ]
 }

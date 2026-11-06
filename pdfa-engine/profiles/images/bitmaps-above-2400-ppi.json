@@ -2,15 +2,18 @@
   "kura-profile": 1,
   "name": "Bitmaps above 2400 ppi",
   "description": "Reports 1-bit images above 2400 ppi.",
-  "checks": [],
-  "builtins": [
+  "checks": [
     {
-      "name": "bitmapResolutionAbove",
+      "name": "Bitmap above 2400 ppi",
       "severity": "info",
-      "params": {
-        "ppi": 2400
-      }
+      "all": [
+        {
+          "check": "image.resolution",
+          "op": ">",
+          "value": 2400,
+          "kind": "bitmap"
+        }
+      ]
     }
-  ],
-  "fixes": []
+  ]
 }

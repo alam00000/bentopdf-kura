@@ -1,20 +1,18 @@
 {
   "kura-profile": 1,
   "name": "Type 3 fonts",
-  "description": "Reports type 3 fonts.",
+  "description": "Reports type 3 fonts in use.",
   "checks": [
     {
       "name": "Type 3 fonts",
       "severity": "info",
       "all": [
         {
-          "prop": "font.isType3",
+          "check": "font.type",
           "op": "==",
-          "value": true
+          "value": "type3"
         }
       ]
     }
-  ],
-  "builtins": [],
-  "fixes": []
+  ]
 }

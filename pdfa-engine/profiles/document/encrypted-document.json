@@ -2,12 +2,17 @@
   "kura-profile": 1,
   "name": "Encrypted document",
   "description": "Reports files protected by encryption.",
-  "checks": [],
-  "builtins": [
+  "checks": [
     {
-      "name": "encrypted",
-      "severity": "warning"
+      "name": "Document is encrypted",
+      "severity": "warning",
+      "all": [
+        {
+          "check": "security.encryption",
+          "op": "!=",
+          "value": "none"
+        }
+      ]
     }
-  ],
-  "fixes": []
+  ]
 }

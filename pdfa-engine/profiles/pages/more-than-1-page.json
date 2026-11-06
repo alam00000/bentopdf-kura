@@ -8,13 +8,11 @@
       "severity": "info",
       "all": [
         {
-          "prop": "doc.pages",
+          "check": "document.page_count",
           "op": ">",
           "value": 1
         }
       ]
     }
-  ],
-  "builtins": [],
-  "fixes": []
+  ]
 }

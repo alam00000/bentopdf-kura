@@ -2,15 +2,18 @@
   "kura-profile": 1,
   "name": "Bitmaps below 300 ppi",
   "description": "Reports 1-bit images whose effective resolution is below 300 ppi.",
-  "checks": [],
-  "builtins": [
+  "checks": [
     {
-      "name": "bitmapResolutionBelow",
+      "name": "Bitmap below 300 ppi",
       "severity": "warning",
-      "params": {
-        "ppi": 300
-      }
+      "all": [
+        {
+          "check": "image.resolution",
+          "op": "<",
+          "value": 300,
+          "kind": "bitmap"
+        }
+      ]
     }
-  ],
-  "fixes": []
+  ]
 }

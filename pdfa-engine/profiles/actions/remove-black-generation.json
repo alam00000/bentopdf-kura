@@ -3,11 +3,12 @@
   "name": "Remove black generation",
   "description": "Removes black-generation functions.",
   "checks": [],
-  "builtins": [],
   "fixes": [
     {
-      "op": "removebg",
-      "params": []
+      "fix": "graphics.remove",
+      "settings": [
+        "black_generation"
+      ]
     }
   ]
 }

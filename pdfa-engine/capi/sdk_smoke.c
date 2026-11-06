@@ -74,8 +74,8 @@ int main(int argc, char** argv) {
       opt.preflight_profile = (const char*)prof;
       r = kura_convert(data, len, "2b", &opt);
       int hits = 0;
-      if (r) { size_t i; for (i = 0; i < r->analysis_count; ++i) if (!strcmp(r->analysis[i].code, "PROFILE_HIT")) ++hits; }
-      CHECK(r && r->ok && hits > 0, "profile check reports PROFILE_HIT findings");
+      if (r) { size_t i; for (i = 0; i < r->analysis_count; ++i) if (!strcmp(r->analysis[i].code, "CHECK_HIT")) ++hits; }
+      CHECK(r && r->ok && hits > 0, "profile check reports CHECK_HIT findings");
       if (r) { print_issues("profile", r->analysis, r->analysis_count); kura_result_free(r); }
       free(prof);
     }

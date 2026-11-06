@@ -3,11 +3,9 @@
   "name": "Registration colour to black",
   "description": "Repaints registration-colour content in black.",
   "checks": [],
-  "builtins": [],
   "fixes": [
     {
-      "op": "convertregistrationcolortoblack",
-      "params": []
+      "fix": "spot.registration_to_black"
     }
   ]
 }

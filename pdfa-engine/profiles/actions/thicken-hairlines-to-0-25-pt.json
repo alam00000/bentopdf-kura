@@ -3,15 +3,10 @@
   "name": "Thicken hairlines to 0.25 pt",
   "description": "Raises every stroke thinner than 0.25 pt to 0.25 pt.",
   "checks": [],
-  "builtins": [],
   "fixes": [
     {
-      "op": "increaselinewidth",
-      "params": [
-        "0.25",
-        "",
-        "pt"
-      ]
+      "fix": "ink.min_line_width",
+      "width": "0.25pt"
     }
   ]
 }

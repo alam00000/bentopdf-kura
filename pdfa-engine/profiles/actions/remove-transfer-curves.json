@@ -3,11 +3,12 @@
   "name": "Remove transfer curves",
   "description": "Removes transfer functions.",
   "checks": [],
-  "builtins": [],
   "fixes": [
     {
-      "op": "transfercurves",
-      "params": []
+      "fix": "graphics.remove",
+      "settings": [
+        "transfer"
+      ]
     }
   ]
 }

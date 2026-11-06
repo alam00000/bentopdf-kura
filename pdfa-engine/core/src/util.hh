@@ -1,4 +1,7 @@
 #pragma once
+#include <cstdlib>
+#include <cctype>
+#include <algorithm>
 
 #include <qpdf/QPDFObjGen.hh>
 #include <qpdf/QPDFObjectHandle.hh>
@@ -171,5 +174,32 @@ inline std::string fmtFixed(double v, int decimals) {
     }
   }
   return out;
+}
+inline bool pageWanted(const std::string& spec, int page, int count) {
+  std::string s = lowerAscii(spec);
+  if (s.empty() || s == "all") return true;
+  size_t p = 0;
+  while (p <= s.size()) {
+    size_t c = s.find(',', p);
+    std::string part = s.substr(p, c == std::string::npos ? std::string::npos : c - p);
+    part.erase(std::remove(part.begin(), part.end(), ' '), part.end());
+    if ((part == "odd" && page % 2 == 1) || (part == "even" && page % 2 == 0) || (part == "first" && page == 1) ||
+        (part == "last" && page == count)) {
+      return true;
+    }
+    size_t dash = part.find('-');
+    if (!part.empty() && std::isdigit(static_cast<unsigned char>(part[0])) && dash == std::string::npos &&
+        std::atoi(part.c_str()) == page) {
+      return true;
+    }
+    if (dash != std::string::npos) {
+      int lo = dash == 0 ? 1 : std::atoi(part.c_str());
+      int hi = dash + 1 >= part.size() ? count : (part.compare(dash + 1, std::string::npos, "last") == 0 ? count : std::atoi(part.c_str() + dash + 1));
+      if (page >= lo && page <= hi) return true;
+    }
+    if (c == std::string::npos) break;
+    p = c + 1;
+  }
+  return false;
 }
 }

@@ -3,7 +3,10 @@
 #include <qpdf/QPDF.hh>
 #include <qpdf/QPDFObjGen.hh>
 #include <qpdf/QPDFObjectHandle.hh>
+#include <memory>
+#include <map>
 #include <set>
+#include <vector>
 #include <string>
 
 #include "einvoice.hh"
@@ -23,11 +26,15 @@ struct Ctx {
   int contentPuaFixed = 0;
   std::set<std::string> incompleteScans{};
   int currentPage = 0;  // 1-based page a pass is working on; 0 = document level
+  std::vector<std::shared_ptr<QPDF>> foreignDocs{};
+  std::vector<std::shared_ptr<std::string>> foreignBuffers{};
+  std::map<std::string, std::set<int>> ruleHitPages{};
 
   bool isA() const { return fam == Family::PDFA; }
   bool isX() const { return fam == Family::PDFX || fam == Family::PDFVT; }
   bool isE() const { return fam == Family::PDFE; }
   bool isVT() const { return fam == Family::PDFVT; }
+  bool dualX() const { return opt.dualPrint && fam == Family::PDFA && (part == 2 || part == 4); }
   bool x1a() const { return opt.level == Level::X1A; }
   bool cmykIntentOnly() const {
     return opt.level == Level::X1A || opt.level == Level::VT1;
@@ -67,6 +74,7 @@ struct Ctx {
     i.fixed = fixed;
     i.severity = issueSeverity(code);
     if (currentPage > 0) i.pages.push_back(currentPage);
+    if (opt.trace) opt.trace("issue " + code + (currentPage > 0 ? " p" + std::to_string(currentPage) : "") + ": " + detail);
     res.issues.push_back(std::move(i));
   }
 
@@ -79,6 +87,7 @@ struct Ctx {
   }
 
   void fatal(const std::string& code, const std::string& detail) {
+    if (opt.trace) opt.trace("fatal " + code + ": " + detail);
     res.errorCode = code;
     res.error = detail;
   }

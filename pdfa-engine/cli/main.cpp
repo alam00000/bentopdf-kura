@@ -17,13 +17,23 @@
 #include <cstring>
 #include <fstream>
 #include <iostream>
+#include <map>
+#include <memory>
+#include <mutex>
 #include <string>
 #include <thread>
 #include <vector>
 
+#include <qpdf/QPDF.hh>
+#include <qpdf/QPDFPageDocumentHelper.hh>
+#include <qpdf/QPDFWriter.hh>
+
 #include "pdfa/pdfa.hh"
 #include "../core/src/einvoice.hh"
+#include "../core/src/profile_vars.hh"
+#include "../core/src/uacheck.hh"
 #include "signer.hh"
+#include "tools.hh"
 
 #ifdef KURA_WITH_PDFIUM
 #include "kura/raster.hh"
@@ -37,6 +47,13 @@ constexpr int kExitUsage = 64;
 
 std::atomic<long long> gDeadlineMs{0};
 unsigned gWatchdogSeconds = 0;
+std::string gReportPath, gReportDict, gReportLang = "en", gJobId;
+std::mutex gTraceMu;
+std::vector<std::string> gTraceLines;
+std::ofstream gTraceFile;
+bool gOnlyPdfa = false;
+bool gPureUa = false;
+bool gCertify = false;
 
 long long nowMs() {
   return std::chrono::duration_cast<std::chrono::milliseconds>(
@@ -85,7 +102,7 @@ void printReport(const pdfa::Options& opt, const pdfa::Result& res,
   if (!source.empty()) json += "\"file\":\"" + jsonEscape(source) + "\",";
   if (!output.empty()) json += "\"output\":\"" + jsonEscape(output) + "\",";
   json += "\"ok\":" + std::string(res.ok ? "true" : "false");
-  json += ",\"level\":\"" + pdfa::levelToString(opt.level) + "\"";
+  json += ",\"level\":\"" + (res.level.empty() ? pdfa::levelToString(opt.level) : res.level) + "\"";
   json += ",\"engine\":\"" + std::string(pdfa::kEngineName) + " " +
           std::string(pdfa::kEngineVersion) + "\"";
   if (!res.errorCode.empty()) {
@@ -125,8 +142,15 @@ void printReport(const pdfa::Options& opt, const pdfa::Result& res,
     }
     json += "]";
   }
+  if (!gJobId.empty()) json += ",\"jobId\":\"" + jsonEscape(gJobId) + "\"";
   json += "}";
   std::cout << json << std::endl;
+  if (!gReportPath.empty()) {
+    std::string err;
+    if (!kuratools::writeReport(gReportPath, json, gReportDict, gReportLang, err)) {
+      std::cerr << "report: " << err << std::endl;
+    }
+  }
 }
 
 
@@ -161,17 +185,7 @@ bool runTesseract(const std::string& exe, int, double, int w, int h, const std::
     f << "P6\n" << w << " " << h << "\n255\n";
     f.write(rgb.data(), static_cast<std::streamsize>(rgb.size()));
   }
-  auto quoted = [](const std::string& raw) {
-    std::string out = "'";
-    for (char c : raw) {
-      if (c == '\'') out += "'\\''";
-      else out += c;
-    }
-    return out + "'";
-  };
-  std::string cmd = quoted(exe) + " " + quoted(ppm.string()) + " " + quoted(tmp.string()) +
-                    " tsv 2>/dev/null";
-  int rc = std::system(cmd.c_str());
+  int rc = kuratools::runProcess({exe, ppm.string(), tmp.string(), "tsv"}, 0);
   std::filesystem::path tsv = tmp;
   tsv += ".tsv";
   bool ok = false;
@@ -222,7 +236,111 @@ bool readFile(const char* path, std::string& into) {
   return true;
 }
 
+bool parseVarFile(const std::string& txt, std::map<std::string, std::string>& into) {
+  pdfa::Json j;
+  std::string err;
+  if (!pdfa::parseJson(txt, j, err) || j.type != pdfa::Json::kObj) {
+    std::cerr << "--var-file needs a JSON object {\"name\": value}" << (err.empty() ? "" : ": " + err) << std::endl;
+    return false;
+  }
+  for (const auto& kv : j.obj) into[kv.first] = kv.second.text();
+  return true;
+}
+
+bool readProfile(const std::string& path, pdfa::Json& j) {
+  std::string text, err;
+  std::ifstream in(path, std::ios::binary);
+  if (!in) return false;
+  text.assign((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+  return pdfa::parseJson(text, j, err) && j.type == pdfa::Json::kObj && j.get("kura-profile");
+}
+
+std::string fieldText(const pdfa::Json& j, const char* key) {
+  const pdfa::Json* f = j.get(key);
+  return f ? f->text() : std::string();
+}
+
+size_t entries(const pdfa::Json& j, const char* key) {
+  const pdfa::Json* f = j.get(key);
+  return f ? f->arr.size() : 0;
+}
+
+int listVars(const char* path) {
+  pdfa::Json prof;
+  if (!readProfile(path, prof)) {
+    std::cerr << path << " is not a Kura JSON profile" << std::endl;
+    return kExitRejected;
+  }
+  std::string json = "{\"ok\":true,\"profile\":\"" + jsonEscape(path) + "\",\"scriptEngine\":" +
+                     (pdfa::scriptEngineAvailable() ? "true" : "false") + ",\"variables\":[";
+  bool first = true;
+  for (const pdfa::ProfileVariable& v : pdfa::listProfileVariables(prof)) {
+    std::string choices;
+    for (const std::string& c : v.choices) choices += (choices.empty() ? "\"" : ",\"") + jsonEscape(c) + "\"";
+    json += std::string(first ? "" : ",") + "{\"name\":\"" + jsonEscape(v.name) + "\",\"label\":\"" +
+            jsonEscape(v.label) + "\",\"type\":\"" + jsonEscape(v.type.empty() ? "text" : v.type) +
+            "\",\"default\":\"" + jsonEscape(v.defaultValue) + "\",\"choices\":[" + choices +
+            "],\"script\":" + (v.script.empty() ? "false" : "true") + "}";
+    first = false;
+  }
+  std::cout << json << "]}" << std::endl;
+  return 0;
+}
+
+int listProfiles(const char* dir) {
+  std::error_code ec;
+  std::vector<std::filesystem::path> files;
+  for (auto it = std::filesystem::recursive_directory_iterator(dir, ec);
+       !ec && it != std::filesystem::recursive_directory_iterator(); it.increment(ec)) {
+    if (it->is_regular_file() && it->path().extension() == ".json") files.push_back(it->path());
+  }
+  std::sort(files.begin(), files.end());
+  std::string json = "{\"ok\":true,\"profiles\":[";
+  bool first = true;
+  for (const auto& f : files) {
+    pdfa::Json prof;
+    if (!readProfile(f.string(), prof)) continue;
+    std::string kind = prof.get("plan") ? "plan" : entries(prof, "fixes") || prof.get("convert") ? "fix" : "check";
+    std::string name = fieldText(prof, "name");
+    json += std::string(first ? "" : ",") + "{\"file\":\"" + jsonEscape(f.string()) + "\",\"name\":\"" +
+            jsonEscape(name.empty() ? f.stem().string() : name) + "\",\"description\":\"" +
+            jsonEscape(fieldText(prof, "description")) + "\",\"kind\":\"" + kind +
+            "\",\"checks\":" + std::to_string(entries(prof, "checks")) +
+            ",\"fixes\":" + std::to_string(entries(prof, "fixes")) +
+            ",\"variables\":" + std::to_string(entries(prof, "variables")) + "}";
+    first = false;
+  }
+  std::cout << json << "]}" << std::endl;
+  return 0;
+}
+
+std::string mergePdfs(const std::vector<std::string>& inputs, const std::string& password, std::string& err) {
+  try {
+    QPDF out;
+    out.emptyPDF();
+    QPDFPageDocumentHelper od(out);
+    std::vector<std::unique_ptr<QPDF>> keep;
+    for (const std::string& path : inputs) {
+      auto in = std::make_unique<QPDF>();
+      in->setSuppressWarnings(true);
+      in->processFile(path.c_str(), password.c_str());
+      for (auto& ph : QPDFPageDocumentHelper(*in).getAllPages()) od.addPage(ph, false);
+      keep.push_back(std::move(in));
+    }
+    std::filesystem::path tmp = std::filesystem::temp_directory_path() /
+                                ("kura-merge-" + std::to_string(kura_getpid()) + ".pdf");
+    QPDFWriter w(out, tmp.string().c_str());
+    w.write();
+    return tmp.string();
+  } catch (const std::exception& e) {
+    err = std::string("merge failed: ") + e.what();
+    return std::string();
+  }
+}
+
 struct BatchOptions {
+  int jobs = 1;
+  bool watch = false;
   bool active = false;
   bool recursive = false;
   bool overwrite = false;
@@ -255,11 +373,47 @@ int runOne(pdfa::Options opt, bool embedSource, const std::string& input,
     }
   }
 
+  if (gPureUa) {
+    pdfa::Result ua;
+    ua.level = "ua1";
+    if (!opt.verifyOnly) {
+      ua.errorCode = "LEVEL_VERIFY_ONLY";
+      ua.error = "ua1 is a check-only level; convert with --level 2u --ua";
+    } else {
+      try {
+        for (const pdfa::UaFinding& f : pdfa::uaCheck(data.data(), data.size(), opt.password)) {
+          ua.issues.push_back({"UA_" + f.checkpoint, f.detail, true, 3, std::vector<int>(f.pages.begin(), f.pages.end())});
+        }
+        ua.ok = true;
+        ua.compliant = ua.issues.empty();
+      } catch (const std::exception& e) {
+        ua.errorCode = "PARSE_ERROR";
+        ua.error = e.what();
+      }
+    }
+    printReport(opt, ua, input, "");
+    return !ua.ok ? kExitRejected : ua.compliant ? kExitOk : kExitFindings;
+  }
+
 #ifdef KURA_WITH_PDFIUM
   opt.rasterizePage = kura::makeRasterizer(data.data(), data.size(), opt.password);
 #endif
 
   pdfa::Result res = pdfa::convert(data.data(), data.size(), opt);
+  pdfa::levelFromString(res.level.substr(0, res.level.find('+')), opt.level);
+  if (gOnlyPdfa && res.ok && !opt.verifyOnly && pdfa::levelFamily(opt.level) == pdfa::Family::PDFA) {
+    pdfa::Options v;
+    v.level = opt.level;
+    v.verifyOnly = true;
+    v.password = opt.password;
+    pdfa::Result chk = pdfa::convert(res.pdf.data(), res.pdf.size(), v);
+    if (!chk.compliant) {
+      res.ok = false;
+      res.errorCode = "NOT_PDFA";
+      res.error = "the result does not pass PDF/A validation; no output written";
+      res.pdf.clear();
+    }
+  }
   if (res.ok && !opt.verifyOnly) {
     std::ofstream out(output, std::ios::binary);
     if (!out) {
@@ -268,6 +422,22 @@ int runOne(pdfa::Options opt, bool embedSource, const std::string& input,
     }
     out.write(reinterpret_cast<const char*>(res.pdf.data()),
               static_cast<std::streamsize>(res.pdf.size()));
+  }
+  if (gCertify && res.ok && !opt.verifyOnly) {
+    std::string tmp = output + ".certify.tmp";
+    std::vector<std::string> args{output, tmp, "--level", pdfa::levelToString(opt.level)};
+    if (!opt.password.empty()) args.insert(args.end(), {"--password", opt.password});
+    std::streambuf* old = std::cout.rdbuf(nullptr);
+    int crc = kuratools::toolReport("certify", args);
+    std::cout.rdbuf(old);
+    std::error_code ec;
+    if (crc == 0 || crc == 1) std::filesystem::rename(tmp, output, ec);
+    if (ec || (crc != 0 && crc != 1)) {
+      std::filesystem::remove(tmp, ec);
+      res.issues.push_back({"CERTIFY_FAILED", "could not embed the check certificate", false, 2});
+    } else {
+      res.issues.push_back({"CERTIFIED", "embedded a check certificate (verify with kura tool verify-cert)", true, 1});
+    }
   }
   printReport(opt, res, input, (res.ok && !opt.verifyOnly) ? output : "");
   if (!res.ok) return kExitRejected;
@@ -348,19 +518,99 @@ int einvoiceValidate(const std::string& input, const std::string& password) {
   return c.consistent ? 0 : 1;
 }
 
+std::vector<std::string> systemIccFolders() {
+  std::vector<std::string> dirs;
+  [[maybe_unused]] const char* home = std::getenv("HOME");
+#ifdef _WIN32
+  const char* windir = std::getenv("WINDIR");
+  dirs.push_back(std::string(windir ? windir : "C:\\Windows") + "\\System32\\spool\\drivers\\color");
+#elif defined(__APPLE__)
+  if (home) dirs.push_back(std::string(home) + "/Library/ColorSync/Profiles");
+  dirs.push_back("/Library/ColorSync/Profiles");
+  dirs.push_back("/System/Library/ColorSync/Profiles");
+#else
+  if (home) dirs.push_back(std::string(home) + "/.color/icc");
+  if (home) dirs.push_back(std::string(home) + "/.local/share/color/icc");
+  dirs.push_back("/usr/share/color/icc");
+  dirs.push_back("/usr/local/share/color/icc");
+#endif
+  return dirs;
+}
+
+bool configureColorJob(pdfa::Options& opt, const std::string& target, int intent, bool keepSpots,
+                       unsigned objects) {
+  using R = pdfa::ColorRule;
+  pdfa::ColorJob& j = opt.colorJob;
+  j.enabled = true;
+  std::string t = lowerOf(target);
+  if (t == "device-link") {
+    j.embed = pdfa::ColorJob::kEmbedNone;
+  } else if (t == "cmyk") {
+    j.destProfile = opt.destProfile;
+  } else if (t == "gray" || t == "grey") {
+    j.destName = "Dot Gain 15%";
+    j.embed = pdfa::ColorJob::kEmbedNone;
+  } else if (t == "rgb" || t == "srgb") {
+    j.destName = "sRGB IEC61966-2.1";
+  } else {
+    std::error_code ec;
+    if (std::filesystem::is_regular_file(target, ec)) {
+      if (!readFile(target.c_str(), j.destProfile)) return false;
+    } else {
+      j.destName = target;
+    }
+  }
+  if (!j.destProfile.empty() && j.destProfile.size() >= 20 && j.destProfile.substr(16, 4) == "CMYK") {
+    opt.destProfile = j.destProfile;
+  }
+  bool gray = t == "gray" || t == "grey" || (j.destProfile.size() >= 20 && j.destProfile.substr(16, 4) == "GRAY");
+  bool rgb = t == "rgb" || t == "srgb" || (j.destProfile.size() >= 20 && j.destProfile.substr(16, 4) == "RGB ");
+  auto add = [&](unsigned sources, R::Action a) {
+    R r;
+    r.objects = objects;
+    r.sources = sources;
+    r.action = a;
+    r.intent = intent;
+    j.rules.push_back(r);
+  };
+  if (gray || rgb) {
+    add(R::kAnySource & ~(R::kSpot | R::kRegistration), R::kConvert);
+  } else {
+    add(R::kUncCmyk, R::kNone);
+    add(R::kCalCmyk, R::kDecalibrate);
+    add(R::kUncGray, j.grayToBlackOnly ? R::kConvert : R::kNone);
+    add(R::kUncRgb | R::kCalRgb | R::kCalGray | R::kLab, R::kConvert);
+  }
+  add(R::kSpot | R::kRegistration, keepSpots ? R::kConvertAlternate : R::kConvert);
+  return true;
+}
+
 void printUsage(std::ostream& out) {
   out << "usage: kura --level "
                "{1b,1a,2b,2u,2a,3b,3u,3a,4,4f,4e,x1a,x3,x4,x6,e1,vt1,vt3} [--ua] [--lang <tag>] "
-               "(check only: x4p,x5g,x5n,x5pg,x6n,x6p,vt2) "
+               "(check only: x4p,x5g,x5n,x5pg,x6n,x6p,vt2,ua1) "
                "[--output-condition <name>] [--output-condition-info <text>] "
                "[--registry <url>] [--vt-records <ranges>] [--allow-visual-risk] "
                "[--password <pw>] <input.pdf> [output.pdf]\n"
+               "       colour: [--convert-colors cmyk|gray|rgb|<icc file>|<profile name>] "
+               "[--intent perceptual|relative|saturation|absolute] [--no-bpc] [--keep-spots] "
+               "[--convert-objects text,vector,shading,images,lossy,lossless] [--gray-to-k] "
+               "[--rgb-gray-to-k <pct>] [--ink-limit <pct>] [--device-link <icc>] "
+               "[--icc-folder <dir>] [--dual (with 2b: also PDF/X-4, with 4: also PDF/X-6)]\n"
                "       kura --check --level <level> [options] <input.pdf>\n"
+               "       profiles: [--profile <profile.json>] (level comes from the profile's convert section when --level is left out) "
+               "[--var name=value] [--var-file <json>] [--pages 1-3,5|odd|even] [--merge-inputs a.pdf b.pdf ... out.pdf]\n"
+               "       fallbacks: [--reconvert] [--fallback-raster <dpi>] [--fallback-pages <dpi>] [--fallback-no-text] "
+               "[--only-pdfa] [--certify] [--quick] [--bookmarks <json|headings>]\n"
+               "       jobs: [--job-id <id>] [--trace <log>] [--report <file.html|xml|pdf|txt|json>] "
+               "[--report-lang en|de|fr|es|nl|it] [--report-dict <json>]\n"
+               "       kura --list-profiles <dir> | --list-vars <profile.json>\n"
+               "       kura tool <name> --help (reports, certification, separations, metadata, dieline)\n"
                "       kura --einvoice <invoice.xml> [--level 3b|3u|3a] <input.pdf> [output.pdf]\n"
                "       kura --extract-invoice <input.pdf> [out.xml]\n"
                "       kura --check-invoice <input.pdf>\n"
                "       kura --verify-password [--password <pw>] <input.pdf>\n"
-               "       kura --level <level> --batch [-r] [-d <dir>] [-s <suffix>] [-w] <folder>\n"
+               "       kura --level <level> --batch [-r] [-d <dir>] [-s <suffix>] [-w] [--jobs N] [--watch] <folder>\n"
                "\n"
                "exit status: 0 ok, 1 check found findings, 2 input rejected, 3 timeout, "
                "64 usage error"
@@ -379,11 +629,22 @@ void pdfa_watchdog() {
     long long deadline = gDeadlineMs.load();
     if (deadline && nowMs() >= deadline) break;
   }
-  std::fputs(
-      "{\n  \"ok\": false,\n  \"errorCode\": \"CONVERT_TIMEOUT\",\n"
-      "  \"error\": \"conversion exceeded the time budget; the input may be "
-      "malformed or crafted with pathological nesting\"\n}\n",
-      stdout);
+  std::string partial;
+  {
+    std::lock_guard<std::mutex> lock(gTraceMu);
+    for (const std::string& l : gTraceLines) partial += (partial.empty() ? "\"" : ",\"") + jsonEscape(l) + "\"";
+    if (gTraceFile.is_open()) {
+      gTraceFile << "timeout" << std::endl;
+      gTraceFile.flush();
+    }
+  }
+  std::string out = "{\n  \"ok\": false,\n  \"errorCode\": \"CONVERT_TIMEOUT\",\n"
+                    "  \"error\": \"conversion exceeded the time budget; the input may be "
+                    "malformed or crafted with pathological nesting\"";
+  if (!gJobId.empty()) out += ",\n  \"jobId\": \"" + jsonEscape(gJobId) + "\"";
+  if (!partial.empty()) out += ",\n  \"partial\": [" + partial + "]";
+  out += "\n}\n";
+  std::fputs(out.c_str(), stdout);
   std::fflush(stdout);
   std::_Exit(3);
 }
@@ -469,6 +730,9 @@ int runCompare(const std::string& fileA, const std::string& fileB) {
 #endif
 
 int main(int argc, char** argv) {
+  if (argc >= 2 && std::string(argv[1]) == "tool") {
+    return kuratools::runTool(argc - 2, argv + 2);
+  }
 #ifdef KURA_WITH_PDFIUM
   if (argc >= 4 && std::string(argv[1]) == "--compare") {
     return runCompare(argv[2], argv[3]);
@@ -493,6 +757,14 @@ int main(int argc, char** argv) {
   bool ocr = false;
   std::string ocrExe = "tesseract";
   BatchOptions batch;
+  std::string colorTarget;
+  int colorIntent = -1;
+  bool keepSpots = false;
+  unsigned colorObjects = pdfa::ColorRule::kAllObjects;
+  std::vector<std::string> iccFolders = systemIccFolders();
+  std::vector<std::string> positional;
+  bool mergeInputs = false;
+  std::string mergedTemp;
   for (int i = 1; i < argc; ++i) {
     std::string arg = argv[i];
     if (arg == "--version" || arg == "-v") {
@@ -502,7 +774,10 @@ int main(int argc, char** argv) {
       printUsage(std::cout);
       return kExitOk;
     } else if (arg == "--level" && i + 1 < argc) {
-      if (!pdfa::levelFromString(argv[++i], opt.level)) return usage();
+      std::string lv = argv[++i];
+      gPureUa = lv == "ua1";
+      if (gPureUa) opt.level = pdfa::Level::A2U;
+      else if (!pdfa::levelFromString(lv, opt.level)) return usage();
       haveLevel = true;
     } else if (arg == "--check") {
       opt.verifyOnly = true;
@@ -511,7 +786,8 @@ int main(int argc, char** argv) {
     } else if (arg == "--outline-fonts") {
       opt.outlineFonts = true;
     } else if (arg == "--profile" && i + 1 < argc) {
-      if (!readFile(argv[++i], opt.preflightProfile)) return 1;
+      opt.profilePath = argv[++i];
+      if (!readFile(argv[i], opt.preflightProfile)) return 1;
     } else if (arg == "--ocr") {
       ocr = true;
     } else if (arg == "--ocr-engine" && i + 1 < argc) {
@@ -541,6 +817,12 @@ int main(int argc, char** argv) {
       batch.outDir = argv[++i];
     } else if ((arg == "--suffix" || arg == "-s") && i + 1 < argc) {
       batch.suffix = argv[++i];
+    } else if ((arg == "--jobs" || arg == "-j") && i + 1 < argc) {
+      batch.jobs = std::max(1, std::atoi(argv[++i]));
+      batch.active = true;
+    } else if (arg == "--watch") {
+      batch.watch = true;
+      batch.active = true;
     } else if (arg == "--overwrite" || arg == "-w") {
       batch.overwrite = true;
     } else if (arg == "--embed-source") {
@@ -613,14 +895,204 @@ int main(int argc, char** argv) {
       }
     } else if (arg == "--password" && i + 1 < argc) {
       opt.password = argv[++i];
-    } else if (input.empty()) {
-      input = arg;
-    } else if (output.empty()) {
-      output = arg;
+    } else if (arg == "--profile-url" && i + 1 < argc) {
+      opt.externalProfileUrl = argv[++i];
+    } else if (arg == "--visible-layers") {
+      opt.visibleLayersOnly = true;
+    } else if (arg == "--hits-per-page" && i + 1 < argc) {
+      opt.hitsPerPage = std::max(0, std::atoi(argv[++i]));
+    } else if (arg == "--hits-per-doc" && i + 1 < argc) {
+      opt.hitsPerDoc = std::max(0, std::atoi(argv[++i]));
+    } else if (arg == "--dual") {
+      opt.dualPrint = true;
+    } else if (arg == "--convert-colors" && i + 1 < argc) {
+      colorTarget = argv[++i];
+    } else if (arg == "--intent" && i + 1 < argc) {
+      std::string v = lowerOf(argv[++i]);
+      colorIntent = v == "perceptual" ? 0 : v == "relative" ? 1 : v == "saturation" ? 2
+                    : v == "absolute" ? 3 : -2;
+      if (colorIntent == -2) {
+        std::cerr << "--intent must be perceptual, relative, saturation or absolute" << std::endl;
+        return kExitUsage;
+      }
+    } else if (arg == "--no-bpc") {
+      opt.colorJob.blackPointCompensation = false;
+    } else if (arg == "--keep-spots") {
+      keepSpots = true;
+    } else if (arg == "--convert-objects" && i + 1 < argc) {
+      colorObjects = 0;
+      std::string list = lowerOf(argv[++i]) + ",";
+      size_t start = 0, comma;
+      while ((comma = list.find(',', start)) != std::string::npos) {
+        std::string w = list.substr(start, comma - start);
+        start = comma + 1;
+        if (w == "text") colorObjects |= pdfa::ColorRule::kText;
+        else if (w == "vector") colorObjects |= pdfa::ColorRule::kVector;
+        else if (w == "shading" || w == "shadings") colorObjects |= pdfa::ColorRule::kShading;
+        else if (w == "images") colorObjects |= pdfa::ColorRule::kImageLossy | pdfa::ColorRule::kImageLossless;
+        else if (w == "lossy") colorObjects |= pdfa::ColorRule::kImageLossy;
+        else if (w == "lossless") colorObjects |= pdfa::ColorRule::kImageLossless;
+        else if (!w.empty()) {
+          std::cerr << "--convert-objects takes text, vector, shading, images, lossy, lossless" << std::endl;
+          return kExitUsage;
+        }
+      }
+    } else if (arg == "--gray-to-k") {
+      opt.colorJob.grayToBlackOnly = true;
+    } else if (arg == "--rgb-gray-to-k" && i + 1 < argc) {
+      double pct = std::atof(argv[++i]);
+      opt.colorJob.rgbGrayToBlackOnly = true;
+      for (double& t : opt.colorJob.rgbGrayTolerance) t = pct / 100.0;
+    } else if (arg == "--ink-limit" && i + 1 < argc) {
+      opt.colorJob.inkLimit = std::atof(argv[++i]);
+      if (!(opt.colorJob.inkLimit >= 100 && opt.colorJob.inkLimit <= 400)) {
+        std::cerr << "--ink-limit must be between 100 and 400" << std::endl;
+        return kExitUsage;
+      }
+    } else if (arg == "--device-link" && i + 1 < argc) {
+      if (!readFile(argv[++i], opt.colorJob.deviceLink)) return 1;
+      if (colorTarget.empty()) colorTarget = "device-link";
+    } else if (arg == "--var" && i + 1 < argc) {
+      std::string kv = argv[++i];
+      size_t eq = kv.find('=');
+      if (eq == std::string::npos) return usage();
+      opt.profileVars[kv.substr(0, eq)] = kv.substr(eq + 1);
+    } else if (arg == "--var-file" && i + 1 < argc) {
+      std::string txt;
+      if (!readFile(argv[++i], txt)) return 1;
+      if (!parseVarFile(txt, opt.profileVars)) return kExitUsage;
+    } else if (arg == "--pages" && i + 1 < argc) {
+      opt.pageRange = argv[++i];
+    } else if (arg == "--merge-inputs") {
+      mergeInputs = true;
+    } else if (arg == "--reconvert") {
+      opt.reconvert = true;
+    } else if ((arg == "--fallback-raster" || arg == "--fallback-pages") && i + 1 < argc) {
+      opt.fallbackProblemPagesOnly = arg == "--fallback-pages";
+      opt.fallbackDpi = std::atof(argv[++i]);
+      if (opt.fallbackDpi < 24 || opt.fallbackDpi > 1200) {
+        std::cerr << arg << " needs a resolution between 24 and 1200" << std::endl;
+        return kExitUsage;
+      }
+    } else if (arg == "--fallback-no-text") {
+      opt.rasterKeepText = false;
+    } else if (arg == "--quick" || arg == "-q") {
+      opt.quickCheck = true;
+    } else if (arg == "--certify") {
+      gCertify = true;
+    } else if (arg == "--only-pdfa") {
+      gOnlyPdfa = true;
+    } else if (arg == "--bookmarks" && i + 1 < argc) {
+      std::string b = argv[++i];
+      if (b == "headings") opt.bookmarks = b;
+      else if (!readFile(b.c_str(), opt.bookmarks)) return 1;
+    } else if (arg == "--trace" && i + 1 < argc) {
+      gTraceFile.open(argv[++i], std::ios::app);
+      if (!gTraceFile) {
+        std::cerr << "cannot write trace file" << std::endl;
+        return 1;
+      }
+    } else if (arg == "--list-vars" && i + 1 < argc) {
+      return listVars(argv[++i]);
+    } else if (arg == "--list-profiles" && i + 1 < argc) {
+      return listProfiles(argv[++i]);
+    } else if (arg == "--report" && i + 1 < argc) {
+      gReportPath = argv[++i];
+    } else if (arg == "--report-dict" && i + 1 < argc) {
+      gReportDict = argv[++i];
+    } else if (arg == "--report-lang" && i + 1 < argc) {
+      gReportLang = argv[++i];
+    } else if (arg == "--job-id" && i + 1 < argc) {
+      gJobId = argv[++i];
+    } else if (arg == "--icc-folder" && i + 1 < argc) {
+      iccFolders.insert(iccFolders.begin(), argv[++i]);
     } else {
-      return usage();
+      positional.push_back(arg);
     }
   }
+  if (mergeInputs && positional.size() >= 2) {
+    output = positional.back();
+    positional.pop_back();
+    std::string err;
+    input = mergePdfs(positional, opt.password, err);
+    if (input.empty()) {
+      std::cerr << err << std::endl;
+      return 2;
+    }
+    mergedTemp = input;
+  } else if (positional.size() > 2) {
+    return usage();
+  } else {
+    if (!positional.empty()) input = positional[0];
+    if (positional.size() > 1) output = positional[1];
+  }
+  opt.inputName = input;
+  opt.renderHtml = [](const std::string& src, const std::string& headScript, std::string& pdf) {
+    std::error_code ec;
+    std::filesystem::path dir = std::filesystem::temp_directory_path() /
+                                ("kura-html-" + std::to_string(kura_getpid()) + "-" + std::to_string(nowMs()));
+    std::filesystem::create_directories(dir, ec);
+    std::filesystem::path page = dir / "index.html";
+    if (src.size() > 4 && src.compare(0, 2, "PK") == 0) {
+      std::ofstream(dir / "t.zip", std::ios::binary).write(src.data(), static_cast<std::streamsize>(src.size()));
+#ifdef _WIN32
+      std::vector<std::string> unzip{"tar", "-xf", (dir / "t.zip").string(), "-C", dir.string()};
+#else
+      std::vector<std::string> unzip{"unzip", "-qo", (dir / "t.zip").string(), "-d", dir.string()};
+#endif
+      if (kuratools::runProcess(unzip, 120) != 0) {
+        std::filesystem::remove_all(dir, ec);
+        return false;
+      }
+      if (!std::filesystem::exists(page)) {
+        for (auto it = std::filesystem::recursive_directory_iterator(dir, ec);
+             !ec && it != std::filesystem::recursive_directory_iterator(); it.increment(ec)) {
+          if (it->path().extension() == ".html") {
+            page = it->path();
+            break;
+          }
+        }
+      }
+    } else {
+      std::ofstream(page, std::ios::binary).write(src.data(), static_cast<std::streamsize>(src.size()));
+    }
+    if (!headScript.empty()) {
+      std::string doc;
+      readFile(page.string().c_str(), doc);
+      std::string tag = "<script>" + headScript + "</script>";
+      std::string low = doc;
+      for (char& c : low) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+      size_t at = std::string::npos;
+      for (const char* t : {"<head>", "<head ", "<html>", "<html "}) {
+        size_t h = low.find(t);
+        if (h != std::string::npos && at == std::string::npos) at = low.find('>', h);
+      }
+      doc.insert(at == std::string::npos ? 0 : at + 1, tag);
+      std::ofstream(page, std::ios::binary).write(doc.data(), static_cast<std::streamsize>(doc.size()));
+    }
+    std::string out = (dir / "out.pdf").string();
+    bool ok = kuratools::renderHtmlFile(page.string(), out, dir.string()) && readFile(out.c_str(), pdf);
+    std::filesystem::remove_all(dir, ec);
+    return ok;
+  };
+  if (!haveLevel && !opt.preflightProfile.empty()) {
+    opt.levelFromProfile = true;
+    haveLevel = true;
+  }
+  if (gTraceFile.is_open() || gWatchdogSeconds) {
+    opt.trace = [](const std::string& line) {
+      std::lock_guard<std::mutex> lock(gTraceMu);
+      long long t = std::chrono::duration_cast<std::chrono::milliseconds>(
+                        std::chrono::system_clock::now().time_since_epoch())
+                        .count();
+      if (gTraceLines.size() < 2000) gTraceLines.push_back(line);
+      if (gTraceFile.is_open()) {
+        gTraceFile << t << (gJobId.empty() ? "" : " [" + gJobId + "]") << " " << line << "\n";
+        gTraceFile.flush();
+      }
+    };
+  }
+  opt.inputPath = input;
   if (verifyPw) {
     if (input.empty()) return usage();
     std::string bytes;
@@ -682,6 +1154,17 @@ int main(int argc, char** argv) {
 #endif
   }
 
+  opt.loadIcc = [iccFolders](const std::string& name, std::string& bytes) {
+    return pdfa::loadIccFromFolders(iccFolders, name, bytes);
+  };
+  if (!colorTarget.empty()) {
+    if (!configureColorJob(opt, colorTarget, colorIntent, keepSpots, colorObjects)) {
+      std::cerr << "--convert-colors takes cmyk, gray, rgb, an ICC file or a profile name"
+                << std::endl;
+      return kExitUsage;
+    }
+  }
+
   if (!opt.fontFolder.empty()) {
     std::string folder = opt.fontFolder;
     opt.loadFont = [folder](const std::string& wanted, std::string& psName,
@@ -691,58 +1174,143 @@ int main(int argc, char** argv) {
   }
 
   if (batch.active) {
-    std::vector<std::string> inputs;
-    std::error_code ec;
-    if (std::filesystem::is_directory(input, ec)) {
-      if (batch.recursive) {
-        for (const auto& e : std::filesystem::recursive_directory_iterator(input, ec)) {
-          if (e.is_regular_file() && lowerOf(e.path().extension().string()) == ".pdf") {
-            inputs.push_back(e.path().string());
+    auto collect = [&](std::vector<std::string>& inputs) {
+      std::error_code ec;
+      inputs.clear();
+      if (std::filesystem::is_directory(input, ec)) {
+        auto take = [&](const std::filesystem::directory_entry& e) {
+          if (e.is_regular_file() && lowerOf(e.path().extension().string()) == ".pdf") inputs.push_back(e.path().string());
+        };
+        if (batch.recursive) {
+          for (const auto& e : std::filesystem::recursive_directory_iterator(input, ec)) {
+            if (batch.watch && e.path().generic_string().find("/done/") != std::string::npos) continue;
+            take(e);
           }
+        } else {
+          for (const auto& e : std::filesystem::directory_iterator(input, ec)) take(e);
+        }
+      } else if (!batch.watch) {
+        inputs.push_back(input);
+      }
+      std::sort(inputs.begin(), inputs.end());
+    };
+    auto dstFor = [&](const std::filesystem::path& src, std::filesystem::path& dst) {
+      if (opt.verifyOnly) return true;
+      std::error_code ec;
+      std::filesystem::path dir = batch.outDir.empty() ? src.parent_path() : std::filesystem::path(batch.outDir);
+      std::filesystem::create_directories(dir, ec);
+      dst = dir / (src.stem().string() + batch.suffix + ".pdf");
+      if (std::filesystem::exists(dst) && !batch.overwrite && std::filesystem::equivalent(dst, src, ec)) {
+        std::cerr << "refusing to overwrite input " << dst << "; use --suffix or -w" << std::endl;
+        return false;
+      }
+      return true;
+    };
+    std::vector<std::string> childArgs;
+    for (int i = 1; i < argc; ++i) {
+      std::string a = argv[i];
+      if (a == "--batch" || a == "--recursive" || a == "-r" || a == "--overwrite" || a == "-w" || a == "--watch") continue;
+      if (a == "--jobs" || a == "-j" || a == "--out-dir" || a == "-d" || a == "--suffix" || a == "-s" ||
+          a == "--report" || a == "--trace") {
+        ++i;
+        continue;
+      }
+      if (a == input) continue;
+      childArgs.push_back(a);
+    }
+    auto runBatch = [&](const std::vector<std::string>& inputs, int& failed, int& nonCompliant) {
+      std::vector<std::string> outputs(inputs.size());
+      std::vector<int> codes(inputs.size(), 0);
+      if (batch.jobs > 1 && inputs.size() > 1) {
+        std::atomic<size_t> next{0};
+        std::string self = argv[0];
+        auto worker = [&]() {
+          for (;;) {
+            size_t i = next++;
+            if (i >= inputs.size()) return;
+            std::filesystem::path dst;
+            if (!dstFor(inputs[i], dst)) {
+              codes[i] = 2;
+              continue;
+            }
+            std::vector<std::string> cmd{self};
+            cmd.insert(cmd.end(), childArgs.begin(), childArgs.end());
+            cmd.push_back(inputs[i]);
+            if (!opt.verifyOnly) cmd.push_back(dst.string());
+            int rc = kuratools::runProcess(cmd, 0, &outputs[i]);
+            codes[i] = rc >= 0 && rc <= 3 ? rc : 2;
+            outputs[i].erase(std::remove(outputs[i].begin(), outputs[i].end(), '\r'), outputs[i].end());
+            while (!outputs[i].empty() && (outputs[i].back() == '\n' || outputs[i].back() == '\r')) outputs[i].pop_back();
+          }
+        };
+        std::vector<std::thread> pool;
+        for (int t = 0; t < batch.jobs; ++t) pool.emplace_back(worker);
+        for (auto& t : pool) t.join();
+        for (size_t i = 0; i < inputs.size(); ++i) {
+          std::cout << (outputs[i].empty() ? "{\"file\":\"" + jsonEscape(inputs[i]) + "\",\"ok\":false}" : outputs[i])
+                    << (i + 1 < inputs.size() ? "," : "") << std::endl;
         }
       } else {
-        for (const auto& e : std::filesystem::directory_iterator(input, ec)) {
-          if (e.is_regular_file() && lowerOf(e.path().extension().string()) == ".pdf") {
-            inputs.push_back(e.path().string());
+        for (size_t i = 0; i < inputs.size(); ++i) {
+          std::filesystem::path dst;
+          if (!dstFor(inputs[i], dst)) {
+            codes[i] = 2;
+            continue;
           }
+          codes[i] = runOne(opt, embedSource, inputs[i], dst.string());
+          std::cout << (i + 1 < inputs.size() ? "," : "") << std::endl;
         }
       }
-    } else {
-      inputs.push_back(input);
+      for (int c : codes) {
+        if (c == 2 || c == 3) ++failed;
+        if (c == 1) ++nonCompliant;
+      }
+      return codes;
+    };
+    if (batch.watch) {
+      std::filesystem::path done = std::filesystem::path(input) / "done";
+      std::error_code ec;
+      std::filesystem::create_directories(done, ec);
+      gWatchdogSeconds = 0;
+      gDeadlineMs.store(0);
+      if (batch.jobs < 2) batch.jobs = 2;
+      std::cerr << "watching " << input << " (processed files move to " << done.string() << ")" << std::endl;
+      for (;;) {
+        std::vector<std::string> inputs;
+        collect(inputs);
+        std::vector<std::string> ready;
+        for (const std::string& f : inputs) {
+          auto t = std::filesystem::last_write_time(f, ec);
+          if (!ec && std::filesystem::file_time_type::clock::now() - t > std::chrono::seconds(2)) ready.push_back(f);
+        }
+        if (!ready.empty()) {
+          int failed = 0, nonCompliant = 0;
+          std::cout << "[" << std::endl;
+          runBatch(ready, failed, nonCompliant);
+          std::cout << "]" << std::endl;
+          for (const std::string& f : ready) {
+            std::filesystem::rename(f, done / std::filesystem::path(f).filename(), ec);
+          }
+        }
+        std::this_thread::sleep_for(std::chrono::seconds(2));
+      }
     }
-    std::sort(inputs.begin(), inputs.end());
+    std::vector<std::string> inputs;
+    collect(inputs);
     if (inputs.empty()) {
       std::cerr << "no PDF files found under " << input << std::endl;
       return 1;
     }
     int failed = 0, nonCompliant = 0;
     std::cout << "[" << std::endl;
-    for (size_t i = 0; i < inputs.size(); ++i) {
-      std::filesystem::path src(inputs[i]);
-      std::filesystem::path dst;
-      if (!opt.verifyOnly) {
-        std::filesystem::path dir =
-            batch.outDir.empty() ? src.parent_path() : std::filesystem::path(batch.outDir);
-        std::filesystem::create_directories(dir, ec);
-        dst = dir / (src.stem().string() + batch.suffix + ".pdf");
-        if (std::filesystem::exists(dst) && !batch.overwrite &&
-            std::filesystem::equivalent(dst, src, ec)) {
-          std::cerr << "refusing to overwrite input " << dst << "; use --suffix or -w"
-                    << std::endl;
-          ++failed;
-          continue;
-        }
-      }
-      int rc = runOne(opt, embedSource, inputs[i], dst.string());
-      if (rc == 2) ++failed;
-      if (rc == 1) ++nonCompliant;
-      std::cout << (i + 1 < inputs.size() ? "," : "") << std::endl;
-    }
+    runBatch(inputs, failed, nonCompliant);
     std::cout << "]" << std::endl;
     std::cerr << "batch: " << inputs.size() << " file(s), " << failed << " rejected, "
               << nonCompliant << " non-compliant" << std::endl;
     return failed ? 2 : (nonCompliant ? 1 : 0);
   }
 
-  return runOne(opt, embedSource, input, output);
+  int rc = runOne(opt, embedSource, input, output);
+  if (!mergedTemp.empty()) std::filesystem::remove(mergedTemp);
+  return rc;
 }

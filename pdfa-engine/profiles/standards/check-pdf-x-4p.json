@@ -1,14 +1,19 @@
 {
   "kura-profile": 1,
   "name": "Check PDF/X-4p",
-  "description": "Reports every deviation from PDF/X-4p; validated only; it references an external press profile.",
-  "checks": [],
-  "builtins": [
+  "description": "Reports whether the file meets PDF/X-4p; checked only, because it refers to an external press profile.",
+  "checks": [
     {
-      "name": "conformsTo",
+      "name": "Does not meet PDF/X-4p",
       "severity": "error",
-      "level": "x4p"
+      "all": [
+        {
+          "check": "conformance.meets",
+          "op": "is",
+          "value": false,
+          "standard": "pdfx-4p"
+        }
+      ]
     }
-  ],
-  "fixes": []
+  ]
 }

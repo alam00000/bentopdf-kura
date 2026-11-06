@@ -8,7 +8,7 @@
       "severity": "error",
       "all": [
         {
-          "prop": "stroke.width",
+          "check": "content.stroke_width",
           "op": "<=",
           "value": 0.125
         }
@@ -19,12 +19,12 @@
       "severity": "warning",
       "all": [
         {
-          "prop": "stroke.width",
+          "check": "content.stroke_width",
           "op": "<=",
           "value": 0.25
         },
         {
-          "prop": "stroke.width",
+          "check": "content.stroke_width",
           "op": ">",
           "value": 0.125
         }
@@ -35,12 +35,12 @@
       "severity": "error",
       "all": [
         {
-          "prop": "stroke.width",
+          "check": "content.stroke_width",
           "op": "<=",
           "value": 0.25
         },
         {
-          "prop": "paint.inkCount",
+          "check": "color.inks_used",
           "op": ">",
           "value": 1
         }
@@ -51,9 +51,10 @@
       "severity": "error",
       "all": [
         {
-          "prop": "fill.totalInk",
+          "check": "color.total_ink",
           "op": ">",
-          "value": 320
+          "value": 320,
+          "paint": "fill"
         }
       ]
     },
@@ -62,9 +63,10 @@
       "severity": "error",
       "all": [
         {
-          "prop": "stroke.totalInk",
+          "check": "color.total_ink",
           "op": ">",
-          "value": 320
+          "value": 320,
+          "paint": "stroke"
         }
       ]
     },
@@ -73,19 +75,26 @@
       "severity": "warning",
       "all": [
         {
-          "prop": "content.isText",
+          "check": "content.kind",
           "op": "==",
-          "value": true
+          "value": "text"
         },
         {
-          "prop": "text.size",
+          "check": "text.size",
           "op": "<",
           "value": 12
         },
         {
-          "prop": "paint.richBlackCmyPercent",
+          "check": "color.ink",
+          "op": ">=",
+          "value": 100,
+          "ink": "black"
+        },
+        {
+          "check": "color.ink",
           "op": ">",
-          "value": 0
+          "value": 0,
+          "ink": "cmy_max"
         }
       ]
     },
@@ -94,14 +103,10 @@
       "severity": "error",
       "all": [
         {
-          "prop": "image.ppi",
+          "check": "image.resolution",
           "op": "<",
-          "value": 200
-        },
-        {
-          "prop": "image.ppi",
-          "op": ">",
-          "value": 0
+          "value": 200,
+          "kind": "colour_or_grey"
         }
       ]
     },
@@ -110,18 +115,16 @@
       "severity": "warning",
       "all": [
         {
-          "prop": "image.ppi",
+          "check": "image.resolution",
           "op": "<",
           "value": 300
         },
         {
-          "prop": "image.ppi",
+          "check": "image.resolution",
           "op": ">=",
           "value": 200
         }
       ]
     }
-  ],
-  "builtins": [],
-  "fixes": []
+  ]
 }

@@ -8,13 +8,12 @@
       "severity": "info",
       "all": [
         {
-          "prop": "image.filter",
+          "check": "image.property",
           "op": "contains",
-          "value": "RunLength"
+          "value": "RunLengthDecode",
+          "property": "filter"
         }
       ]
     }
-  ],
-  "builtins": [],
-  "fixes": []
+  ]
 }

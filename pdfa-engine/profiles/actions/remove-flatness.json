@@ -3,11 +3,12 @@
   "name": "Remove flatness",
   "description": "Removes flatness tolerances from graphics states.",
   "checks": [],
-  "builtins": [],
   "fixes": [
     {
-      "op": "removeflatness",
-      "params": []
+      "fix": "graphics.remove",
+      "settings": [
+        "flatness"
+      ]
     }
   ]
 }

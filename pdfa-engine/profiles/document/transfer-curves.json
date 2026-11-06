@@ -2,12 +2,17 @@
   "kura-profile": 1,
   "name": "Transfer curves",
   "description": "Reports transfer functions, which PDF/X forbids.",
-  "checks": [],
-  "builtins": [
+  "checks": [
     {
-      "name": "transferCurves",
-      "severity": "warning"
+      "name": "Transfer curve",
+      "severity": "warning",
+      "all": [
+        {
+          "check": "print.rendering_functions",
+          "op": "includes",
+          "value": "transfer"
+        }
+      ]
     }
-  ],
-  "fixes": []
+  ]
 }

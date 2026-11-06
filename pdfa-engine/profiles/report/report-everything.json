@@ -8,7 +8,7 @@
       "severity": "error",
       "all": [
         {
-          "prop": "stroke.width",
+          "check": "content.stroke_width",
           "op": "<=",
           "value": 0.125
         }
@@ -19,12 +19,12 @@
       "severity": "warning",
       "all": [
         {
-          "prop": "stroke.width",
+          "check": "content.stroke_width",
           "op": "<=",
           "value": 0.25
         },
         {
-          "prop": "stroke.width",
+          "check": "content.stroke_width",
           "op": ">",
           "value": 0.125
         }
@@ -35,12 +35,12 @@
       "severity": "error",
       "all": [
         {
-          "prop": "stroke.width",
+          "check": "content.stroke_width",
           "op": "<=",
           "value": 0.25
         },
         {
-          "prop": "paint.inkCount",
+          "check": "color.inks_used",
           "op": ">",
           "value": 1
         }
@@ -51,12 +51,12 @@
       "severity": "warning",
       "all": [
         {
-          "prop": "text.size",
+          "check": "text.size",
           "op": "<",
           "value": 5
         },
         {
-          "prop": "text.size",
+          "check": "text.size",
           "op": ">",
           "value": 0.01
         }
@@ -67,17 +67,17 @@
       "severity": "warning",
       "all": [
         {
-          "prop": "text.size",
+          "check": "text.size",
           "op": "<",
           "value": 8
         },
         {
-          "prop": "text.size",
+          "check": "text.size",
           "op": ">",
           "value": 0.01
         },
         {
-          "prop": "paint.inkCount",
+          "check": "color.inks_used",
           "op": ">",
           "value": 1
         }
@@ -88,19 +88,19 @@
       "severity": "warning",
       "all": [
         {
-          "prop": "text.size",
+          "check": "text.size",
           "op": "<",
           "value": 8
         },
         {
-          "prop": "text.size",
+          "check": "text.size",
           "op": ">",
           "value": 0.01
         },
         {
-          "prop": "paint.isWhite",
+          "check": "color.ink_mix",
           "op": "==",
-          "value": true
+          "value": "none"
         }
       ]
     },
@@ -109,9 +109,10 @@
       "severity": "error",
       "all": [
         {
-          "prop": "fill.totalInk",
+          "check": "color.total_ink",
           "op": ">",
-          "value": 300
+          "value": 300,
+          "paint": "fill"
         }
       ]
     },
@@ -120,9 +121,10 @@
       "severity": "error",
       "all": [
         {
-          "prop": "stroke.totalInk",
+          "check": "color.total_ink",
           "op": ">",
-          "value": 300
+          "value": 300,
+          "paint": "stroke"
         }
       ]
     },
@@ -131,19 +133,26 @@
       "severity": "warning",
       "all": [
         {
-          "prop": "content.isText",
+          "check": "content.kind",
           "op": "==",
-          "value": true
+          "value": "text"
         },
         {
-          "prop": "text.size",
+          "check": "text.size",
           "op": "<",
           "value": 12
         },
         {
-          "prop": "paint.richBlackCmyPercent",
+          "check": "color.ink",
+          "op": ">=",
+          "value": 100,
+          "ink": "black"
+        },
+        {
+          "check": "color.ink",
           "op": ">",
-          "value": 0
+          "value": 0,
+          "ink": "cmy_max"
         }
       ]
     },
@@ -152,14 +161,18 @@
       "severity": "error",
       "all": [
         {
-          "prop": "paint.isWhite",
+          "check": "color.ink_mix",
           "op": "==",
-          "value": true
+          "value": "none"
         },
         {
-          "prop": "fill.overprint",
-          "op": "==",
-          "value": true
+          "check": "color.overprint",
+          "op": "in",
+          "value": [
+            "on",
+            "on_nonzero_mode"
+          ],
+          "paint": "fill"
         }
       ]
     },
@@ -168,19 +181,20 @@
       "severity": "warning",
       "all": [
         {
-          "prop": "content.isText",
+          "check": "content.kind",
           "op": "==",
-          "value": true
+          "value": "text"
         },
         {
-          "prop": "paint.is100Black",
+          "check": "color.ink_mix",
           "op": "==",
-          "value": true
+          "value": "solid_black"
         },
         {
-          "prop": "fill.overprint",
+          "check": "color.overprint",
           "op": "==",
-          "value": false
+          "value": "off",
+          "paint": "fill"
         }
       ]
     },
@@ -189,8 +203,8 @@
       "severity": "info",
       "all": [
         {
-          "prop": "gstate.transparency",
-          "op": "==",
+          "check": "transparency.used",
+          "op": "is",
           "value": true
         }
       ]
@@ -200,14 +214,12 @@
       "severity": "info",
       "all": [
         {
-          "prop": "gstate.blendMode",
-          "op": "!=",
-          "value": "Normal"
-        },
-        {
-          "prop": "gstate.blendMode",
-          "op": "!=",
-          "value": "Compatible"
+          "check": "transparency.blend_mode",
+          "op": "not_in",
+          "value": [
+            "Normal",
+            "Compatible"
+          ]
         }
       ]
     },
@@ -216,9 +228,9 @@
       "severity": "info",
       "all": [
         {
-          "prop": "paint.isRgb",
+          "check": "color.space",
           "op": "==",
-          "value": true
+          "value": "DeviceRGB"
         }
       ]
     },
@@ -227,9 +239,13 @@
       "severity": "info",
       "all": [
         {
-          "prop": "paint.isSpot",
-          "op": "==",
-          "value": true
+          "check": "color.ink_mix",
+          "op": "in",
+          "value": [
+            "spot_only",
+            "spot_and_black",
+            "process_and_spot"
+          ]
         }
       ]
     },
@@ -238,9 +254,9 @@
       "severity": "info",
       "all": [
         {
-          "prop": "text.isInvisible",
+          "check": "text.rendering",
           "op": "==",
-          "value": true
+          "value": "invisible"
         }
       ]
     },
@@ -249,9 +265,10 @@
       "severity": "info",
       "all": [
         {
-          "prop": "layers.onLayer",
-          "op": "==",
-          "value": true
+          "check": "layer.membership",
+          "op": "count",
+          "value": 0,
+          "compare": ">"
         }
       ]
     },
@@ -260,9 +277,9 @@
       "severity": "info",
       "all": [
         {
-          "prop": "annot.prints",
-          "op": "==",
-          "value": true
+          "check": "annotation.flags",
+          "op": "includes",
+          "value": "print"
         }
       ]
     },
@@ -271,55 +288,103 @@
       "severity": "info",
       "all": [
         {
-          "prop": "page.isRotated",
+          "check": "page.rotation",
+          "op": "!=",
+          "value": 0
+        }
+      ]
+    },
+    {
+      "name": "Image below 300 ppi",
+      "severity": "warning",
+      "all": [
+        {
+          "check": "image.resolution",
+          "op": "<",
+          "value": 300,
+          "kind": "colour_or_grey"
+        }
+      ]
+    },
+    {
+      "name": "Image above 450 ppi",
+      "severity": "info",
+      "all": [
+        {
+          "check": "image.resolution",
+          "op": ">",
+          "value": 450,
+          "kind": "colour_or_grey"
+        }
+      ]
+    },
+    {
+      "name": "Font not embedded",
+      "severity": "error",
+      "all": [
+        {
+          "check": "font.embedding",
           "op": "==",
+          "value": "not_embedded"
+        }
+      ]
+    },
+    {
+      "name": "More than 2 spot colours on a page",
+      "severity": "info",
+      "all": [
+        {
+          "check": "print.plates",
+          "op": "count",
+          "value": 2,
+          "compare": ">",
+          "kind": "spot"
+        }
+      ]
+    },
+    {
+      "name": "Pages differ in size or orientation",
+      "severity": "info",
+      "all": [
+        {
+          "check": "document.pages_uniform",
+          "op": "is",
+          "value": false
+        }
+      ]
+    },
+    {
+      "name": "Empty page",
+      "severity": "info",
+      "all": [
+        {
+          "check": "page.empty",
+          "op": "is",
+          "value": true
+        }
+      ]
+    },
+    {
+      "name": "Document is encrypted",
+      "severity": "info",
+      "all": [
+        {
+          "check": "security.encryption",
+          "op": "!=",
+          "value": "none"
+        }
+      ]
+    },
+    {
+      "name": "Document is damaged",
+      "severity": "warning",
+      "all": [
+        {
+          "check": "document.damaged",
+          "op": "is",
           "value": true
         }
       ]
     }
-  ],
-  "builtins": [
-    {
-      "name": "imageResolutionBelow",
-      "severity": "warning",
-      "params": {
-        "ppi": 300
-      }
-    },
-    {
-      "name": "imageResolutionAbove",
-      "severity": "info",
-      "params": {
-        "ppi": 450
-      }
-    },
-    {
-      "name": "fontsNotEmbedded",
-      "severity": "error"
-    },
-    {
-      "name": "spotColoursMoreThan",
-      "severity": "info",
-      "params": {
-        "count": 2
-      }
-    },
-    {
-      "name": "pagesDifferInSize",
-      "severity": "info"
-    },
-    {
-      "name": "emptyPage",
-      "severity": "info"
-    },
-    {
-      "name": "encrypted",
-      "severity": "info"
-    },
-    {
-      "name": "damaged",
-      "severity": "warning"
-    }
-  ],
-  "fixes": []
+  ]
 }

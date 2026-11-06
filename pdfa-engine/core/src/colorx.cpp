@@ -20,7 +20,9 @@
 #include "assets/cmyk_icc.hh"
 #include "assets/srgb_icc.hh"
 #include "images.hh"
+#include "colorconv.hh"
 #include "limits.hh"
+#include "pdffunc.hh"
 #include "util.hh"
 
 namespace pdfa {
@@ -338,7 +340,23 @@ bool spaceIsRgbLike(QPDFObjectHandle cs, int depth) {
 }
 
 bool spaceIsLab(QPDFObjectHandle cs) {
+  if (cs.isName()) return cs.getName() == "/Lab";
   return cs.isArray() && cs.getArrayNItems() >= 1 && nameOf(cs.getArrayItem(0)) == "/Lab";
+}
+
+QPDFObjectHandle labAlternateFunction(Ctx& ctx, const Xform& xf, QPDFObjectHandle cs, int n) {
+  if (cs.getArrayNItems() < 4) return QPDFObjectHandle();
+  std::unique_ptr<PdfFunction> tint = PdfFunction::loadArray(cs.getArrayItem(3));
+  if (!tint || !xf.lab2cmyk) return QPDFObjectHandle();
+  std::vector<double> dom;
+  for (int i = 0; i < n; ++i) {
+    dom.push_back(0);
+    dom.push_back(1);
+  }
+  return sampledColorFunction(ctx.pdf, n, dom, 4, [&](const double* in, double* out) {
+    double lab[32];
+    return tint->compute(in, lab) && xf.lab1(lab[0], lab[1], lab[2], out);
+  });
 }
 
 void convertImage(Ctx& ctx, ConvertState& st, QPDFObjectHandle image) {
@@ -536,7 +554,11 @@ bool convertSpaceObject(Ctx& ctx, ConvertState& st, QPDFObjectHandle holder,
   X1aGuard g_;
   if (g_.over) { st.failed = true; st.failReason = "colour space nesting too deep"; return false; }
   if (cs.isName()) {
-    if (isRgbClassName(cs.getName())) {
+    if (cs.getName() == "/Lab" && st.xf.lab2cmyk) {
+      holder.replaceKey(key, QPDFObjectHandle::newName("/DeviceCMYK"));
+      if (opFix) (*opFix)[key] = kOpFixLab;
+      ++st.spaces;
+    } else if (isRgbClassName(cs.getName())) {
       holder.replaceKey(key, QPDFObjectHandle::newName("/DeviceCMYK"));
       if (opFix) (*opFix)[key] = kOpFixRgb;
       ++st.spaces;
@@ -597,6 +619,24 @@ bool convertSpaceObject(Ctx& ctx, ConvertState& st, QPDFObjectHandle holder,
       cs.setArrayItem(2, QPDFObjectHandle::newName("/DeviceCMYK"));
       cs.setArrayItem(3, nf);
       ++st.spaces;
+    } else if (spaceIsLab(alt)) {
+      int n = family == "/Separation" ? 1 : cs.getArrayItem(1).isArray() ? cs.getArrayItem(1).getArrayNItems() : 0;
+      QPDFObjectHandle nf = n > 0 ? labAlternateFunction(ctx, st.xf, cs, n) : QPDFObjectHandle();
+      if (!nf.isInitialized()) {
+        st.failed = true;
+        st.failReason = "spot colour with a Lab alternate could not be converted to a CMYK alternate";
+        return false;
+      }
+      cs.setArrayItem(2, QPDFObjectHandle::newName("/DeviceCMYK"));
+      cs.setArrayItem(3, nf);
+      ++st.spaces;
+    } else if (alt.isArray() && alt.getArrayNItems() >= 1 &&
+               (nameOf(alt.getArrayItem(0)) == "/ICCBased" || nameOf(alt.getArrayItem(0)) == "/CalGray")) {
+      int n = nameOf(alt.getArrayItem(0)) == "/CalGray" ? 1 : iccComponents(alt);
+      if (n == 1 || n == 4) {
+        cs.setArrayItem(2, QPDFObjectHandle::newName(n == 1 ? "/DeviceGray" : "/DeviceCMYK"));
+        ++st.spaces;
+      }
     }
     return true;
   }

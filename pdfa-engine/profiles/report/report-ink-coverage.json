@@ -8,9 +8,10 @@
       "severity": "error",
       "all": [
         {
-          "prop": "fill.totalInk",
+          "check": "color.total_ink",
           "op": ">",
-          "value": 300
+          "value": 300,
+          "paint": "fill"
         }
       ]
     },
@@ -19,9 +20,10 @@
       "severity": "error",
       "all": [
         {
-          "prop": "stroke.totalInk",
+          "check": "color.total_ink",
           "op": ">",
-          "value": 300
+          "value": 300,
+          "paint": "stroke"
         }
       ]
     },
@@ -30,23 +32,28 @@
       "severity": "warning",
       "all": [
         {
-          "prop": "content.isText",
+          "check": "content.kind",
           "op": "==",
-          "value": true
+          "value": "text"
         },
         {
-          "prop": "text.size",
+          "check": "text.size",
           "op": "<",
           "value": 12
         },
         {
-          "prop": "paint.richBlackCmyPercent",
+          "check": "color.ink",
+          "op": ">=",
+          "value": 100,
+          "ink": "black"
+        },
+        {
+          "check": "color.ink",
           "op": ">",
-          "value": 0
+          "value": 0,
+          "ink": "cmy_max"
         }
       ]
     }
-  ],
-  "builtins": [],
-  "fixes": []
+  ]
 }

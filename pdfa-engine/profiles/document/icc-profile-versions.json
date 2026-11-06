@@ -1,20 +1,19 @@
 {
   "kura-profile": 1,
   "name": "ICC profile versions",
-  "description": "Reports ICC profiles of version 4 or later, which older RIPs reject.",
+  "description": "Reports ICC profiles of version 4 or later, which older output devices reject.",
   "checks": [
     {
       "name": "ICC version 4 or later",
       "severity": "info",
       "all": [
         {
-          "prop": "icc.version",
-          "op": ">=",
-          "value": 4
+          "check": "icc.header",
+          "op": "matches",
+          "value": "([4-9]|[1-9][0-9]).*",
+          "field": "version"
         }
       ]
     }
-  ],
-  "builtins": [],
-  "fixes": []
+  ]
 }

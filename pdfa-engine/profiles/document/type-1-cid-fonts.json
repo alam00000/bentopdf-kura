@@ -2,12 +2,17 @@
   "kura-profile": 1,
   "name": "Type 1 CID fonts",
   "description": "Reports type 1 cid fonts in use.",
-  "checks": [],
-  "builtins": [
+  "checks": [
     {
-      "name": "type1CidFonts",
-      "severity": "info"
+      "name": "Type 1 CID fonts",
+      "severity": "info",
+      "all": [
+        {
+          "check": "font.type",
+          "op": "==",
+          "value": "cid_type0"
+        }
+      ]
     }
-  ],
-  "fixes": []
+  ]
 }

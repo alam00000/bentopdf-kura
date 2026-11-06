@@ -1,16 +1,16 @@
 {
   "kura-profile": 1,
   "name": "Archive readiness: report",
-  "description": "The things that block archiving: encryption, damage, fonts not embedded, invisible text, layers and JavaScript-bearing annotations.",
+  "description": "The things that block archiving: encryption, damage, fonts not embedded, invisible text, layers and transparency.",
   "checks": [
     {
       "name": "Invisible text",
       "severity": "info",
       "all": [
         {
-          "prop": "text.isInvisible",
+          "check": "text.rendering",
           "op": "==",
-          "value": true
+          "value": "invisible"
         }
       ]
     },
@@ -19,9 +19,10 @@
       "severity": "warning",
       "all": [
         {
-          "prop": "layers.onLayer",
-          "op": "==",
-          "value": true
+          "check": "layer.membership",
+          "op": "count",
+          "value": 0,
+          "compare": ">"
         }
       ]
     },
@@ -30,30 +31,56 @@
       "severity": "info",
       "all": [
         {
-          "prop": "annot.hasOpacity",
+          "check": "annotation.entry",
           "op": "==",
+          "value": "true",
+          "entry": "has_opacity"
+        }
+      ]
+    },
+    {
+      "name": "Document is encrypted",
+      "severity": "error",
+      "all": [
+        {
+          "check": "security.encryption",
+          "op": "!=",
+          "value": "none"
+        }
+      ]
+    },
+    {
+      "name": "Document is damaged",
+      "severity": "error",
+      "all": [
+        {
+          "check": "document.damaged",
+          "op": "is",
+          "value": true
+        }
+      ]
+    },
+    {
+      "name": "Font not embedded",
+      "severity": "error",
+      "all": [
+        {
+          "check": "font.embedding",
+          "op": "==",
+          "value": "not_embedded"
+        }
+      ]
+    },
+    {
+      "name": "Transparency in use",
+      "severity": "info",
+      "all": [
+        {
+          "check": "transparency.used",
+          "op": "is",
           "value": true
         }
       ]
     }
-  ],
-  "builtins": [
-    {
-      "name": "encrypted",
-      "severity": "error"
-    },
-    {
-      "name": "damaged",
-      "severity": "error"
-    },
-    {
-      "name": "fontsNotEmbedded",
-      "severity": "error"
-    },
-    {
-      "name": "transparencyUsed",
-      "severity": "info"
-    }
-  ],
-  "fixes": []
+  ]
 }

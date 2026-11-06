@@ -8,13 +8,11 @@
       "severity": "warning",
       "all": [
         {
-          "prop": "doc.spotRepresentationsInconsistent",
-          "op": "==",
-          "value": true
+          "check": "print.spot_naming",
+          "op": "includes",
+          "value": "same_name_different_look"
         }
       ]
     }
-  ],
-  "builtins": [],
-  "fixes": []
+  ]
 }

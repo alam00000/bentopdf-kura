@@ -8,13 +8,11 @@
       "severity": "info",
       "all": [
         {
-          "prop": "content.isShading",
+          "check": "content.kind",
           "op": "==",
-          "value": true
+          "value": "shading"
         }
       ]
     }
-  ],
-  "builtins": [],
-  "fixes": []
+  ]
 }

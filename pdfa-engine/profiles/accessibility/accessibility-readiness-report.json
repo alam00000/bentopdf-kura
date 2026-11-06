@@ -8,9 +8,9 @@
       "severity": "error",
       "all": [
         {
-          "prop": "text.hasUnicode",
+          "check": "text.unicode",
           "op": "==",
-          "value": false
+          "value": "unmapped"
         }
       ]
     },
@@ -19,33 +19,44 @@
       "severity": "warning",
       "all": [
         {
-          "prop": "text.isInvisible",
+          "check": "text.rendering",
           "op": "==",
-          "value": true
+          "value": "invisible"
         }
       ]
     },
     {
-      "name": "Text used as a clipping path",
+      "name": "Text that clips instead of painting",
       "severity": "warning",
       "all": [
         {
-          "prop": "text.isClippingPath",
+          "check": "text.rendering",
           "op": "==",
-          "value": true
+          "value": "clip_only"
+        }
+      ]
+    },
+    {
+      "name": "Font not embedded",
+      "severity": "error",
+      "all": [
+        {
+          "check": "font.embedding",
+          "op": "==",
+          "value": "not_embedded"
+        }
+      ]
+    },
+    {
+      "name": "Pages differ in size or orientation",
+      "severity": "info",
+      "all": [
+        {
+          "check": "document.pages_uniform",
+          "op": "is",
+          "value": false
         }
       ]
     }
-  ],
-  "builtins": [
-    {
-      "name": "fontsNotEmbedded",
-      "severity": "error"
-    },
-    {
-      "name": "pagesDifferInSize",
-      "severity": "info"
-    }
-  ],
-  "fixes": []
+  ]
 }

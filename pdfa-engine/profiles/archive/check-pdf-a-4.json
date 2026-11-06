@@ -1,14 +1,22 @@
 {
   "kura-profile": 1,
   "name": "Check PDF/A-4",
-  "description": "Reports every deviation from PDF/A-4; convert with --level 4 to fix them.",
-  "checks": [],
-  "builtins": [
+  "description": "Reports whether the file meets PDF/A-4; convert with --level 4 to fix it.",
+  "convert": {
+    "level": "pdfa-4"
+  },
+  "checks": [
     {
-      "name": "conformsTo",
+      "name": "Does not meet PDF/A-4",
       "severity": "error",
-      "level": "4"
+      "all": [
+        {
+          "check": "conformance.meets",
+          "op": "is",
+          "value": false,
+          "standard": "pdfa-4"
+        }
+      ]
     }
-  ],
-  "fixes": []
+  ]
 }

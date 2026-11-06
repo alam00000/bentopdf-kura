@@ -3,14 +3,11 @@
   "name": "Open as two-page spread",
   "description": "Sets the initial view to facing pages with the first page on the right.",
   "checks": [],
-  "builtins": [],
   "fixes": [
     {
-      "op": "setinitialviewdocumentoptions",
-      "params": [
-        "UseNone",
-        "TwoPageRight"
-      ]
+      "fix": "document.set_view",
+      "page_mode": "UseNone",
+      "page_layout": "TwoPageRight"
     }
   ]
 }

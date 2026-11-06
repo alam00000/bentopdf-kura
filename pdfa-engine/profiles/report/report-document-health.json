@@ -8,33 +8,92 @@
       "severity": "info",
       "all": [
         {
-          "prop": "doc.dataAfterEof",
-          "op": "==",
+          "check": "document.data_after_eof",
+          "op": "is",
           "value": true
         }
       ]
-    }
-  ],
-  "builtins": [
-    {
-      "name": "encrypted",
-      "severity": "info"
     },
     {
-      "name": "damaged",
-      "severity": "warning"
-    },
-    {
-      "name": "syntaxProblems",
-      "severity": "warning"
-    },
-    {
-      "name": "pdfVersionBelow",
+      "name": "Document is encrypted",
       "severity": "info",
-      "params": {
-        "version": 1.7
-      }
+      "all": [
+        {
+          "check": "security.encryption",
+          "op": "!=",
+          "value": "none"
+        }
+      ]
+    },
+    {
+      "name": "Document is damaged",
+      "severity": "warning",
+      "all": [
+        {
+          "check": "document.damaged",
+          "op": "is",
+          "value": true
+        }
+      ]
+    },
+    {
+      "name": "Syntax problem",
+      "severity": "warning",
+      "any": [
+        {
+          "all": [
+            {
+              "check": "syntax.content_stream_error",
+              "op": "count",
+              "value": 0,
+              "compare": ">"
+            }
+          ]
+        },
+        {
+          "all": [
+            {
+              "check": "syntax.xref_layout",
+              "op": "count",
+              "value": 0,
+              "compare": ">"
+            }
+          ]
+        },
+        {
+          "all": [
+            {
+              "check": "syntax.object_layout",
+              "op": "count",
+              "value": 0,
+              "compare": ">"
+            }
+          ]
+        },
+        {
+          "all": [
+            {
+              "check": "syntax.broken_reference",
+              "op": "in",
+              "value": [
+                "object",
+                "external_file"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "PDF version below 1.7",
+      "severity": "info",
+      "all": [
+        {
+          "check": "document.pdf_version",
+          "op": "<",
+          "value": 1.7
+        }
+      ]
     }
-  ],
-  "fixes": []
+  ]
 }

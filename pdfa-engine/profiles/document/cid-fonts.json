@@ -1,20 +1,21 @@
 {
   "kura-profile": 1,
   "name": "CID fonts",
-  "description": "Reports cid fonts.",
+  "description": "Reports cid fonts in use.",
   "checks": [
     {
       "name": "CID fonts",
       "severity": "info",
       "all": [
         {
-          "prop": "font.isCid",
-          "op": "==",
-          "value": true
+          "check": "font.type",
+          "op": "in",
+          "value": [
+            "cid_type0",
+            "cid_truetype"
+          ]
         }
       ]
     }
-  ],
-  "builtins": [],
-  "fixes": []
+  ]
 }

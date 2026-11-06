@@ -8,13 +8,11 @@
       "severity": "warning",
       "all": [
         {
-          "prop": "annot.prints",
-          "op": "==",
-          "value": true
+          "check": "annotation.flags",
+          "op": "includes",
+          "value": "print"
         }
       ]
     }
-  ],
-  "builtins": [],
-  "fixes": []
+  ]
 }

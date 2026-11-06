@@ -2,15 +2,18 @@
   "kura-profile": 1,
   "name": "Images below 300 ppi",
   "description": "Reports colour and grayscale images whose effective resolution is below 300 ppi.",
-  "checks": [],
-  "builtins": [
+  "checks": [
     {
-      "name": "imageResolutionBelow",
+      "name": "Image below 300 ppi",
       "severity": "warning",
-      "params": {
-        "ppi": 300
-      }
+      "all": [
+        {
+          "check": "image.resolution",
+          "op": "<",
+          "value": 300,
+          "kind": "colour_or_grey"
+        }
+      ]
     }
-  ],
-  "fixes": []
+  ]
 }

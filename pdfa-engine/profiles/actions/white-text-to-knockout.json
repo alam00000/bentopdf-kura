@@ -3,13 +3,10 @@
   "name": "White text to knockout",
   "description": "Switches overprint off for white text.",
   "checks": [],
-  "builtins": [],
   "fixes": [
     {
-      "op": "knockoutwhite",
-      "params": [
-        "Text"
-      ]
+      "fix": "ink.knockout_white",
+      "objects": "text"
     }
   ]
 }

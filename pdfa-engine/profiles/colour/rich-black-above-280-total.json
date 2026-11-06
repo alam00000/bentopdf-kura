@@ -8,18 +8,24 @@
       "severity": "warning",
       "all": [
         {
-          "prop": "paint.richBlackCmyPercent",
-          "op": ">",
-          "value": 0
+          "check": "color.ink",
+          "op": ">=",
+          "value": 100,
+          "ink": "black"
         },
         {
-          "prop": "fill.totalInk",
+          "check": "color.ink",
           "op": ">",
-          "value": 280
+          "value": 0,
+          "ink": "cmy_max"
+        },
+        {
+          "check": "color.total_ink",
+          "op": ">",
+          "value": 280,
+          "paint": "fill"
         }
       ]
     }
-  ],
-  "builtins": [],
-  "fixes": []
+  ]
 }

@@ -8,13 +8,12 @@
       "severity": "info",
       "all": [
         {
-          "prop": "page.hasOutputIntent",
-          "op": "==",
-          "value": true
+          "check": "page.output_intent",
+          "op": "!=",
+          "value": "none",
+          "subtype": "any"
         }
       ]
     }
-  ],
-  "builtins": [],
-  "fixes": []
+  ]
 }

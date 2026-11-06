@@ -8,13 +8,11 @@
       "severity": "error",
       "all": [
         {
-          "prop": "content.unknownOperator",
-          "op": "==",
-          "value": true
+          "check": "syntax.content_stream_error",
+          "op": "includes",
+          "value": "unknown_operator"
         }
       ]
     }
-  ],
-  "builtins": [],
-  "fixes": []
+  ]
 }

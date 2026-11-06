@@ -2,13 +2,19 @@
   "kura-profile": 1,
   "name": "Embedded files conform to PDF/A-2b",
   "description": "Checks that every embedded PDF is itself PDF/A-2b, as a PDF/A-2 container requires.",
-  "checks": [],
-  "builtins": [
+  "checks": [
     {
-      "name": "embeddedFilesConformTo",
+      "name": "Attachment fails PDF/A-2b",
       "severity": "error",
-      "level": "2b"
+      "all": [
+        {
+          "check": "conformance.meets",
+          "op": "is",
+          "value": false,
+          "standard": "pdfa-2b",
+          "embedded_files": true
+        }
+      ]
     }
-  ],
-  "fixes": []
+  ]
 }

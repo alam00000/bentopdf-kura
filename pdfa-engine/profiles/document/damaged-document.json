@@ -1,13 +1,18 @@
 {
   "kura-profile": 1,
   "name": "Damaged document",
-  "description": "Reports files the parser had to repair.",
-  "checks": [],
-  "builtins": [
+  "description": "Reports files that had to be repaired while reading.",
+  "checks": [
     {
-      "name": "damaged",
-      "severity": "error"
+      "name": "Document is damaged",
+      "severity": "error",
+      "all": [
+        {
+          "check": "document.damaged",
+          "op": "is",
+          "value": true
+        }
+      ]
     }
-  ],
-  "fixes": []
+  ]
 }

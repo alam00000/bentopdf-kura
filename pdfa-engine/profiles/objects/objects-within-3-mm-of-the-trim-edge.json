@@ -8,14 +8,15 @@
       "severity": "info",
       "all": [
         {
-          "prop": "content.distanceInsideTrimBox",
+          "check": "content.distance_to_box",
           "op": "<",
-          "value": 8.5
+          "value": 3,
+          "box": "trim",
+          "side": "inside",
+          "unit": "mm"
         }
       ],
       "scope": "trim"
     }
-  ],
-  "builtins": [],
-  "fixes": []
+  ]
 }

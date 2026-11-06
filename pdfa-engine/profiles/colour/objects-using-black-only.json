@@ -8,13 +8,14 @@
       "severity": "info",
       "all": [
         {
-          "prop": "paint.isBlackOnly",
-          "op": "==",
-          "value": true
+          "check": "color.ink_mix",
+          "op": "in",
+          "value": [
+            "black_only",
+            "solid_black"
+          ]
         }
       ]
     }
-  ],
-  "builtins": [],
-  "fixes": []
+  ]
 }

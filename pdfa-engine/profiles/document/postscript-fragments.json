@@ -1,13 +1,22 @@
 {
   "kura-profile": 1,
   "name": "PostScript fragments",
-  "description": "Reports PostScript XObjects, which most renderers ignore.",
-  "checks": [],
-  "builtins": [
+  "description": "Reports PostScript code, which most viewers ignore.",
+  "checks": [
     {
-      "name": "postscript",
-      "severity": "warning"
+      "name": "PostScript fragment",
+      "severity": "warning",
+      "all": [
+        {
+          "check": "syntax.postscript",
+          "op": "in",
+          "value": [
+            "operator",
+            "xobject",
+            "form"
+          ]
+        }
+      ]
     }
-  ],
-  "fixes": []
+  ]
 }

@@ -8,9 +8,13 @@
       "severity": "warning",
       "all": [
         {
-          "prop": "paint.isSpot",
-          "op": "==",
-          "value": true
+          "check": "color.ink_mix",
+          "op": "in",
+          "value": [
+            "spot_only",
+            "spot_and_black",
+            "process_and_spot"
+          ]
         }
       ]
     },
@@ -19,9 +23,9 @@
       "severity": "error",
       "all": [
         {
-          "prop": "paint.isRegistration",
+          "check": "color.ink_mix",
           "op": "==",
-          "value": true
+          "value": "registration"
         }
       ]
     },
@@ -30,14 +34,154 @@
       "severity": "info",
       "all": [
         {
-          "prop": "text.size",
+          "check": "text.size",
           "op": "<",
           "value": 6
         },
         {
-          "prop": "text.size",
+          "check": "text.size",
           "op": ">",
           "value": 0.01
+        }
+      ]
+    },
+    {
+      "name": "Page scaling in use",
+      "severity": "warning",
+      "all": [
+        {
+          "check": "page.user_unit",
+          "op": "!=",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "name": "Image above 150 ppi",
+      "severity": "warning",
+      "all": [
+        {
+          "check": "image.resolution",
+          "op": ">",
+          "value": 150,
+          "kind": "colour_or_grey"
+        }
+      ]
+    },
+    {
+      "name": "Bitmap above 600 ppi",
+      "severity": "info",
+      "all": [
+        {
+          "check": "image.resolution",
+          "op": ">",
+          "value": 600,
+          "kind": "bitmap"
+        }
+      ]
+    },
+    {
+      "name": "Image below 72 ppi",
+      "severity": "info",
+      "all": [
+        {
+          "check": "image.resolution",
+          "op": "<",
+          "value": 72,
+          "kind": "colour_or_grey"
+        }
+      ]
+    },
+    {
+      "name": "Font not embedded",
+      "severity": "error",
+      "all": [
+        {
+          "check": "font.embedding",
+          "op": "==",
+          "value": "not_embedded"
+        }
+      ]
+    },
+    {
+      "name": "Document is encrypted",
+      "severity": "warning",
+      "all": [
+        {
+          "check": "security.encryption",
+          "op": "!=",
+          "value": "none"
+        }
+      ]
+    },
+    {
+      "name": "Document is damaged",
+      "severity": "error",
+      "all": [
+        {
+          "check": "document.damaged",
+          "op": "is",
+          "value": true
+        }
+      ]
+    },
+    {
+      "name": "Syntax problem",
+      "severity": "error",
+      "any": [
+        {
+          "all": [
+            {
+              "check": "syntax.content_stream_error",
+              "op": "count",
+              "value": 0,
+              "compare": ">"
+            }
+          ]
+        },
+        {
+          "all": [
+            {
+              "check": "syntax.xref_layout",
+              "op": "count",
+              "value": 0,
+              "compare": ">"
+            }
+          ]
+        },
+        {
+          "all": [
+            {
+              "check": "syntax.object_layout",
+              "op": "count",
+              "value": 0,
+              "compare": ">"
+            }
+          ]
+        },
+        {
+          "all": [
+            {
+              "check": "syntax.broken_reference",
+              "op": "in",
+              "value": [
+                "object",
+                "external_file"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Uncompressed image",
+      "severity": "warning",
+      "all": [
+        {
+          "check": "image.property",
+          "op": "==",
+          "value": "false",
+          "property": "compressed"
         }
       ]
     },
@@ -46,55 +190,12 @@
       "severity": "error",
       "all": [
         {
-          "prop": "doc.fileSizeBytes",
+          "check": "document.file_size",
           "op": ">",
-          "value": 5242880
+          "value": 5,
+          "unit": "mb"
         }
       ]
     }
-  ],
-  "builtins": [
-    {
-      "name": "imageResolutionAbove",
-      "severity": "warning",
-      "params": {
-        "ppi": 150
-      }
-    },
-    {
-      "name": "bitmapResolutionAbove",
-      "severity": "info",
-      "params": {
-        "ppi": 600
-      }
-    },
-    {
-      "name": "imageResolutionBelow",
-      "severity": "info",
-      "params": {
-        "ppi": 72
-      }
-    },
-    {
-      "name": "fontsNotEmbedded",
-      "severity": "error"
-    },
-    {
-      "name": "encrypted",
-      "severity": "warning"
-    },
-    {
-      "name": "damaged",
-      "severity": "error"
-    },
-    {
-      "name": "syntaxProblems",
-      "severity": "error"
-    },
-    {
-      "name": "uncompressedImages",
-      "severity": "warning"
-    }
-  ],
-  "fixes": []
+  ]
 }

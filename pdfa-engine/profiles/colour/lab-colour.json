@@ -8,13 +8,11 @@
       "severity": "info",
       "all": [
         {
-          "prop": "paint.isLab",
+          "check": "color.space",
           "op": "==",
-          "value": true
+          "value": "Lab"
         }
       ]
     }
-  ],
-  "builtins": [],
-  "fixes": []
+  ]
 }

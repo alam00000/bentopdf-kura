@@ -1,15 +1,12 @@
 {
   "kura-profile": 1,
   "name": "Set rendering intent to RelativeColorimetric",
-  "description": "Sets every graphics state's rendering intent to RelativeColorimetric.",
+  "description": "Sets the rendering intent of every object to RelativeColorimetric.",
   "checks": [],
-  "builtins": [],
   "fixes": [
     {
-      "op": "setrenderingintent",
-      "params": [
-        "RelativeColorimetric"
-      ]
+      "fix": "graphics.set",
+      "rendering_intent": "RelativeColorimetric"
     }
   ]
 }

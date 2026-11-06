@@ -42,7 +42,8 @@ emscripten::val convertJs(emscripten::val data, const std::string& level,
                           emscripten::val opts) {
   emscripten::val result = emscripten::val::object();
   pdfa::Options opt;
-  if (!pdfa::levelFromString(level, opt.level)) {
+  opt.levelFromProfile = level.empty();
+  if (!level.empty() && !pdfa::levelFromString(level, opt.level)) {
     result.set("ok", false);
     result.set("errorCode", std::string("BAD_LEVEL"));
     result.set("error", std::string("unknown conformance level: ") + level);
@@ -72,6 +73,14 @@ emscripten::val convertJs(emscripten::val data, const std::string& level,
   opt.defaultGrayProfile = optBytes(opts, "defaultGray");
   opt.rasterizeAllPages = optBool(opts, "rasterizePages");
   opt.preflightProfile = optString(opts, "profile");
+  if (!opts.isUndefined() && !opts.isNull() && !opts["vars"].isUndefined() && !opts["vars"].isNull()) {
+    emscripten::val vars = opts["vars"];
+    emscripten::val keys = emscripten::val::global("Object").call<emscripten::val>("keys", vars);
+    for (unsigned k = 0, n = keys["length"].as<unsigned>(); k < n; ++k) {
+      std::string name = keys[k].as<std::string>();
+      opt.profileVars[name] = emscripten::val::global("String")(vars[name]).as<std::string>();
+    }
+  }
   {
     emscripten::val dpi = opts.isUndefined() || opts.isNull() ? emscripten::val::undefined()
                                                              : opts["rasterDpi"];
@@ -87,7 +96,7 @@ emscripten::val convertJs(emscripten::val data, const std::string& level,
 #endif
   pdfa::Result res = pdfa::convert(input.data(), input.size(), opt);
   result.set("ok", res.ok);
-  result.set("level", pdfa::levelToString(opt.level));
+  result.set("level", res.level.empty() ? pdfa::levelToString(opt.level) : res.level);
   result.set("engine", std::string(pdfa::kEngineVersion));
   if (!res.errorCode.empty()) {
     result.set("errorCode", res.errorCode);

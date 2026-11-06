@@ -8,13 +8,11 @@
       "severity": "info",
       "all": [
         {
-          "prop": "content.isStrokedOnly",
+          "check": "content.painting",
           "op": "==",
-          "value": true
+          "value": "stroke"
         }
       ]
     }
-  ],
-  "builtins": [],
-  "fixes": []
+  ]
 }

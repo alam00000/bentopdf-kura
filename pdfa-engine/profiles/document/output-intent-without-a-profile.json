@@ -8,18 +8,13 @@
       "severity": "warning",
       "all": [
         {
-          "prop": "outputIntent.hasProfile",
+          "check": "output_intent.entry",
           "op": "==",
-          "value": false
-        },
-        {
-          "prop": "outputIntent.count",
-          "op": ">",
-          "value": 0
+          "value": "false",
+          "subtype": "any",
+          "entry": "has_profile"
         }
       ]
     }
-  ],
-  "builtins": [],
-  "fixes": []
+  ]
 }

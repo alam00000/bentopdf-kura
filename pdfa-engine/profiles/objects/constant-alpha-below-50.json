@@ -8,9 +8,10 @@
       "severity": "info",
       "all": [
         {
-          "prop": "fill.alpha",
+          "check": "transparency.alpha",
           "op": "<",
-          "value": 0.5
+          "value": 0.5,
+          "paint": "fill"
         }
       ]
     },
@@ -19,13 +20,12 @@
       "severity": "info",
       "all": [
         {
-          "prop": "stroke.alpha",
+          "check": "transparency.alpha",
           "op": "<",
-          "value": 0.5
+          "value": 0.5,
+          "paint": "stroke"
         }
       ]
     }
-  ],
-  "builtins": [],
-  "fixes": []
+  ]
 }

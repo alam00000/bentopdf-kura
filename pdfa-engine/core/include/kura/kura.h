@@ -60,6 +60,7 @@ typedef struct {
   const char* font_folders;  /* newline-separated folders searched for missing fonts */
   const kura_ocr_page* ocr_pages;  /* words to lay down as invisible text */
   size_t ocr_page_count;
+  const char* profile_vars;  /* JSON object {"name": value} overriding the profile's variables */
 } kura_options;
 
 /* A finding.  severity: 1 info, 2 warning, 3 error.  pages are 1-based; an

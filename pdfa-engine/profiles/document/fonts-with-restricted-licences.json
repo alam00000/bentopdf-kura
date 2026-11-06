@@ -1,20 +1,18 @@
 {
   "kura-profile": 1,
   "name": "Fonts with restricted licences",
-  "description": "Reports fonts with restricted licences.",
+  "description": "Reports fonts with restricted licences in use.",
   "checks": [
     {
       "name": "Fonts with restricted licences",
       "severity": "info",
       "all": [
         {
-          "prop": "font.restrictedLicense",
+          "check": "font.license",
           "op": "==",
-          "value": true
+          "value": "restricted"
         }
       ]
     }
-  ],
-  "builtins": [],
-  "fixes": []
+  ]
 }

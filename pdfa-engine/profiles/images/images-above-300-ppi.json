@@ -1,16 +1,19 @@
 {
   "kura-profile": 1,
   "name": "Images above 300 ppi",
-  "description": "Reports images above 300 ppi, candidates for downsampling with --image-max-ppi.",
-  "checks": [],
-  "builtins": [
+  "description": "Reports images above 300 ppi, candidates for downsampling.",
+  "checks": [
     {
-      "name": "imageResolutionAbove",
+      "name": "Image above 300 ppi",
       "severity": "info",
-      "params": {
-        "ppi": 300
-      }
+      "all": [
+        {
+          "check": "image.resolution",
+          "op": ">",
+          "value": 300,
+          "kind": "colour_or_grey"
+        }
+      ]
     }
-  ],
-  "fixes": []
+  ]
 }

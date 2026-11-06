@@ -1,14 +1,22 @@
 {
   "kura-profile": 1,
   "name": "Check PDF/X-4",
-  "description": "Reports every deviation from PDF/X-4; convert with --level x4 to fix them.",
-  "checks": [],
-  "builtins": [
+  "description": "Reports whether the file meets PDF/X-4; convert with --level x4 to fix it.",
+  "convert": {
+    "level": "pdfx-4"
+  },
+  "checks": [
     {
-      "name": "conformsTo",
+      "name": "Does not meet PDF/X-4",
       "severity": "error",
-      "level": "x4"
+      "all": [
+        {
+          "check": "conformance.meets",
+          "op": "is",
+          "value": false,
+          "standard": "pdfx-4"
+        }
+      ]
     }
-  ],
-  "fixes": []
+  ]
 }

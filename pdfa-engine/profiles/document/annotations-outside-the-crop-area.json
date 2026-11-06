@@ -1,0 +1,21 @@
+{
+  "kura-profile": 1,
+  "name": "Annotations outside the crop area",
+  "description": "Reports annotations lying outside the visible page area or with no size.",
+  "checks": [
+    {
+      "name": "Annotation outside the crop box",
+      "severity": "info",
+      "all": [
+        {
+          "check": "annotation.outside_crop",
+          "op": "in",
+          "value": [
+            "outside",
+            "zero_size"
+          ]
+        }
+      ]
+    }
+  ]
+}

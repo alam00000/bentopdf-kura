@@ -8,18 +8,16 @@
       "severity": "warning",
       "all": [
         {
-          "prop": "text.size",
+          "check": "text.size",
           "op": "<",
           "value": 8
         },
         {
-          "prop": "text.size",
+          "check": "text.size",
           "op": ">",
           "value": 0.01
         }
       ]
     }
-  ],
-  "builtins": [],
-  "fixes": []
+  ]
 }

@@ -3,13 +3,10 @@
   "name": "Clip content to the trim box",
   "description": "Removes anything drawn outside the trim box.",
   "checks": [],
-  "builtins": [],
   "fixes": [
     {
-      "op": "removeobjectsoutofbox",
-      "params": [
-        "TrimBox"
-      ]
+      "fix": "content.remove_outside",
+      "box": "trim"
     }
   ]
 }

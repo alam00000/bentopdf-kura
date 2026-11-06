@@ -1,3 +1,4 @@
+#include <cmath>
 #include <qpdf/QPDF.hh>
 #include <qpdf/QPDFPageDocumentHelper.hh>
 #include <qpdf/QPDFPageObjectHelper.hh>
@@ -36,11 +37,17 @@ Box readBox(QPDFObjectHandle arr) {
 
 QPDFObjectHandle boxArray(const Box& b) {
   QPDFObjectHandle a = QPDFObjectHandle::newArray();
-  a.appendItem(QPDFObjectHandle::newReal(b.x1, 4));
-  a.appendItem(QPDFObjectHandle::newReal(b.y1, 4));
-  a.appendItem(QPDFObjectHandle::newReal(b.x2, 4));
-  a.appendItem(QPDFObjectHandle::newReal(b.y2, 4));
+  a.appendItem(QPDFObjectHandle::newReal(b.x1, 6));
+  a.appendItem(QPDFObjectHandle::newReal(b.y1, 6));
+  a.appendItem(QPDFObjectHandle::newReal(b.x2, 6));
+  a.appendItem(QPDFObjectHandle::newReal(b.y2, 6));
   return a;
+}
+
+bool sameBox(const Box& a, const Box& b) {
+  const double eps = 0.001;
+  return std::fabs(a.x1 - b.x1) < eps && std::fabs(a.y1 - b.y1) < eps && std::fabs(a.x2 - b.x2) < eps &&
+         std::fabs(a.y2 - b.y2) < eps;
 }
 
 Box clampTo(const Box& inner, const Box& outer) {
@@ -64,9 +71,7 @@ void fixPageBoxes(Ctx&, QPDFPageObjectHelper& ph, bool& boxAdded, bool& boxFixed
   Box crop = readBox(ph.getAttribute("/CropBox", true));
   Box effCrop = crop.ok ? clampTo(crop, media) : media;
   if (crop.ok && !effCrop.ok) effCrop = media;
-  if (crop.ok &&
-      (effCrop.x1 != crop.x1 || effCrop.y1 != crop.y1 || effCrop.x2 != crop.x2 ||
-       effCrop.y2 != crop.y2)) {
+  if (crop.ok && !sameBox(effCrop, crop)) {
     page.replaceKey("/CropBox", boxArray(effCrop));
     boxFixed = true;
   }
@@ -84,8 +89,7 @@ void fixPageBoxes(Ctx&, QPDFPageObjectHelper& ph, bool& boxAdded, bool& boxFixed
   } else if (trim.ok) {
     Box clamped = clampTo(trim, effCrop);
     if (!clamped.ok) clamped = effCrop;
-    if (clamped.x1 != trim.x1 || clamped.y1 != trim.y1 || clamped.x2 != trim.x2 ||
-        clamped.y2 != trim.y2) {
+    if (!sameBox(clamped, trim)) {
       page.replaceKey("/TrimBox", boxArray(clamped));
       trim = clamped;
       boxFixed = true;
@@ -93,8 +97,7 @@ void fixPageBoxes(Ctx&, QPDFPageObjectHelper& ph, bool& boxAdded, bool& boxFixed
   } else if (art.ok) {
     Box clamped = clampTo(art, effCrop);
     if (!clamped.ok) clamped = effCrop;
-    if (clamped.x1 != art.x1 || clamped.y1 != art.y1 || clamped.x2 != art.x2 ||
-        clamped.y2 != art.y2) {
+    if (!sameBox(clamped, art)) {
       page.replaceKey("/ArtBox", boxArray(clamped));
       art = clamped;
       boxFixed = true;
@@ -111,8 +114,7 @@ void fixPageBoxes(Ctx&, QPDFPageObjectHelper& ph, bool& boxAdded, bool& boxFixed
       clamped.x2 = std::max(clamped.x2, target.x2);
       clamped.y2 = std::max(clamped.y2, target.y2);
     }
-    if (clamped.x1 != bleed.x1 || clamped.y1 != bleed.y1 ||
-        clamped.x2 != bleed.x2 || clamped.y2 != bleed.y2) {
+    if (!sameBox(clamped, bleed)) {
       page.replaceKey("/BleedBox", boxArray(clamped));
       boxFixed = true;
     }

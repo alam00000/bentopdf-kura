@@ -3,15 +3,11 @@
   "name": "Stamp DRAFT",
   "description": "Places the word DRAFT on every page.",
   "checks": [],
-  "builtins": [],
   "fixes": [
     {
-      "op": "placetext",
-      "params": [
-        "DRAFT",
-        "",
-        "36"
-      ]
+      "fix": "place.text",
+      "text": "DRAFT",
+      "size": "36pt"
     }
   ]
 }

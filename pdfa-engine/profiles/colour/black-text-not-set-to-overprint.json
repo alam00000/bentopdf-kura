@@ -8,23 +8,22 @@
       "severity": "warning",
       "all": [
         {
-          "prop": "content.isText",
+          "check": "content.kind",
           "op": "==",
-          "value": true
+          "value": "text"
         },
         {
-          "prop": "paint.is100Black",
+          "check": "color.ink_mix",
           "op": "==",
-          "value": true
+          "value": "solid_black"
         },
         {
-          "prop": "fill.overprint",
+          "check": "color.overprint",
           "op": "==",
-          "value": false
+          "value": "off",
+          "paint": "fill"
         }
       ]
     }
-  ],
-  "builtins": [],
-  "fixes": []
+  ]
 }

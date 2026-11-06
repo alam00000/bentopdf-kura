@@ -2,6 +2,8 @@
 
 #include <cstddef>
 #include <functional>
+#include <map>
+#include <set>
 #include <string>
 #include <utility>
 #include <vector>
@@ -15,6 +17,47 @@ enum class Level { A1B, A1A, A2B, A2U, A2A, A3B, A3U, A3A, A4, A4F, A4E,
                    X4P, X5G, X5N, X5PG, X6N, X6P, VT2 };
 
 enum class Family { PDFA, PDFX, PDFE, PDFVT };
+
+struct ColorRule {
+  enum Objects : unsigned {
+    kText = 1, kVector = 2, kShading = 4, kImageLossy = 8, kImageLossless = 16, kAllObjects = 31
+  };
+  enum Sources : unsigned {
+    kUncRgb = 1, kCalRgb = 2, kUncCmyk = 4, kCalCmyk = 8, kUncGray = 16, kCalGray = 32,
+    kLab = 64, kSpot = 128, kRegistration = 256, kAnySource = 511
+  };
+  enum Action { kConvert, kNone, kDecalibrate, kConvertAlternate, kDecalibrateConvert, kTag };
+  unsigned objects = kAllObjects;
+  unsigned sources = kAnySource;
+  Action action = kConvert;
+  int intent = -1;
+};
+
+struct ColorJob {
+  enum Embed { kEmbedNone, kEmbedOutputIntent, kEmbedSource };
+  bool enabled = false;
+  std::string destName;
+  std::string destProfile;
+  std::string deviceLink;
+  std::string rgbName = "sRGB IEC61966-2.1";
+  std::string cmykName;
+  std::string grayName = "Dot Gain 15%";
+  Embed embed = kEmbedOutputIntent;
+  bool blackPointCompensation = true;
+  bool preserveBlack = true;
+  bool softMasks = true;
+  bool processSeparationsAsCmyk = false;
+  bool grayToBlackOnly = false;
+  bool rgbGrayToBlackOnly = false;
+  double rgbGrayTolerance[3] = {0, 0, 0};
+  bool blendSpaceToDest = true;
+  double inkLimit = 0;
+  std::vector<std::pair<unsigned, std::vector<double>>> toneCurves;
+  bool quick = false;
+  double quickBlackGeneration = 1.0;
+  double quickUnderColorRemoval = 1.0;
+  std::vector<ColorRule> rules;
+};
 
 struct Options {
   Level level = Level::A2B;
@@ -32,6 +75,10 @@ struct Options {
       rasterizePage;
   double rasterDpi = 300.0;
   double imageMaxPpi = 0.0;
+  double imageDownsampleAbovePpi = 0.0;
+  std::string imageDownsampleKind;
+  double imageUpsampleBelowPpi = 0.0;
+  double imageUpsampleToPpi = 0.0;
   std::string attachXml;
   std::string attachXmlName;
   std::string facturxProfile;
@@ -40,7 +87,10 @@ struct Options {
   bool outlineFonts = false;
   bool linearize = false;
   std::string preflightProfile;
-  std::vector<std::pair<std::string, std::vector<std::string>>> profileFixOps;
+  std::string profilePath;
+  std::string inputPath;
+  std::vector<std::pair<std::string, std::map<std::string, std::string>>> profileFixOps;
+  std::map<std::size_t, std::vector<std::string>> profileFixRules;
   std::string embedSource;
   std::string embedSourceName;
   std::string embedSourceMime;
@@ -51,7 +101,28 @@ struct Options {
   std::string defaultRgbProfile;
   std::string defaultCmykProfile;
   std::string defaultGrayProfile;
+  ColorJob colorJob;
+  std::string pageOutputIntents;
+  bool dualPrint = false;
+  bool visibleLayersOnly = false;
+  int hitsPerPage = 0;
+  int hitsPerDoc = 0;
+  std::string externalProfileUrl;
+  std::function<bool(const std::string& name, std::string& bytes)> loadIcc;
   bool rasterizeAllPages = false;
+  bool rasterKeepText = true;
+  std::set<int> rasterPages;
+  std::map<std::string, std::string> profileVars;
+  std::string pageRange;
+  bool levelFromProfile = false;
+  bool reconvert = false;
+  double fallbackDpi = 0.0;
+  bool fallbackProblemPagesOnly = false;
+  bool quickCheck = false;
+  std::string bookmarks;
+  std::function<void(const std::string&)> trace;
+  std::function<bool(const std::string& htmlOrZip, const std::string& headScript, std::string& pdf)> renderHtml;
+  std::string inputName;
   std::function<bool(const std::string& signedData, std::string& pkcs7Der)> signDocument;
   std::string signName;
   std::string signReason;
@@ -84,6 +155,7 @@ struct Result {
   std::string error;
   std::string errorCode;
   std::string suggestedLevel;
+  std::string level;
   bool compliant = false;
 };
 
@@ -101,6 +173,9 @@ int issueSeverity(const std::string& code);
 // case, spaces, dashes and underscores; fills the PostScript-style name and bytes.
 bool loadFontFromFolder(const std::string& folder, const std::string& wanted,
                         std::string& psName, std::string& bytes);
+
+bool loadIccFromFolders(const std::vector<std::string>& folders, const std::string& name,
+                        std::string& bytes);
 
 bool levelFromString(const std::string& s, Level& out);
 std::string levelToString(Level level);

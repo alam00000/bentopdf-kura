@@ -8,13 +8,11 @@
       "severity": "warning",
       "all": [
         {
-          "prop": "font.widthsMatch",
-          "op": "==",
-          "value": false
+          "check": "font.problem",
+          "op": "includes",
+          "value": "width_mismatch"
         }
       ]
     }
-  ],
-  "builtins": [],
-  "fixes": []
+  ]
 }

@@ -1,14 +1,22 @@
 {
   "kura-profile": 1,
   "name": "Check PDF/A-4f",
-  "description": "Reports every deviation from PDF/A-4f; convert with --level 4f to fix them.",
-  "checks": [],
-  "builtins": [
+  "description": "Reports whether the file meets PDF/A-4f; convert with --level 4f to fix it.",
+  "convert": {
+    "level": "pdfa-4f"
+  },
+  "checks": [
     {
-      "name": "conformsTo",
+      "name": "Does not meet PDF/A-4f",
       "severity": "error",
-      "level": "4f"
+      "all": [
+        {
+          "check": "conformance.meets",
+          "op": "is",
+          "value": false,
+          "standard": "pdfa-4f"
+        }
+      ]
     }
-  ],
-  "fixes": []
+  ]
 }

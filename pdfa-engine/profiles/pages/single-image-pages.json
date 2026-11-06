@@ -8,13 +8,11 @@
       "severity": "info",
       "all": [
         {
-          "prop": "page.singleImage",
-          "op": "==",
+          "check": "page.single_image",
+          "op": "is",
           "value": true
         }
       ]
     }
-  ],
-  "builtins": [],
-  "fixes": []
+  ]
 }

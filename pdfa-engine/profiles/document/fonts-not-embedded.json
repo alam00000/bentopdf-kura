@@ -2,12 +2,17 @@
   "kura-profile": 1,
   "name": "Fonts not embedded",
   "description": "Reports every font the file does not carry.",
-  "checks": [],
-  "builtins": [
+  "checks": [
     {
-      "name": "fontsNotEmbedded",
-      "severity": "error"
+      "name": "Font not embedded",
+      "severity": "error",
+      "all": [
+        {
+          "check": "font.embedding",
+          "op": "==",
+          "value": "not_embedded"
+        }
+      ]
     }
-  ],
-  "fixes": []
+  ]
 }

@@ -8,13 +8,11 @@
       "severity": "info",
       "all": [
         {
-          "prop": "page.isRotated",
-          "op": "==",
-          "value": true
+          "check": "page.rotation",
+          "op": "!=",
+          "value": 0
         }
       ]
     }
-  ],
-  "builtins": [],
-  "fixes": []
+  ]
 }

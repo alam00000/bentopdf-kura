@@ -8,13 +8,11 @@
       "severity": "info",
       "all": [
         {
-          "prop": "paint.isPattern",
+          "check": "color.space",
           "op": "==",
-          "value": true
+          "value": "Pattern"
         }
       ]
     }
-  ],
-  "builtins": [],
-  "fixes": []
+  ]
 }

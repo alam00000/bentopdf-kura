@@ -3,14 +3,11 @@
   "name": "Open with bookmarks panel",
   "description": "Sets the initial view to show the bookmarks panel.",
   "checks": [],
-  "builtins": [],
   "fixes": [
     {
-      "op": "setinitialviewdocumentoptions",
-      "params": [
-        "UseOutlines",
-        "SinglePage"
-      ]
+      "fix": "document.set_view",
+      "page_mode": "UseOutlines",
+      "page_layout": "SinglePage"
     }
   ]
 }

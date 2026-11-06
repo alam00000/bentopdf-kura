@@ -3,13 +3,10 @@
   "name": "Blend transparency in sRGB",
   "description": "Sets sRGB as the page blending colour space.",
   "checks": [],
-  "builtins": [],
   "fixes": [
     {
-      "op": "settransparencyblendcs",
-      "params": [
-        "sRGB"
-      ]
+      "fix": "transparency.set_blend_space",
+      "space": "sRGB"
     }
   ]
 }

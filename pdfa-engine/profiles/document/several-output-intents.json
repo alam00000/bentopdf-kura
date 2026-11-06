@@ -8,13 +8,12 @@
       "severity": "info",
       "all": [
         {
-          "prop": "outputIntent.count",
+          "check": "output_intent.count",
           "op": ">",
-          "value": 1
+          "value": 1,
+          "subtype": "any"
         }
       ]
     }
-  ],
-  "builtins": [],
-  "fixes": []
+  ]
 }

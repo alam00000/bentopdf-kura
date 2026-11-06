@@ -8,13 +8,12 @@
       "severity": "info",
       "all": [
         {
-          "prop": "gstate.hasSoftMask",
-          "op": "==",
-          "value": true
+          "check": "transparency.used",
+          "op": "is",
+          "value": true,
+          "how": "soft_mask"
         }
       ]
     }
-  ],
-  "builtins": [],
-  "fixes": []
+  ]
 }

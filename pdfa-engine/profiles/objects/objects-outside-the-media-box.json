@@ -8,13 +8,12 @@
       "severity": "warning",
       "all": [
         {
-          "prop": "content.outsideMediaBox",
+          "check": "content.box_relation",
           "op": "==",
-          "value": true
+          "value": "outside",
+          "box": "media"
         }
       ]
     }
-  ],
-  "builtins": [],
-  "fixes": []
+  ]
 }

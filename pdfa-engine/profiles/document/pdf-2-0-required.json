@@ -8,13 +8,12 @@
       "severity": "info",
       "all": [
         {
-          "prop": "doc.requiresPdf20",
-          "op": "==",
-          "value": true
+          "check": "document.requirements",
+          "op": "is",
+          "value": true,
+          "pdf2_only": true
         }
       ]
     }
-  ],
-  "builtins": [],
-  "fixes": []
+  ]
 }

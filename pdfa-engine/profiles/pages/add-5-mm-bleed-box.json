@@ -3,15 +3,15 @@
   "name": "Add 5 mm bleed box",
   "description": "Sets a bleed box 5 mm outside the trim box, limited by the media box.",
   "checks": [],
-  "builtins": [],
   "fixes": [
     {
-      "op": "generatebleed",
-      "params": [
-        "Amount",
-        "5",
-        "mm"
-      ]
+      "fix": "page.set_box",
+      "box": "bleed",
+      "from": "trim",
+      "left": "-5mm",
+      "right": "-5mm",
+      "top": "-5mm",
+      "bottom": "-5mm"
     }
   ]
 }

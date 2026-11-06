@@ -3,13 +3,10 @@
   "name": "Clip content to the bleed box",
   "description": "Removes anything drawn outside the bleed box.",
   "checks": [],
-  "builtins": [],
   "fixes": [
     {
-      "op": "removeobjectsoutofbox",
-      "params": [
-        "BleedBox"
-      ]
+      "fix": "content.remove_outside",
+      "box": "bleed"
     }
   ]
 }

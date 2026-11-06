@@ -1,13 +1,55 @@
 {
   "kura-profile": 1,
   "name": "Syntax problems",
-  "description": "Reports structural problems found while parsing.",
-  "checks": [],
-  "builtins": [
+  "description": "Reports structural problems found while reading the file.",
+  "checks": [
     {
-      "name": "syntaxProblems",
-      "severity": "error"
+      "name": "Syntax problem",
+      "severity": "error",
+      "any": [
+        {
+          "all": [
+            {
+              "check": "syntax.content_stream_error",
+              "op": "count",
+              "value": 0,
+              "compare": ">"
+            }
+          ]
+        },
+        {
+          "all": [
+            {
+              "check": "syntax.xref_layout",
+              "op": "count",
+              "value": 0,
+              "compare": ">"
+            }
+          ]
+        },
+        {
+          "all": [
+            {
+              "check": "syntax.object_layout",
+              "op": "count",
+              "value": 0,
+              "compare": ">"
+            }
+          ]
+        },
+        {
+          "all": [
+            {
+              "check": "syntax.broken_reference",
+              "op": "in",
+              "value": [
+                "object",
+                "external_file"
+              ]
+            }
+          ]
+        }
+      ]
     }
-  ],
-  "fixes": []
+  ]
 }

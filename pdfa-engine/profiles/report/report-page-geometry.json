@@ -8,9 +8,20 @@
       "severity": "info",
       "all": [
         {
-          "prop": "page.isRotated",
-          "op": "==",
-          "value": true
+          "check": "page.rotation",
+          "op": "!=",
+          "value": 0
+        }
+      ]
+    },
+    {
+      "name": "Page scaling in use",
+      "severity": "warning",
+      "all": [
+        {
+          "check": "page.user_unit",
+          "op": "!=",
+          "value": 1
         }
       ]
     },
@@ -19,22 +30,34 @@
       "severity": "info",
       "all": [
         {
-          "prop": "page.hasCropBox",
-          "op": "==",
+          "check": "page.box_present",
+          "op": "is",
+          "value": false,
+          "box": "crop"
+        }
+      ]
+    },
+    {
+      "name": "Pages differ in size or orientation",
+      "severity": "info",
+      "all": [
+        {
+          "check": "document.pages_uniform",
+          "op": "is",
           "value": false
         }
       ]
-    }
-  ],
-  "builtins": [
-    {
-      "name": "pagesDifferInSize",
-      "severity": "info"
     },
     {
-      "name": "emptyPage",
-      "severity": "info"
+      "name": "Empty page",
+      "severity": "info",
+      "all": [
+        {
+          "check": "page.empty",
+          "op": "is",
+          "value": true
+        }
+      ]
     }
-  ],
-  "fixes": []
+  ]
 }

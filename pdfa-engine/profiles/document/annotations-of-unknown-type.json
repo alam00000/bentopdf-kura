@@ -8,13 +8,11 @@
       "severity": "warning",
       "all": [
         {
-          "prop": "annot.unknownType",
+          "check": "annotation.type",
           "op": "==",
-          "value": true
+          "value": "unknown"
         }
       ]
     }
-  ],
-  "builtins": [],
-  "fixes": []
+  ]
 }

@@ -8,13 +8,16 @@
       "severity": "info",
       "all": [
         {
-          "prop": "content.emptyVector",
+          "check": "content.kind",
           "op": "==",
-          "value": true
+          "value": "path"
+        },
+        {
+          "check": "content.painting",
+          "op": "==",
+          "value": "none"
         }
       ]
     }
-  ],
-  "builtins": [],
-  "fixes": []
+  ]
 }

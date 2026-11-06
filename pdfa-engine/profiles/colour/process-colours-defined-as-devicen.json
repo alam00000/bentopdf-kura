@@ -8,13 +8,11 @@
       "severity": "info",
       "all": [
         {
-          "prop": "paint.processColoursAsDeviceN",
-          "op": "==",
-          "value": true
+          "check": "color.devicen",
+          "op": "includes",
+          "value": "process_as_devicen"
         }
       ]
     }
-  ],
-  "builtins": [],
-  "fixes": []
+  ]
 }

@@ -1,0 +1,484 @@
+{
+  "kura-profile": 1,
+  "name": "Accessibility checklist (WCAG / Section 508)",
+  "description": "Checks a tagged PDF against the machine-testable items of WCAG 2.2 and Section 508: tags, language, title, alternative text, tables, links, form fields, tab order, bookmarks and colour contrast. Contrast and link checks are best-effort and need a human look.",
+  "checks": [
+    {
+      "name": "Not marked as tagged",
+      "severity": "error",
+      "all": [
+        {
+          "check": "document.marked",
+          "op": "is",
+          "value": false
+        }
+      ]
+    },
+    {
+      "name": "No structure tree",
+      "severity": "error",
+      "all": [
+        {
+          "check": "structure.tree",
+          "op": "includes",
+          "value": [
+            "missing_root"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Structure tree problems",
+      "severity": "info",
+      "all": [
+        {
+          "check": "structure.tree",
+          "op": "excludes",
+          "value": [
+            "missing_root"
+          ]
+        },
+        {
+          "check": "structure.tree",
+          "op": "count",
+          "value": 0,
+          "compare": ">"
+        }
+      ]
+    },
+    {
+      "name": "Content neither tagged nor artifact",
+      "severity": "error",
+      "all": [
+        {
+          "check": "structure.content_tagging",
+          "op": "==",
+          "value": "neither"
+        }
+      ],
+      "max_hits_per_page": 1
+    },
+    {
+      "name": "Non-standard structure type without role mapping",
+      "severity": "error",
+      "all": [
+        {
+          "check": "structure.standard_type",
+          "op": "includes",
+          "value": [
+            "non_standard_type"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Document language missing",
+      "severity": "error",
+      "all": [
+        {
+          "check": "document.language",
+          "op": "==",
+          "value": "false",
+          "test": "present"
+        }
+      ]
+    },
+    {
+      "name": "Language of some text cannot be determined",
+      "severity": "error",
+      "all": [
+        {
+          "check": "structure.language_unknown",
+          "op": "count",
+          "value": 0,
+          "compare": ">"
+        }
+      ]
+    },
+    {
+      "name": "Change of language not marked",
+      "severity": "warning",
+      "all": [
+        {
+          "check": "structure.language_change",
+          "op": "count",
+          "value": 0,
+          "compare": ">"
+        }
+      ]
+    },
+    {
+      "name": "Document title missing",
+      "severity": "error",
+      "all": [
+        {
+          "check": "document.title",
+          "op": "includes",
+          "value": [
+            "missing"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Title not in the XMP metadata",
+      "severity": "warning",
+      "all": [
+        {
+          "check": "document.title",
+          "op": "includes",
+          "value": [
+            "not_in_metadata"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Window shows the file name instead of the title",
+      "severity": "error",
+      "all": [
+        {
+          "check": "document.title",
+          "op": "includes",
+          "value": [
+            "not_displayed"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Figure without alternative text",
+      "severity": "error",
+      "all": [
+        {
+          "check": "structure.alternate_text",
+          "op": "includes",
+          "value": [
+            "figure_without_alt"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Alternative text is a placeholder",
+      "severity": "warning",
+      "all": [
+        {
+          "check": "structure.alternate_text",
+          "op": "includes",
+          "value": [
+            "placeholder_alt"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Formula without alternative text",
+      "severity": "error",
+      "all": [
+        {
+          "check": "structure.alternate_text",
+          "op": "includes",
+          "value": [
+            "formula_without_alt"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Annotation without description",
+      "severity": "error",
+      "all": [
+        {
+          "check": "structure.alternate_text",
+          "op": "includes",
+          "value": [
+            "annotation_without_alt"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Link without description",
+      "severity": "warning",
+      "all": [
+        {
+          "check": "structure.alternate_text",
+          "op": "includes",
+          "value": [
+            "link_without_contents"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Form field without tooltip",
+      "severity": "error",
+      "all": [
+        {
+          "check": "structure.alternate_text",
+          "op": "includes",
+          "value": [
+            "form_field_without_alt"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Heading levels skipped",
+      "severity": "warning",
+      "all": [
+        {
+          "check": "structure.headings",
+          "op": "includes",
+          "value": [
+            "skipped_levels"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Table without summary or caption",
+      "severity": "warning",
+      "all": [
+        {
+          "check": "structure.table",
+          "op": "==",
+          "value": "false",
+          "property": "has_summary"
+        }
+      ]
+    },
+    {
+      "name": "Empty table header cell",
+      "severity": "error",
+      "all": [
+        {
+          "check": "structure.table",
+          "op": "!=",
+          "value": "0",
+          "property": "empty_header_cells"
+        }
+      ]
+    },
+    {
+      "name": "Table header cell without scope",
+      "severity": "warning",
+      "all": [
+        {
+          "check": "structure.table",
+          "op": "!=",
+          "value": "0",
+          "property": "th_without_scope_or_headers"
+        }
+      ]
+    },
+    {
+      "name": "Irregular table",
+      "severity": "warning",
+      "all": [
+        {
+          "check": "structure.table",
+          "op": "==",
+          "value": "false",
+          "property": "regular"
+        }
+      ]
+    },
+    {
+      "name": "Note without unique ID",
+      "severity": "warning",
+      "all": [
+        {
+          "check": "structure.notes",
+          "op": "count",
+          "value": 0,
+          "compare": ">"
+        }
+      ]
+    },
+    {
+      "name": "Link not tagged as Link",
+      "severity": "error",
+      "all": [
+        {
+          "check": "structure.nesting",
+          "op": "includes",
+          "value": [
+            "link_not_in_link"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Link annotation without StructParent",
+      "severity": "error",
+      "all": [
+        {
+          "check": "structure.nesting",
+          "op": "includes",
+          "value": [
+            "link_without_struct_parent"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Form field not tagged as Form",
+      "severity": "error",
+      "all": [
+        {
+          "check": "structure.nesting",
+          "op": "includes",
+          "value": [
+            "field_not_in_form"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Annotation not tagged as Annot",
+      "severity": "error",
+      "all": [
+        {
+          "check": "structure.nesting",
+          "op": "includes",
+          "value": [
+            "annotation_not_in_annot"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Tab order does not follow the structure",
+      "severity": "error",
+      "any": [
+        {
+          "all": [
+            {
+              "check": "annotation.entry",
+              "op": "==",
+              "value": "false",
+              "entry": "has_tab_order"
+            }
+          ]
+        },
+        {
+          "all": [
+            {
+              "check": "annotation.entry",
+              "op": "!=",
+              "value": "S",
+              "entry": "tab_order"
+            }
+          ]
+        }
+      ],
+      "max_hits_per_page": 1
+    },
+    {
+      "name": "Link text does not say where it goes",
+      "severity": "warning",
+      "all": [
+        {
+          "check": "annotation.link_text",
+          "op": "in",
+          "value": [
+            "click here",
+            "here",
+            "read more",
+            "more",
+            "link",
+            "this"
+          ],
+          "case_sensitive": false
+        }
+      ]
+    },
+    {
+      "name": "Link marked by colour only",
+      "severity": "warning",
+      "all": [
+        {
+          "check": "annotation.link_colour_only",
+          "op": "is",
+          "value": true
+        }
+      ]
+    },
+    {
+      "name": "Long document without bookmarks",
+      "severity": "warning",
+      "all": [
+        {
+          "check": "document.page_count",
+          "op": ">=",
+          "value": 10
+        },
+        {
+          "check": "document.has",
+          "op": "is",
+          "value": false,
+          "feature": "bookmarks"
+        }
+      ]
+    },
+    {
+      "name": "Text contrast too low",
+      "severity": "warning",
+      "all": [
+        {
+          "check": "content.contrast_sufficient",
+          "op": "is",
+          "value": false
+        }
+      ]
+    },
+    {
+      "name": "Graphic contrast too low",
+      "severity": "info",
+      "all": [
+        {
+          "check": "content.contrast_sufficient",
+          "op": "is",
+          "value": false,
+          "kind": "graphics"
+        }
+      ]
+    },
+    {
+      "name": "Text without a Unicode mapping",
+      "severity": "error",
+      "all": [
+        {
+          "check": "text.unicode",
+          "op": "==",
+          "value": "unmapped"
+        }
+      ]
+    },
+    {
+      "name": "Assistive technology blocked by permissions",
+      "severity": "error",
+      "all": [
+        {
+          "check": "security.permission",
+          "op": "is",
+          "value": true,
+          "action": "accessibility"
+        }
+      ]
+    },
+    {
+      "name": "Font not embedded",
+      "severity": "error",
+      "all": [
+        {
+          "check": "font.embedding",
+          "op": "==",
+          "value": "not_embedded"
+        }
+      ]
+    }
+  ]
+}

@@ -17,6 +17,65 @@ struct MemStream {
   size_t pos;
 };
 
+std::string withoutTlm(const std::string& in) {
+  const unsigned char* b = reinterpret_cast<const unsigned char*>(in.data());
+  size_t n = in.size();
+  size_t cs = std::string::npos;
+  size_t boxLenAt = std::string::npos;
+  bool boxLen64 = false;
+  if (n >= 2 && b[0] == 0xFF && b[1] == 0x4F) {
+    cs = 0;
+  } else {
+    size_t p = 0;
+    while (p + 8 <= n) {
+      unsigned long long len = (static_cast<unsigned long long>(b[p]) << 24) | (b[p + 1] << 16) | (b[p + 2] << 8) | b[p + 3];
+      size_t hdr = 8;
+      if (len == 1 && p + 16 <= n) {
+        len = 0;
+        for (int i = 0; i < 8; ++i) len = (len << 8) | b[p + 8 + i];
+        hdr = 16;
+      }
+      if (std::memcmp(b + p + 4, "jp2c", 4) == 0) {
+        cs = p + hdr;
+        if (len != 0) {
+          boxLenAt = hdr == 16 ? p + 8 : p;
+          boxLen64 = hdr == 16;
+        }
+        break;
+      }
+      if (len == 0 || len < hdr || p + len > n) break;
+      p += static_cast<size_t>(len);
+    }
+  }
+  if (cs == std::string::npos || cs + 4 > n || b[cs] != 0xFF || b[cs + 1] != 0x4F) return in;
+  std::string out = in.substr(0, cs + 2);
+  size_t p = cs + 2;
+  size_t removed = 0;
+  while (p + 4 <= n) {
+    if (b[p] != 0xFF) return in;
+    unsigned marker = b[p + 1];
+    if (marker == 0x90 || marker == 0x93 || marker == 0xD9) break;
+    size_t segLen = (static_cast<size_t>(b[p + 2]) << 8) | b[p + 3];
+    if (segLen < 2 || p + 2 + segLen > n) return in;
+    if (marker == 0x55) removed += 2 + segLen;
+    else out.append(in, p, 2 + segLen);
+    p += 2 + segLen;
+  }
+  if (!removed) return in;
+  out.append(in, p, std::string::npos);
+  if (boxLenAt != std::string::npos) {
+    unsigned long long len = 0;
+    int bytes = boxLen64 ? 8 : 4;
+    for (int i = 0; i < bytes; ++i) len = (len << 8) | static_cast<unsigned char>(out[boxLenAt + i]);
+    len -= removed;
+    for (int i = bytes - 1; i >= 0; --i) {
+      out[boxLenAt + i] = static_cast<char>(len & 0xFF);
+      len >>= 8;
+    }
+  }
+  return out;
+}
+
 OPJ_SIZE_T memRead(void* buffer, OPJ_SIZE_T bytes, void* user) {
   MemStream* ms = static_cast<MemStream*>(user);
   if (ms->pos >= ms->size) return static_cast<OPJ_SIZE_T>(-1);
@@ -110,7 +169,7 @@ bool scanJp2Boxes(const unsigned char* d, size_t n, int& colrCount, bool& colrOk
           ok = false;
         } else {
           uint32_t enumCs = be32(p + 3);
-          ok = enumCs >= 12 && enumCs <= 43;
+          ok = enumCs >= 12 && enumCs <= 43 && enumCs != 19;
         }
       } else if (meth != 2) {
         ok = false;
@@ -145,7 +204,8 @@ bool jpxPdfaConformant(const std::string& data) {
 }
 
 namespace {
-RawImage decodeJpxDataAt(const std::string& data, std::string& alphaOut) {
+RawImage decodeJpxDataAt(const std::string& original, std::string& alphaOut) {
+  const std::string data = withoutTlm(original);
   RawImage out;
   alphaOut.clear();
   if (data.size() < 12) {

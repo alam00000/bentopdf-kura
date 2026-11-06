@@ -1,14 +1,22 @@
 {
   "kura-profile": 1,
   "name": "Check PDF/VT-1",
-  "description": "Reports every deviation from PDF/VT-1; convert with --level vt1 to fix them.",
-  "checks": [],
-  "builtins": [
+  "description": "Reports whether the file meets PDF/VT-1; convert with --level vt1 to fix it.",
+  "convert": {
+    "level": "pdfvt-1"
+  },
+  "checks": [
     {
-      "name": "conformsTo",
+      "name": "Does not meet PDF/VT-1",
       "severity": "error",
-      "level": "vt1"
+      "all": [
+        {
+          "check": "conformance.meets",
+          "op": "is",
+          "value": false,
+          "standard": "pdfvt-1"
+        }
+      ]
     }
-  ],
-  "fixes": []
+  ]
 }

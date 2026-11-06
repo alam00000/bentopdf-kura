@@ -8,13 +8,11 @@
       "severity": "warning",
       "all": [
         {
-          "prop": "doc.hexStringInvalid",
-          "op": "==",
-          "value": true
+          "check": "syntax.string_encoding",
+          "op": "includes",
+          "value": "hex_invalid_character"
         }
       ]
     }
-  ],
-  "builtins": [],
-  "fixes": []
+  ]
 }

@@ -1,20 +1,25 @@
 {
   "kura-profile": 1,
   "name": "Rich black",
-  "description": "Reports black objects that also carry cyan, magenta or yellow.",
+  "description": "Reports solid black objects that also carry cyan, magenta or yellow.",
   "checks": [
     {
       "name": "Rich black",
       "severity": "warning",
       "all": [
         {
-          "prop": "paint.richBlackCmyPercent",
+          "check": "color.ink",
+          "op": ">=",
+          "value": 100,
+          "ink": "black"
+        },
+        {
+          "check": "color.ink",
           "op": ">",
-          "value": 0
+          "value": 0,
+          "ink": "cmy_max"
         }
       ]
     }
-  ],
-  "builtins": [],
-  "fixes": []
+  ]
 }

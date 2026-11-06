@@ -8,7 +8,7 @@
       "severity": "error",
       "all": [
         {
-          "prop": "stroke.width",
+          "check": "content.stroke_width",
           "op": "<=",
           "value": 0.125
         }
@@ -19,12 +19,12 @@
       "severity": "warning",
       "all": [
         {
-          "prop": "stroke.width",
+          "check": "content.stroke_width",
           "op": "<=",
           "value": 0.25
         },
         {
-          "prop": "stroke.width",
+          "check": "content.stroke_width",
           "op": ">",
           "value": 0.125
         }
@@ -35,12 +35,12 @@
       "severity": "error",
       "all": [
         {
-          "prop": "stroke.width",
+          "check": "content.stroke_width",
           "op": "<=",
           "value": 0.25
         },
         {
-          "prop": "paint.inkCount",
+          "check": "color.inks_used",
           "op": ">",
           "value": 1
         }
@@ -51,12 +51,12 @@
       "severity": "warning",
       "all": [
         {
-          "prop": "text.size",
+          "check": "text.size",
           "op": "<",
           "value": 4
         },
         {
-          "prop": "text.size",
+          "check": "text.size",
           "op": ">",
           "value": 0.01
         }
@@ -67,17 +67,17 @@
       "severity": "warning",
       "all": [
         {
-          "prop": "text.size",
+          "check": "text.size",
           "op": "<",
           "value": 8
         },
         {
-          "prop": "text.size",
+          "check": "text.size",
           "op": ">",
           "value": 0.01
         },
         {
-          "prop": "paint.inkCount",
+          "check": "color.inks_used",
           "op": ">",
           "value": 1
         }
@@ -88,19 +88,19 @@
       "severity": "warning",
       "all": [
         {
-          "prop": "text.size",
+          "check": "text.size",
           "op": "<",
           "value": 8
         },
         {
-          "prop": "text.size",
+          "check": "text.size",
           "op": ">",
           "value": 0.01
         },
         {
-          "prop": "paint.isWhite",
+          "check": "color.ink_mix",
           "op": "==",
-          "value": true
+          "value": "none"
         }
       ]
     },
@@ -109,18 +109,12 @@
       "severity": "warning",
       "all": [
         {
-          "prop": "image.ppi",
+          "check": "image.resolution",
           "op": "<",
-          "value": 250
-        },
-        {
-          "prop": "image.ppi",
-          "op": ">",
-          "value": 0
+          "value": 250,
+          "kind": "colour_or_grey"
         }
       ]
     }
-  ],
-  "builtins": [],
-  "fixes": []
+  ]
 }

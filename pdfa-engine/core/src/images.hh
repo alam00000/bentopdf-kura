@@ -1,7 +1,9 @@
 #pragma once
 
 #include <qpdf/QPDFObjectHandle.hh>
+#include <qpdf/QPDFPageObjectHelper.hh>
 #include <string>
+#include <vector>
 
 #include "ctx.hh"
 
@@ -19,7 +21,7 @@ RawImage decodeImage(QPDFObjectHandle image);
 std::string encodeCmykJpeg(const std::string& cmyk, int width, int height, int quality);
 std::string encodeJpeg(const std::string& samples, int width, int height, int comps,
                        int quality);
-std::string flateCompress(const std::string& data);
+std::string flateCompress(const std::string& data, int level = 6);
 bool flattenImageSMask(Ctx& ctx, QPDFObjectHandle image);
 RawImage decodeJpxData(const std::string& data, std::string& alphaOut);
 
@@ -28,4 +30,5 @@ bool transcodeJpxImage(Ctx& ctx, QPDFObjectHandle image);
 RawImage decodeDctData(const std::string& data, bool& cmykInverted);
 bool inflateData(const std::string& in, std::string& out);
 void passImageResolution(Ctx& ctx);
+void externalizeInlineImagesOnce(std::vector<QPDFPageObjectHelper>& pages, size_t minSize);
 }

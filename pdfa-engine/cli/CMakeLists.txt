@@ -1,6 +1,6 @@
 option(KURA_WITH_SIGNING "Build the CLI with PKCS#7 signing (needs OpenSSL)" ON)
 
-set(KURA_CLI_SOURCES main.cpp)
+set(KURA_CLI_SOURCES main.cpp tools.cpp html_render.cpp tool_output.cpp tool_report.cpp)
 if(KURA_WITH_SIGNING)
   if(PDFA_STATIC_DEPS)
     set(OPENSSL_USE_STATIC_LIBS TRUE)

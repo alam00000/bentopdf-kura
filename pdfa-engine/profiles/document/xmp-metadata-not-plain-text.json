@@ -8,13 +8,11 @@
       "severity": "warning",
       "all": [
         {
-          "prop": "doc.xmpIsPlainText",
-          "op": "==",
-          "value": false
+          "check": "metadata.xmp_problem",
+          "op": "includes",
+          "value": "filtered"
         }
       ]
     }
-  ],
-  "builtins": [],
-  "fixes": []
+  ]
 }

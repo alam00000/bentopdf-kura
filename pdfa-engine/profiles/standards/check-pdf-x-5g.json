@@ -1,14 +1,19 @@
 {
   "kura-profile": 1,
   "name": "Check PDF/X-5g",
-  "description": "Reports every deviation from PDF/X-5g; validated only; it references an external press profile.",
-  "checks": [],
-  "builtins": [
+  "description": "Reports whether the file meets PDF/X-5g; checked only, because it refers to an external press profile.",
+  "checks": [
     {
-      "name": "conformsTo",
+      "name": "Does not meet PDF/X-5g",
       "severity": "error",
-      "level": "x5g"
+      "all": [
+        {
+          "check": "conformance.meets",
+          "op": "is",
+          "value": false,
+          "standard": "pdfx-5g"
+        }
+      ]
     }
-  ],
-  "fixes": []
+  ]
 }

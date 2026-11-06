@@ -3,13 +3,10 @@
   "name": "Rotate pages 180 degrees",
   "description": "Rotates every page by 180 degrees clockwise.",
   "checks": [],
-  "builtins": [],
   "fixes": [
     {
-      "op": "rotatepages",
-      "params": [
-        "180"
-      ]
+      "fix": "page.rotate",
+      "angle": "180"
     }
   ]
 }

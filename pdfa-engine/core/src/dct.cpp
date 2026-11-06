@@ -182,12 +182,12 @@ std::string encodeCmykJpeg(const std::string& cmyk, int width, int height, int q
   return out;
 }
 
-std::string flateCompress(const std::string& data) {
+std::string flateCompress(const std::string& data, int level) {
   uLongf cap = compressBound(static_cast<uLong>(data.size()));
   std::string out(cap, '\0');
   if (compress2(reinterpret_cast<Bytef*>(&out[0]), &cap,
                 reinterpret_cast<const Bytef*>(data.data()),
-                static_cast<uLong>(data.size()), 6) != Z_OK) {
+                static_cast<uLong>(data.size()), level) != Z_OK) {
     return std::string();
   }
   out.resize(cap);

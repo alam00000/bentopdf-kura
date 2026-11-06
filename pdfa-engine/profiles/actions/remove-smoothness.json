@@ -3,11 +3,12 @@
   "name": "Remove smoothness",
   "description": "Removes smoothness tolerances from graphics states.",
   "checks": [],
-  "builtins": [],
   "fixes": [
     {
-      "op": "removesmoothness",
-      "params": []
+      "fix": "graphics.remove",
+      "settings": [
+        "smoothness"
+      ]
     }
   ]
 }

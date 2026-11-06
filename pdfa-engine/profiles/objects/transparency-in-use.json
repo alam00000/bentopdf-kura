@@ -8,8 +8,8 @@
       "severity": "info",
       "all": [
         {
-          "prop": "gstate.transparency",
-          "op": "==",
+          "check": "transparency.used",
+          "op": "is",
           "value": true
         }
       ]
@@ -19,18 +19,14 @@
       "severity": "info",
       "all": [
         {
-          "prop": "gstate.blendMode",
-          "op": "!=",
-          "value": "Normal"
-        },
-        {
-          "prop": "gstate.blendMode",
-          "op": "!=",
-          "value": "Compatible"
+          "check": "transparency.blend_mode",
+          "op": "not_in",
+          "value": [
+            "Normal",
+            "Compatible"
+          ]
         }
       ]
     }
-  ],
-  "builtins": [],
-  "fixes": []
+  ]
 }

@@ -1,14 +1,22 @@
 {
   "kura-profile": 1,
   "name": "Check PDF/VT-3",
-  "description": "Reports every deviation from PDF/VT-3; convert with --level vt3 to fix them.",
-  "checks": [],
-  "builtins": [
+  "description": "Reports whether the file meets PDF/VT-3; convert with --level vt3 to fix it.",
+  "convert": {
+    "level": "pdfvt-3"
+  },
+  "checks": [
     {
-      "name": "conformsTo",
+      "name": "Does not meet PDF/VT-3",
       "severity": "error",
-      "level": "vt3"
+      "all": [
+        {
+          "check": "conformance.meets",
+          "op": "is",
+          "value": false,
+          "standard": "pdfvt-3"
+        }
+      ]
     }
-  ],
-  "fixes": []
+  ]
 }

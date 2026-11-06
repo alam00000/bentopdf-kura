@@ -3,11 +3,12 @@
   "name": "Remove undercolour removal",
   "description": "Removes undercolour-removal functions.",
   "checks": [],
-  "builtins": [],
   "fixes": [
     {
-      "op": "removeucr",
-      "params": []
+      "fix": "graphics.remove",
+      "settings": [
+        "undercolour_removal"
+      ]
     }
   ]
 }

@@ -2,15 +2,18 @@
   "kura-profile": 1,
   "name": "Bitmaps below 600 ppi",
   "description": "Reports 1-bit images whose effective resolution is below 600 ppi.",
-  "checks": [],
-  "builtins": [
+  "checks": [
     {
-      "name": "bitmapResolutionBelow",
+      "name": "Bitmap below 600 ppi",
       "severity": "warning",
-      "params": {
-        "ppi": 600
-      }
+      "all": [
+        {
+          "check": "image.resolution",
+          "op": "<",
+          "value": 600,
+          "kind": "bitmap"
+        }
+      ]
     }
-  ],
-  "fixes": []
+  ]
 }

@@ -8,18 +8,20 @@
       "severity": "error",
       "all": [
         {
-          "prop": "paint.isWhite",
+          "check": "color.ink_mix",
           "op": "==",
-          "value": true
+          "value": "none"
         },
         {
-          "prop": "fill.overprint",
-          "op": "==",
-          "value": true
+          "check": "color.overprint",
+          "op": "in",
+          "value": [
+            "on",
+            "on_nonzero_mode"
+          ],
+          "paint": "fill"
         }
       ]
     }
-  ],
-  "builtins": [],
-  "fixes": []
+  ]
 }

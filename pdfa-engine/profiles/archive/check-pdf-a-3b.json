@@ -1,14 +1,22 @@
 {
   "kura-profile": 1,
   "name": "Check PDF/A-3b",
-  "description": "Reports every deviation from PDF/A-3b; convert with --level 3b to fix them.",
-  "checks": [],
-  "builtins": [
+  "description": "Reports whether the file meets PDF/A-3b; convert with --level 3b to fix it.",
+  "convert": {
+    "level": "pdfa-3b"
+  },
+  "checks": [
     {
-      "name": "conformsTo",
+      "name": "Does not meet PDF/A-3b",
       "severity": "error",
-      "level": "3b"
+      "all": [
+        {
+          "check": "conformance.meets",
+          "op": "is",
+          "value": false,
+          "standard": "pdfa-3b"
+        }
+      ]
     }
-  ],
-  "fixes": []
+  ]
 }

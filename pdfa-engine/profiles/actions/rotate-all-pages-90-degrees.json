@@ -3,13 +3,10 @@
   "name": "Rotate all pages 90 degrees",
   "description": "Rotates every page by 90 degrees.",
   "checks": [],
-  "builtins": [],
   "fixes": [
     {
-      "op": "rotatepages",
-      "params": [
-        "90"
-      ]
+      "fix": "page.rotate",
+      "angle": "90"
     }
   ]
 }

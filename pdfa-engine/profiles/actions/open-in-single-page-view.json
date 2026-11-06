@@ -3,14 +3,11 @@
   "name": "Open in single-page view",
   "description": "Sets the initial view to one page at a time, no panels.",
   "checks": [],
-  "builtins": [],
   "fixes": [
     {
-      "op": "setinitialviewdocumentoptions",
-      "params": [
-        "UseNone",
-        "SinglePage"
-      ]
+      "fix": "document.set_view",
+      "page_mode": "UseNone",
+      "page_layout": "SinglePage"
     }
   ]
 }

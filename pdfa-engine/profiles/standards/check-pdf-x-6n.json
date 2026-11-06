@@ -1,14 +1,19 @@
 {
   "kura-profile": 1,
   "name": "Check PDF/X-6n",
-  "description": "Reports every deviation from PDF/X-6n; validated only; it references an external press profile.",
-  "checks": [],
-  "builtins": [
+  "description": "Reports whether the file meets PDF/X-6n; checked only, because it refers to an external press profile.",
+  "checks": [
     {
-      "name": "conformsTo",
+      "name": "Does not meet PDF/X-6n",
       "severity": "error",
-      "level": "x6n"
+      "all": [
+        {
+          "check": "conformance.meets",
+          "op": "is",
+          "value": false,
+          "standard": "pdfx-6n"
+        }
+      ]
     }
-  ],
-  "fixes": []
+  ]
 }

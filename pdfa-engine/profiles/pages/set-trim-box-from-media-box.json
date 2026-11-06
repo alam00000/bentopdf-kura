@@ -3,19 +3,16 @@
   "name": "Set trim box from media box",
   "description": "Adds a trim box equal to the media box on pages that lack one.",
   "checks": [],
-  "builtins": [],
   "fixes": [
     {
-      "op": "setpagebox",
-      "params": [
-        "TrimBox",
-        "RelativeToMediaBox",
-        "0",
-        "0",
-        "0",
-        "0",
-        "pt"
-      ]
+      "fix": "page.set_box",
+      "box": "trim",
+      "from": "media",
+      "left": "0mm",
+      "right": "0mm",
+      "top": "0mm",
+      "bottom": "0mm",
+      "when": "missing"
     }
   ]
 }

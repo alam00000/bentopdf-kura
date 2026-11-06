@@ -8,13 +8,11 @@
       "severity": "error",
       "all": [
         {
-          "prop": "stroke.width",
+          "check": "content.stroke_width",
           "op": "<=",
           "value": 0.1
         }
       ]
     }
-  ],
-  "builtins": [],
-  "fixes": []
+  ]
 }

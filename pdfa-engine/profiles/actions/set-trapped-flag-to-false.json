@@ -3,13 +3,11 @@
   "name": "Set trapped flag to false",
   "description": "Declares the file untrapped.",
   "checks": [],
-  "builtins": [],
   "fixes": [
     {
-      "op": "trappedkey",
-      "params": [
-        "false"
-      ]
+      "fix": "document.set_info",
+      "key": "Trapped",
+      "value": "False"
     }
   ]
 }

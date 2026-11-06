@@ -8,13 +8,11 @@
       "severity": "info",
       "all": [
         {
-          "prop": "text.isInvisible",
+          "check": "text.rendering",
           "op": "==",
-          "value": true
+          "value": "invisible"
         }
       ]
     }
-  ],
-  "builtins": [],
-  "fixes": []
+  ]
 }

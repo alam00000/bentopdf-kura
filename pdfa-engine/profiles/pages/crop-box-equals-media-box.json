@@ -8,13 +8,19 @@
       "severity": "info",
       "all": [
         {
-          "prop": "page.cropEqualsMedia",
+          "check": "page.box_present",
+          "op": "is",
+          "value": true,
+          "box": "crop"
+        },
+        {
+          "check": "page.box_relation",
           "op": "==",
-          "value": true
+          "value": "same",
+          "box": "crop",
+          "other": "media"
         }
       ]
     }
-  ],
-  "builtins": [],
-  "fixes": []
+  ]
 }

@@ -471,7 +471,7 @@ int artifactMarkUntagged(Ctx& ctx) {
 }
 }
 
-void passSemanticRepair(Ctx& ctx) {
+void passSemanticRepair(Ctx& ctx, bool mergeHeadings) {
   QPDFObjectHandle str = ctx.pdf.getRoot().getKey("/StructTreeRoot");
   if (!str.isDictionary()) return;
   std::vector<QPDFObjectHandle> elems;
@@ -479,7 +479,7 @@ void passSemanticRepair(Ctx& ctx) {
   collectElems(str.getKey("/K"), seen, elems);
   if (elems.empty()) return;
 
-  int merged = mergeAdjacentHeadings(ctx, elems);
+  int merged = mergeHeadings ? mergeAdjacentHeadings(ctx, elems) : 0;
   if (merged) {
     ctx.issue("HEADINGS_MERGED",
               "merged " + std::to_string(merged) +
@@ -498,7 +498,7 @@ void passSemanticRepair(Ctx& ctx) {
       if (!detail.empty()) detail += " and ";
       detail += "rebuilt the structure ID tree from element IDs";
     }
-    ctx.issue("STRUCT_IDS_REPAIRED", detail, true);
+    ctx.issue("STRUCT_IDS_REPAIRED", detail, !ctx.opt.verifyOnly);
   }
 
   int lists = setListNumbering(ctx, elems);

@@ -1,20 +1,19 @@
 {
   "kura-profile": 1,
   "name": "Invalid images",
-  "description": "Reports images the renderer cannot decode.",
+  "description": "Reports images that cannot be decoded.",
   "checks": [
     {
       "name": "Invalid image",
       "severity": "error",
       "all": [
         {
-          "prop": "image.invalid",
+          "check": "image.property",
           "op": "==",
-          "value": true
+          "value": "true",
+          "property": "invalid"
         }
       ]
     }
-  ],
-  "builtins": [],
-  "fixes": []
+  ]
 }

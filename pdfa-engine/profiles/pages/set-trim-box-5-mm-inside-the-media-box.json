@@ -3,19 +3,16 @@
   "name": "Set trim box 5 mm inside the media box",
   "description": "Adds a trim box inset 5 mm from the media box on pages that lack one, for files delivered with bleed but no boxes.",
   "checks": [],
-  "builtins": [],
   "fixes": [
     {
-      "op": "setpagebox",
-      "params": [
-        "TrimBox",
-        "RelativeToMediaBox",
-        "5",
-        "5",
-        "5",
-        "5",
-        "mm"
-      ]
+      "fix": "page.set_box",
+      "box": "trim",
+      "from": "media",
+      "left": "5mm",
+      "right": "5mm",
+      "top": "5mm",
+      "bottom": "5mm",
+      "when": "missing"
     }
   ]
 }

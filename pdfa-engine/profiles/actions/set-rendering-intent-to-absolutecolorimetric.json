@@ -1,15 +1,12 @@
 {
   "kura-profile": 1,
   "name": "Set rendering intent to AbsoluteColorimetric",
-  "description": "Sets every graphics state's rendering intent to AbsoluteColorimetric.",
+  "description": "Sets the rendering intent of every object to AbsoluteColorimetric.",
   "checks": [],
-  "builtins": [],
   "fixes": [
     {
-      "op": "setrenderingintent",
-      "params": [
-        "AbsoluteColorimetric"
-      ]
+      "fix": "graphics.set",
+      "rendering_intent": "AbsoluteColorimetric"
     }
   ]
 }

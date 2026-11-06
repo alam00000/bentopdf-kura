@@ -8,13 +8,15 @@
       "severity": "info",
       "all": [
         {
-          "prop": "paint.isSpot",
-          "op": "==",
-          "value": true
+          "check": "color.ink_mix",
+          "op": "in",
+          "value": [
+            "spot_only",
+            "spot_and_black",
+            "process_and_spot"
+          ]
         }
       ]
     }
-  ],
-  "builtins": [],
-  "fixes": []
+  ]
 }

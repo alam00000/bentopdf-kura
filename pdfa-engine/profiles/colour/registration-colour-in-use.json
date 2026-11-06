@@ -8,13 +8,11 @@
       "severity": "error",
       "all": [
         {
-          "prop": "paint.isRegistration",
+          "check": "color.ink_mix",
           "op": "==",
-          "value": true
+          "value": "registration"
         }
       ]
     }
-  ],
-  "builtins": [],
-  "fixes": []
+  ]
 }

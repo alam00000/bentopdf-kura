@@ -8,13 +8,11 @@
       "severity": "info",
       "all": [
         {
-          "prop": "annot.type",
+          "check": "annotation.type",
           "op": "==",
           "value": "Watermark"
         }
       ]
     }
-  ],
-  "builtins": [],
-  "fixes": []
+  ]
 }

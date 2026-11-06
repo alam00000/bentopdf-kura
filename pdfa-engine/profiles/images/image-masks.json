@@ -8,13 +8,11 @@
       "severity": "info",
       "all": [
         {
-          "prop": "content.isImageMask",
+          "check": "content.kind",
           "op": "==",
-          "value": true
+          "value": "image_mask"
         }
       ]
     }
-  ],
-  "builtins": [],
-  "fixes": []
+  ]
 }

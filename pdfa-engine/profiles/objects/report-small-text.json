@@ -8,12 +8,12 @@
       "severity": "warning",
       "all": [
         {
-          "prop": "text.size",
+          "check": "text.size",
           "op": "<",
           "value": 5
         },
         {
-          "prop": "text.size",
+          "check": "text.size",
           "op": ">",
           "value": 0.01
         }
@@ -24,17 +24,17 @@
       "severity": "warning",
       "all": [
         {
-          "prop": "text.size",
+          "check": "text.size",
           "op": "<",
           "value": 8
         },
         {
-          "prop": "text.size",
+          "check": "text.size",
           "op": ">",
           "value": 0.01
         },
         {
-          "prop": "paint.inkCount",
+          "check": "color.inks_used",
           "op": ">",
           "value": 1
         }
@@ -45,23 +45,21 @@
       "severity": "warning",
       "all": [
         {
-          "prop": "text.size",
+          "check": "text.size",
           "op": "<",
           "value": 8
         },
         {
-          "prop": "text.size",
+          "check": "text.size",
           "op": ">",
           "value": 0.01
         },
         {
-          "prop": "paint.isWhite",
+          "check": "color.ink_mix",
           "op": "==",
-          "value": true
+          "value": "none"
         }
       ]
     }
-  ],
-  "builtins": [],
-  "fixes": []
+  ]
 }

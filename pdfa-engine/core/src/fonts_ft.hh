@@ -10,7 +10,10 @@
 #include FT_TRUETYPE_IDS_H
 
 #include <cstdint>
+#include <map>
+#include <set>
 #include <string>
+#include <tuple>
 #include <vector>
 
 #include "assets/agl_names.hh"
@@ -324,4 +327,10 @@ inline FT_UInt resolveSimpleGid(const FtFace& face, int code, const SimpleEncodi
   }
   return glyphForCode(face.face, code, enc, symbolic);
 }
+struct FontUse {
+  std::set<uint32_t> codes, visibleCodes, cids, visibleCids;
+  bool partialCode = false;
+  std::set<std::tuple<uint32_t, QPDFObjGen, long long>> bareCodes;
+};
+std::map<QPDFObjGen, FontUse> collectFontUse(QPDF& pdf, std::set<QPDFObjGen>* reached = nullptr);
 }

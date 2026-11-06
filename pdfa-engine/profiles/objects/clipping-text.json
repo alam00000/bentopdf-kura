@@ -1,6 +1,6 @@
 {
   "kura-profile": 1,
-  "name": "Text used as a clipping path",
+  "name": "Clipping text",
   "description": "Reports text that clips instead of painting.",
   "checks": [
     {
@@ -8,13 +8,11 @@
       "severity": "info",
       "all": [
         {
-          "prop": "text.isClippingPath",
+          "check": "text.rendering",
           "op": "==",
-          "value": true
+          "value": "clip_only"
         }
       ]
     }
-  ],
-  "builtins": [],
-  "fixes": []
+  ]
 }

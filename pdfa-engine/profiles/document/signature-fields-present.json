@@ -8,13 +8,11 @@
       "severity": "info",
       "all": [
         {
-          "prop": "signature.hasFields",
-          "op": "==",
+          "check": "signature.present",
+          "op": "is",
           "value": true
         }
       ]
     }
-  ],
-  "builtins": [],
-  "fixes": []
+  ]
 }

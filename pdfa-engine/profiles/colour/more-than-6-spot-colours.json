@@ -2,15 +2,19 @@
   "kura-profile": 1,
   "name": "More than 6 spot colours",
   "description": "Reports pages that use more than 6 spot colours.",
-  "checks": [],
-  "builtins": [
+  "checks": [
     {
-      "name": "spotColoursMoreThan",
+      "name": "More than 6 spot colours on a page",
       "severity": "warning",
-      "params": {
-        "count": 6
-      }
+      "all": [
+        {
+          "check": "print.plates",
+          "op": "count",
+          "value": 6,
+          "compare": ">",
+          "kind": "spot"
+        }
+      ]
     }
-  ],
-  "fixes": []
+  ]
 }

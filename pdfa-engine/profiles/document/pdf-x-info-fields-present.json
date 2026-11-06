@@ -8,13 +8,11 @@
       "severity": "info",
       "all": [
         {
-          "prop": "docinfo.hasPdfxFields",
-          "op": "==",
-          "value": true
+          "check": "metadata.info_keys",
+          "op": "includes",
+          "value": "pdfx"
         }
       ]
     }
-  ],
-  "builtins": [],
-  "fixes": []
+  ]
 }

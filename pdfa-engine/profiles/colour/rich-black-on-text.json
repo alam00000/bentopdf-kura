@@ -8,18 +8,23 @@
       "severity": "warning",
       "all": [
         {
-          "prop": "content.isText",
+          "check": "content.kind",
           "op": "==",
-          "value": true
+          "value": "text"
         },
         {
-          "prop": "paint.richBlackCmyPercent",
+          "check": "color.ink",
+          "op": ">=",
+          "value": 100,
+          "ink": "black"
+        },
+        {
+          "check": "color.ink",
           "op": ">",
-          "value": 0
+          "value": 0,
+          "ink": "cmy_max"
         }
       ]
     }
-  ],
-  "builtins": [],
-  "fixes": []
+  ]
 }

@@ -1,20 +1,18 @@
 {
   "kura-profile": 1,
   "name": "Glyphs falling back to .notdef",
-  "description": "Reports glyphs falling back to .notdef.",
+  "description": "Reports glyphs falling back to .notdef in use.",
   "checks": [
     {
       "name": "Glyphs falling back to .notdef",
       "severity": "warning",
       "all": [
         {
-          "prop": "font.notdefUsed",
+          "check": "text.glyph",
           "op": "==",
-          "value": true
+          "value": "notdef"
         }
       ]
     }
-  ],
-  "builtins": [],
-  "fixes": []
+  ]
 }

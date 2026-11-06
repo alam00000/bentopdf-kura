@@ -1,14 +1,22 @@
 {
   "kura-profile": 1,
   "name": "Check PDF/E-1",
-  "description": "Reports every deviation from PDF/E-1; convert with --level e1 to fix them.",
-  "checks": [],
-  "builtins": [
+  "description": "Reports whether the file meets PDF/E-1; convert with --level e1 to fix it.",
+  "convert": {
+    "level": "pdfe-1"
+  },
+  "checks": [
     {
-      "name": "conformsTo",
+      "name": "Does not meet PDF/E-1",
       "severity": "error",
-      "level": "e1"
+      "all": [
+        {
+          "check": "conformance.meets",
+          "op": "is",
+          "value": false,
+          "standard": "pdfe-1"
+        }
+      ]
     }
-  ],
-  "fixes": []
+  ]
 }

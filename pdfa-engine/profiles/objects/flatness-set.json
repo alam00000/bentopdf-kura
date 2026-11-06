@@ -1,20 +1,18 @@
 {
   "kura-profile": 1,
   "name": "Flatness set",
-  "description": "Reports graphics states that set a flatness tolerance, which changes curve rendering.",
+  "description": "Reports objects drawn with a flatness tolerance, which changes curve rendering.",
   "checks": [
     {
       "name": "Flatness set",
       "severity": "info",
       "all": [
         {
-          "prop": "gstate.flatness",
+          "check": "print.flatness",
           "op": ">",
           "value": 0
         }
       ]
     }
-  ],
-  "builtins": [],
-  "fixes": []
+  ]
 }

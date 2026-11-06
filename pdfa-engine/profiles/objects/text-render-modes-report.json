@@ -8,13 +8,11 @@
       "severity": "info",
       "all": [
         {
-          "prop": "text.renderMode",
+          "check": "text.rendering",
           "op": "!=",
-          "value": 0
+          "value": "fill"
         }
       ]
     }
-  ],
-  "builtins": [],
-  "fixes": []
+  ]
 }

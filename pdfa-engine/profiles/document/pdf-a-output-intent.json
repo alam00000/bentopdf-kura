@@ -8,13 +8,12 @@
       "severity": "info",
       "all": [
         {
-          "prop": "outputIntent.isPdfa",
-          "op": "==",
-          "value": true
+          "check": "output_intent.count",
+          "op": ">",
+          "value": 0,
+          "subtype": "pdfa"
         }
       ]
     }
-  ],
-  "builtins": [],
-  "fixes": []
+  ]
 }

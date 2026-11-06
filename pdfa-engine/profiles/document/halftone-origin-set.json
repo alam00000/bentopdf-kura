@@ -8,13 +8,12 @@
       "severity": "info",
       "all": [
         {
-          "prop": "halftone.hasOrigin",
+          "check": "print.halftone",
           "op": "==",
-          "value": true
+          "value": "true",
+          "property": "origin"
         }
       ]
     }
-  ],
-  "builtins": [],
-  "fixes": []
+  ]
 }

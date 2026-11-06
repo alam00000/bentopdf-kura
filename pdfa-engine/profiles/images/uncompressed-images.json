@@ -2,12 +2,18 @@
   "kura-profile": 1,
   "name": "Uncompressed images",
   "description": "Reports images stored without any compression.",
-  "checks": [],
-  "builtins": [
+  "checks": [
     {
-      "name": "uncompressedImages",
-      "severity": "warning"
+      "name": "Uncompressed image",
+      "severity": "warning",
+      "all": [
+        {
+          "check": "image.property",
+          "op": "==",
+          "value": "false",
+          "property": "compressed"
+        }
+      ]
     }
-  ],
-  "fixes": []
+  ]
 }

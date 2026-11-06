@@ -8,8 +8,8 @@
       "severity": "info",
       "all": [
         {
-          "prop": "doc.dataAfterEof",
-          "op": "==",
+          "check": "document.data_after_eof",
+          "op": "is",
           "value": true
         }
       ]
@@ -19,26 +19,81 @@
       "severity": "warning",
       "all": [
         {
-          "prop": "doc.hexStringInvalid",
-          "op": "==",
+          "check": "syntax.string_encoding",
+          "op": "includes",
+          "value": "hex_invalid_character"
+        }
+      ]
+    },
+    {
+      "name": "Document is encrypted",
+      "severity": "warning",
+      "all": [
+        {
+          "check": "security.encryption",
+          "op": "!=",
+          "value": "none"
+        }
+      ]
+    },
+    {
+      "name": "Document is damaged",
+      "severity": "error",
+      "all": [
+        {
+          "check": "document.damaged",
+          "op": "is",
           "value": true
         }
       ]
-    }
-  ],
-  "builtins": [
-    {
-      "name": "encrypted",
-      "severity": "warning"
     },
     {
-      "name": "damaged",
-      "severity": "error"
-    },
-    {
-      "name": "syntaxProblems",
-      "severity": "error"
+      "name": "Syntax problem",
+      "severity": "error",
+      "any": [
+        {
+          "all": [
+            {
+              "check": "syntax.content_stream_error",
+              "op": "count",
+              "value": 0,
+              "compare": ">"
+            }
+          ]
+        },
+        {
+          "all": [
+            {
+              "check": "syntax.xref_layout",
+              "op": "count",
+              "value": 0,
+              "compare": ">"
+            }
+          ]
+        },
+        {
+          "all": [
+            {
+              "check": "syntax.object_layout",
+              "op": "count",
+              "value": 0,
+              "compare": ">"
+            }
+          ]
+        },
+        {
+          "all": [
+            {
+              "check": "syntax.broken_reference",
+              "op": "in",
+              "value": [
+                "object",
+                "external_file"
+              ]
+            }
+          ]
+        }
+      ]
     }
-  ],
-  "fixes": []
+  ]
 }

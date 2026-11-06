@@ -8,14 +8,12 @@
       "severity": "info",
       "all": [
         {
-          "prop": "gstate.blendMode",
-          "op": "!=",
-          "value": "Normal"
-        },
-        {
-          "prop": "gstate.blendMode",
-          "op": "!=",
-          "value": "Compatible"
+          "check": "transparency.blend_mode",
+          "op": "not_in",
+          "value": [
+            "Normal",
+            "Compatible"
+          ]
         }
       ]
     },
@@ -24,9 +22,10 @@
       "severity": "info",
       "all": [
         {
-          "prop": "gstate.hasSoftMask",
-          "op": "==",
-          "value": true
+          "check": "transparency.used",
+          "op": "is",
+          "value": true,
+          "how": "soft_mask"
         }
       ]
     },
@@ -35,9 +34,10 @@
       "severity": "info",
       "all": [
         {
-          "prop": "fill.alpha",
+          "check": "transparency.alpha",
           "op": "<",
-          "value": 1
+          "value": 1,
+          "paint": "fill"
         }
       ]
     },
@@ -46,9 +46,10 @@
       "severity": "info",
       "all": [
         {
-          "prop": "stroke.alpha",
+          "check": "transparency.alpha",
           "op": "<",
-          "value": 1
+          "value": 1,
+          "paint": "stroke"
         }
       ]
     },
@@ -57,13 +58,11 @@
       "severity": "info",
       "all": [
         {
-          "prop": "gstate.inTransparencyGroup",
-          "op": "==",
-          "value": true
+          "check": "transparency.group",
+          "op": "includes",
+          "value": "member"
         }
       ]
     }
-  ],
-  "builtins": [],
-  "fixes": []
+  ]
 }

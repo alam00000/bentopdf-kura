@@ -8,13 +8,14 @@
       "severity": "info",
       "all": [
         {
-          "prop": "text.isStroked",
-          "op": "==",
-          "value": true
+          "check": "text.rendering",
+          "op": "in",
+          "value": [
+            "stroke",
+            "fill_and_stroke"
+          ]
         }
       ]
     }
-  ],
-  "builtins": [],
-  "fixes": []
+  ]
 }

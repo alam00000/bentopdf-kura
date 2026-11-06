@@ -3,11 +3,9 @@
   "name": "Remove unnecessary transparency groups",
   "description": "Drops page transparency groups that contain no transparent objects.",
   "checks": [],
-  "builtins": [],
   "fixes": [
     {
-      "op": "removeunnecessarytransparencygroups",
-      "params": []
+      "fix": "transparency.remove_unneeded_groups"
     }
   ]
 }

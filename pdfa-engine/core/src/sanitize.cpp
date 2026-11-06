@@ -2,6 +2,8 @@
 #include <qpdf/QPDFPageDocumentHelper.hh>
 
 #include <algorithm>
+#include <cctype>
+#include <regex>
 #include <set>
 #include <string>
 #include <vector>
@@ -41,10 +43,29 @@ bool actionAllowed(Ctx& ctx, QPDFObjectHandle action) {
   return false;
 }
 
+bool aaForbidden(Ctx& ctx, QPDFObjectHandle aa, const std::string& where) {
+  if (!ctx.isA() || ctx.part < 4 || !aa.isDictionary()) return true;
+  static const std::set<std::string> catalogKeys = {"/WC", "/WS", "/DS", "/WP", "/DP"};
+  static const std::set<std::string> pageKeys = {"/O", "/C"};
+  static const std::set<std::string> annotKeys = {"/PO", "/PC", "/PV", "/PI"};
+  const std::set<std::string>& banned =
+      where.rfind("annotation", 0) == 0 ? annotKeys : where == "page" ? pageKeys : catalogKeys;
+  for (const std::string& k : aa.getKeys()) {
+    if (banned.count(k) || !actionAllowed(ctx, aa.getKey(k))) return true;
+  }
+  return false;
+}
+
 void sanitizeAdditionalActions(Ctx& ctx, QPDFObjectHandle dict, const std::string& where,
                                bool aaAllowed) {
   if (!dict.hasKey("/AA")) return;
   QPDFObjectHandle aa = dict.getKey("/AA");
+  if (ctx.opt.verifyOnly && ctx.isA() && ctx.part >= 4) {
+    bool bad = aaForbidden(ctx, aa, where);
+    dict.removeKey("/AA");
+    ctx.issue("ADDITIONAL_ACTIONS_REMOVED", "removed /AA from " + where, bad);
+    return;
+  }
   if (aaAllowed && ctx.isA() && ctx.part >= 4 && aa.isDictionary()) {
     for (const std::string& k : aa.getKeys()) {
       if (!actionAllowed(ctx, aa.getKey(k))) {
@@ -148,7 +169,7 @@ void stripSignatures(Ctx& ctx, QPDFObjectHandle root) {
               "removed " + std::to_string(stripped) +
                   " digital signature value(s)/permission dictionaries (signatures are "
                   "invalidated by conversion; re-sign the converted file)",
-              true);
+              !ctx.opt.verifyOnly);
   }
 }
 
@@ -183,6 +204,10 @@ void stripEmbeddedFilespec(Ctx& ctx, QPDFObjectHandle fs) {
 
 void normalizeFilespecPart3(Ctx& ctx, QPDFObjectHandle fs) {
   if (!fs.isDictionary()) return;
+  if (ctx.opt.verifyOnly && ctx.isA() && ctx.part >= 3 && fs.getKey("/EF").isDictionary() &&
+      (!fs.hasKey("/F") || !fs.hasKey("/UF"))) {
+    ctx.issue("EMBEDDED_FILE_KEYS_MISSING", "embedded file specification lacks the /F or /UF key", true);
+  }
   if (!ctx.isE() && !fs.hasKey("/AFRelationship")) {
     fs.replaceKey("/AFRelationship", QPDFObjectHandle::newName("/Unspecified"));
     ctx.issue("AF_RELATIONSHIP_ADDED", "added /AFRelationship /Unspecified to filespec", true);
@@ -211,11 +236,52 @@ void normalizeFilespecPart3(Ctx& ctx, QPDFObjectHandle fs) {
   }
 }
 
+bool embeddedFilesArePdfa(Ctx& ctx) {
+  static thread_local int nesting = 0;
+  static const std::regex partRe("pdfaid:part(?:\\s*=\\s*[\"']|>)\\s*([0-9])");
+  static const std::regex confRe("pdfaid:conformance(?:\\s*=\\s*[\"']|>)\\s*([A-Za-z])");
+  if (nesting > 2) return false;
+  for (QPDFObjectHandle obj : ctx.pdf.getAllObjects()) {
+    if (!obj.isDictionary() || !obj.getKey("/EF").isDictionary()) continue;
+    QPDFObjectHandle ef = obj.getKey("/EF");
+    QPDFObjectHandle st = ef.getKey("/F").isStream() ? ef.getKey("/F") : ef.getKey("/UF");
+    if (!st.isStream()) return false;
+    try {
+      auto buf = st.getStreamData(qpdf_dl_generalized);
+      QPDF inner;
+      inner.setSuppressWarnings(true);
+      inner.processMemoryFile("embedded", reinterpret_cast<const char*>(buf->getBuffer()), buf->getSize());
+      QPDFObjectHandle md = inner.getRoot().getKey("/Metadata");
+      if (!md.isStream()) return false;
+      auto mb = md.getStreamData(qpdf_dl_generalized);
+      std::string xmp(reinterpret_cast<const char*>(mb->getBuffer()), mb->getSize());
+      std::smatch m, c;
+      if (!std::regex_search(xmp, m, partRe) || (m[1] != "1" && m[1] != "2" && m[1] != "4")) return false;
+      std::string lv = m[1].str();
+      if (std::regex_search(xmp, c, confRe)) lv += static_cast<char>(std::tolower(static_cast<unsigned char>(c[1].str()[0])));
+      else if (lv != "4") return false;
+      Options o;
+      if (!levelFromString(lv, o.level)) return false;
+      o.verifyOnly = true;
+      ++nesting;
+      Result r = convertOnce(buf->getBuffer(), buf->getSize(), o);
+      --nesting;
+      if (!r.ok || !r.compliant) return false;
+    } catch (...) {
+      return false;
+    }
+  }
+  return true;
+}
+
 void handleEmbeddedFiles(Ctx& ctx, QPDFObjectHandle root) {
   QPDFObjectHandle names = root.getKey("/Names");
   QPDFObjectHandle tree =
       names.isDictionary() ? names.getKey("/EmbeddedFiles") : QPDFObjectHandle::newNull();
-  if (!ctx.allowEmbeddedFiles()) {
+  bool hadTree = tree.isDictionary();
+  bool allowed = ctx.allowEmbeddedFiles() ||
+                 (ctx.opt.verifyOnly && ctx.isA() && ctx.part >= 4 && embeddedFilesArePdfa(ctx));
+  if (!allowed) {
     if (tree.isDictionary()) {
       names.removeKey("/EmbeddedFiles");
       ctx.issue("EMBEDDED_FILES_REMOVED",
@@ -328,7 +394,7 @@ void handleEmbeddedFiles(Ctx& ctx, QPDFObjectHandle root) {
     ctx.issue("EMBEDDED_FILES_ENROLLED",
               "listed " + std::to_string(orphans.size()) +
                   " embedded file(s) in the catalog /EmbeddedFiles name tree",
-              true);
+              !ctx.opt.verifyOnly || (ctx.conf == 'F' && !hadTree));
   }
   if (ctx.conf == 'F' && !tree.isDictionary()) {
     if (!names.isDictionary()) {
@@ -342,6 +408,20 @@ void handleEmbeddedFiles(Ctx& ctx, QPDFObjectHandle root) {
               "added empty /EmbeddedFiles name tree (PDF/A-4f requires the key; document has "
               "no attachments)",
               true);
+  }
+  std::set<QPDFObjGen> associated;
+  if (ctx.opt.verifyOnly) {
+    for (QPDFObjectHandle obj : ctx.pdf.getAllObjects()) {
+      QPDFObjectHandle d = obj.isStream() ? obj.getDict() : obj;
+      QPDFObjectHandle afs = d.isDictionary() ? d.getKey("/AF") : QPDFObjectHandle::newNull();
+      for (int i = 0; afs.isArray() && i < afs.getArrayNItems(); ++i) {
+        if (afs.getArrayItem(i).isIndirect()) associated.insert(afs.getArrayItem(i).getObjGen());
+      }
+    }
+  }
+  bool unassociated = !ctx.opt.verifyOnly;
+  for (QPDFObjectHandle fs : specs) {
+    unassociated = unassociated || (ctx.part == 3 && (!fs.isIndirect() || !associated.count(fs.getObjGen())));
   }
   if (!specs.empty() && !ctx.isE()) {
     QPDFObjectHandle af = root.getKey("/AF");
@@ -363,7 +443,7 @@ void handleEmbeddedFiles(Ctx& ctx, QPDFObjectHandle root) {
     if (added) {
       root.replaceKey("/AF", af);
       ctx.issue("AF_ARRAY_ADDED", "associated embedded files with the document via catalog /AF",
-                true);
+                unassociated);
     }
   }
 }
@@ -483,13 +563,15 @@ void handleOptionalContent(Ctx& ctx, QPDFObjectHandle root) {
       ctx.issue("OC_AS_REMOVED", "removed /AS from optional content configuration", true);
     }
     if (!cfg.getKey("/Name").isString() || cfg.getKey("/Name").getUTF8Value().empty()) {
+      bool nameMissing = !cfg.getKey("/Name").isString();
       std::string nm;
       do {
         ++nameCounter;
         nm = nameCounter == 1 ? "Configuration" : "Configuration " + std::to_string(nameCounter);
       } while (!usedNames.insert(nm).second);
       cfg.replaceKey("/Name", QPDFObjectHandle::newUnicodeString(nm));
-      ctx.issue("OC_CONFIG_NAME_ADDED", "added missing /Name to optional content config", true);
+      ctx.issue("OC_CONFIG_NAME_ADDED", "added missing /Name to optional content config",
+                !ctx.opt.verifyOnly || nameMissing);
     } else if (!usedNames.insert(cfg.getKey("/Name").getUTF8Value()).second) {
       std::string nm = cfg.getKey("/Name").getUTF8Value();
       std::string uniq;
@@ -607,8 +689,30 @@ void passStructure(Ctx& ctx) {
 
   for (const char* key : {"/AA", "/Requirements", "/NeedsRendering", "/Perms", "/Version"}) {
     if (root.hasKey(key)) {
+      bool real = !ctx.opt.verifyOnly;
+      if (!real && std::string(key) == "/Perms") {
+        QPDFObjectHandle perms = root.getKey(key);
+        for (const std::string& pk : perms.isDictionary() && ctx.part >= 2 ? perms.getKeys() : std::set<std::string>()) {
+          real = real || (pk != "/UR3" && pk != "/DocMDP");
+        }
+        QPDFObjectHandle refs = perms.isDictionary() ? perms.getKey("/DocMDP").getKey("/Reference") : QPDFObjectHandle::newNull();
+        for (int ri = 0; ctx.part >= 2 && refs.isArray() && ri < refs.getArrayNItems(); ++ri) {
+          QPDFObjectHandle rd = refs.getArrayItem(ri);
+          for (const char* dk : {"/DigestLocation", "/DigestMethod", "/DigestValue"}) {
+            real = real || (rd.isDictionary() && rd.hasKey(dk));
+          }
+        }
+      } else if (!real && std::string(key) == "/AA") {
+        real = aaForbidden(ctx, root.getKey(key), "catalog");
+      } else if (!real && std::string(key) == "/Version") {
+        QPDFObjectHandle v = root.getKey(key);
+        std::string vs = v.isName() ? v.getName().substr(1) : std::string();
+        real = ctx.part >= 4 && (vs.size() != 3 || vs[0] != '2' || vs[1] != '.' || !std::isdigit(static_cast<unsigned char>(vs[2])));
+      } else if (!real) {
+        real = true;
+      }
       root.removeKey(key);
-      ctx.issue("CATALOG_KEY_REMOVED", std::string("removed catalog ") + key, true);
+      ctx.issue("CATALOG_KEY_REMOVED", std::string("removed catalog ") + key, real);
     }
   }
 
@@ -655,8 +759,9 @@ void passStructure(Ctx& ctx) {
       ctx.issue("XFA_REMOVED", "removed /XFA form data", true);
     }
     if (acro.hasKey("/NeedAppearances")) {
+      bool on = acro.getKey("/NeedAppearances").isBool() && acro.getKey("/NeedAppearances").getBoolValue();
       acro.removeKey("/NeedAppearances");
-      ctx.issue("NEED_APPEARANCES_REMOVED", "removed /NeedAppearances from AcroForm", true);
+      ctx.issue("NEED_APPEARANCES_REMOVED", "removed /NeedAppearances from AcroForm", !ctx.opt.verifyOnly || on);
     }
     Visited visited;
     walkFields(ctx, acro.getKey("/Fields"), visited);
