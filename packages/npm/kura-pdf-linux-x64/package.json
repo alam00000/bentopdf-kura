@@ -1,6 +1,6 @@
 {
   "name": "@bentopdf/kura-pdf-linux-x64",
-  "version": "1.2.1",
+  "version": "1.3.0",
   "description": "Prebuilt Kura engine binary for Linux x64",
   "license": "AGPL-3.0-only",
   "repository": {
