@@ -6,6 +6,22 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- PDF/A-1 runs that cannot convert RGB content to the CMYK output intent now
+  fail with `RGB_UNDER_CMYK_P1` and suggest PDF/A-2b, instead of a PDF/X error
+  that pointed to PDF/X-3 or X-4.
+- The web converter runs engine 1.4.1; it had been serving 1.3.0.
+
+### Added
+
+- Web converter: colour conversion to CMYK, grayscale or sRGB, a plain-PDF
+  target with a PDF version choice, and a document language for PDF/UA.
+- Web preflight: a Colour group (grey, sRGB, spot colours to CMYK, ink limits,
+  midtones); fix-only presets no longer also convert to PDF/A-2b.
+- The browser and `kura-pdf-wasm` say up front that they carry no fonts for
+  non-Latin scripts, so such text in an unembedded font becomes an image there.
+
 ## [1.4.1] - 2026-11-08
 
 ### Fixed

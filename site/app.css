@@ -92,6 +92,9 @@ button:disabled, .btn:disabled { opacity: .5; cursor: default; }
 .tool-dropzone:hover .ph, .tool-dropzone.over .ph { color: var(--brand); }
 .tool-dropzone-inner strong { display: block; color: var(--text); font-size: 16px; margin-bottom: 4px; }
 .tool-dropzone-inner span { color: var(--muted); font-size: 13px; }
+.tool-dropzone-inner .note { max-width: 460px; margin-top: 18px; font-size: 12px; line-height: 1.5; }
+.tool-dropzone-inner .note a { color: var(--brand); }
+.tool-file-note { color: var(--muted); font-size: 12px; margin-top: 4px; }
 
 .tool-file-list {
   flex: 1 1 auto; min-height: 0; overflow-y: auto;

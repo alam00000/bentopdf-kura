@@ -116,6 +116,7 @@ The two packages differ in a few options:
 | `convertColors` | `cmyk`, `gray`, `rgb`, ICC bytes, or a profile name looked up as on the [CLI](/cli#colour-profiles-what-is-included-and-where-kura-looks) | `cmyk`, `gray`, `rgb` or ICC bytes; a name throws `BAD_OPTION` |
 | `imageMaxPpi`, `timeoutMs`, `sign`, `ocr`, `ocrEngine`, `fontFolder` | supported | ignored |
 | `vars`, `now` | not available | supported |
+| Text in a font the file does not embed | substituted from Kura's bundled fonts, so Arabic, Indic, Chinese, Japanese, Korean and other scripts stay text | the bundled script fonts are too large to ship in WebAssembly, so a page with such text in a non-Latin script is turned into an image instead; it still conforms, but that text can no longer be selected or searched |
 
 `issues` and `analysis` entries carry `code`, `detail` and, for issues, `fixed`. The severity and page numbers the CLI prints are not passed through; run the CLI with `--check` when you need them.
 

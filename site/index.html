@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Kura · BentoPDF</title>
-<meta name="description" content="Convert any PDF to PDF/A, PDF/UA, PDF/X, PDF/E or PDF/VT in your browser. Files never leave your machine.">
+<meta name="description" content="Convert any PDF to PDF/A, PDF/UA, PDF/X, PDF/E or PDF/VT, convert its colours, or check it against the standard, in your browser. Files never leave your machine.">
 <link rel="icon" href="./logo.svg" type="image/svg+xml">
 <link rel="stylesheet" href="./app.css">
 </head>
@@ -31,6 +31,7 @@
         <span class="ic" data-icon="upload-simple"></span>
         <strong>Drop PDFs here</strong>
         <span>or click to choose files. JPEG scans work too.</span>
+        <span class="note">Everything runs in your browser. This version has no fonts for scripts such as Arabic, Hindi, Chinese, Japanese or Korean, so a page whose text in those scripts uses a font the file does not include becomes an image. It still conforms, but that text can no longer be selected. The <a href="/docs/getting-started" onclick="event.stopPropagation()">downloadable versions</a> keep it as text.</span>
       </div>
       <input id="file" type="file" accept="application/pdf,image/jpeg,.pdf,.jpg,.jpeg" multiple hidden>
     </div>
@@ -66,6 +67,32 @@
           <option value="vt1">PDF/VT-1</option>
           <option value="vt3">PDF/VT-3</option>
         </optgroup>
+        <optgroup label="No standard">
+          <option value="none">Plain PDF, colours or version only</option>
+        </optgroup>
+      </select>
+    </div>
+
+    <div class="tool-field-group">
+      <span class="tool-field-label">Colours</span>
+      <select id="colors" aria-label="Convert colours">
+        <option value="" selected>Keep as they are</option>
+        <option value="cmyk">Convert to CMYK, for print</option>
+        <option value="gray">Convert to grayscale</option>
+        <option value="rgb">Convert to sRGB, for screens</option>
+      </select>
+      <p class="tool-field-help">Converted through ICC colour profiles, with the standard's own rules applied on top.</p>
+    </div>
+
+    <div class="tool-field-group hidden" id="pdfVersionGroup">
+      <span class="tool-field-label">PDF version</span>
+      <select id="pdfVersion" aria-label="PDF version">
+        <option value="" selected>Keep the file's version</option>
+        <option value="1.4">PDF 1.4</option>
+        <option value="1.5">PDF 1.5</option>
+        <option value="1.6">PDF 1.6</option>
+        <option value="1.7">PDF 1.7</option>
+        <option value="2.0">PDF 2.0</option>
       </select>
     </div>
 
@@ -75,7 +102,13 @@
       <span id="uaLabel">Accessibility (PDF/UA-1)</span>
     </label>
 
-    <label class="switch off" title="Report what would have to change without producing a file">
+    <div class="tool-field-group hidden" id="langGroup">
+      <span class="tool-field-label">Document language</span>
+      <input type="text" id="lang" placeholder="for example en-US" autocomplete="off" spellcheck="false" maxlength="35">
+      <p class="tool-field-help">Tells screen readers how to pronounce the text. Used when the file does not declare a language.</p>
+    </div>
+
+    <label class="switch off" id="checkSwitch" title="Validate the file as it is, rule by rule, without producing a new one">
       <input type="checkbox" id="checkOnly">
       <span class="track"><span class="thumb"></span></span>
       <span>Check only</span>

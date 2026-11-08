@@ -10,6 +10,7 @@ let running = false;
 let invoiceXml = null;
 let nextId = 0;
 const files = [];
+const levelName = (v) => v === 'none' ? 'PDF' : `PDF/${describeLevel(v)}`;
 
 const engine = createEngine((m) => {
   ready = m.ready;
@@ -82,7 +83,7 @@ function renderRow(it, i) {
   sub.appendChild(el('span', null, fmtBytes(it.file.size)));
   if (it.outSize) {
     sub.appendChild(el('span', 'dot', '·'));
-    sub.appendChild(el('span', null, `${fmtBytes(it.outSize)} as PDF/${describeLevel(it.level)}${it.ua ? ' + UA' : ''}`));
+    sub.appendChild(el('span', null, `${fmtBytes(it.outSize)} as ${levelName(it.level)}${it.ua ? ' + UA' : ''}`));
   }
   if (it.ms) { sub.appendChild(el('span', 'dot', '·')); sub.appendChild(el('span', null, `${it.ms} ms`)); }
   if (it.encrypted) {
@@ -110,19 +111,22 @@ function renderRow(it, i) {
     status.appendChild(detailsToggle(it.open ? 'hide details' : 'show details'));
   } else if (it.status === 'checked') {
     status.appendChild(withIcon('span', it.compliant ? 'ok' : 'warn', it.compliant ? 'check-circle' : 'warning-circle',
-      it.compliant ? `already conforms to PDF/${describeLevel(it.level)}` : `${it.findings} finding(s)`));
+      it.compliant ? `already conforms to ${levelName(it.level)}` : `${it.findings} finding(s)`));
     if (!it.compliant) status.appendChild(detailsToggle(it.open ? 'hide' : 'show'));
   } else if (it.status === 'error' && it.errorCode === 'PASSWORD_REQUIRED' && it.encrypted && !it.verified) {
     status.appendChild(withIcon('span', 'warn', 'lock', 'Needs its password'));
   } else if (it.status === 'error') {
     status.appendChild(withIcon('span', 'err', 'x-circle', `${it.errorCode}: ${it.error}`));
     if (it.suggest) {
-      const b = el('button', 'link-btn', `try PDF/${describeLevel(it.suggest)}`);
+      const b = el('button', 'link-btn', `try ${levelName(it.suggest)}`);
       b.onclick = () => convertOne(it, it.suggest);
       status.appendChild(b);
     }
   }
   meta.appendChild(status);
+  if (it.status === 'done' && it.issues.some((is) => is.code === 'FONT_PAGE_RASTERIZED')) {
+    meta.appendChild(el('div', 'tool-file-note', 'Some pages became images because a font could not be included in the browser. For Arabic, Hindi, Chinese, Japanese, Korean and other scripts, the downloadable versions keep that text selectable.'));
+  }
   if (it.encrypted && !it.verified && !running) meta.appendChild(unlockRow(it));
   let list = null;
   if (it.open && it.issues && it.issues.length) {
@@ -160,6 +164,9 @@ function currentOptions(bytes, name, it) {
   const pw = it.password || $('password').value;
   if (pw) opts.password = pw;
   if ($('ua').checked && !$('ua').disabled) opts.ua = true;
+  if (opts.ua && $('lang').value.trim()) opts.lang = $('lang').value.trim();
+  if ($('colors').value) opts.convertColors = $('colors').value;
+  if ($('level').value === 'none' && $('pdfVersion').value) opts.pdfVersion = $('pdfVersion').value;
   if ($('visualRisk').checked) opts.allowVisualRisk = true;
   if ($('checkOnly').checked) opts.check = true;
   if ($('rasterize').checked) opts.rasterizePages = true;
@@ -195,7 +202,7 @@ async function convertOne(it, levelOverride) {
     it.issues = r.issues;
     it.blob = new Blob([r.pdf], { type: 'application/pdf' });
     it.outSize = it.blob.size;
-    it.outName = it.file.name.replace(/\.(pdf|jpe?g)$/i, '') + `.${level}${ua ? '-ua' : ''}.pdf`;
+    it.outName = it.file.name.replace(/\.(pdf|jpe?g)$/i, '') + `.${level === 'none' ? (opts.convertColors || 'out') : level}${ua ? '-ua' : ''}.pdf`;
   } else {
     it.status = 'error';
     it.errorCode = r.errorCode;
@@ -246,6 +253,11 @@ function syncSwitches() {
   const isA = /^[1-4]/.test(v);
   $('ua').disabled = !isA;
   if (!isA) $('ua').checked = false;
+  $('langGroup').classList.toggle('hidden', !$('ua').checked);
+  const none = v === 'none';
+  $('pdfVersionGroup').classList.toggle('hidden', !none);
+  $('checkOnly').disabled = none;
+  if (none) $('checkOnly').checked = false;
   $('uaLabel').textContent = isA ? (/^4/.test(v) ? 'Accessibility (PDF/UA-2)' : 'Accessibility (PDF/UA-1)') : 'Accessibility (PDF/A only)';
   const canAttach = /^(3|4f|4e|e1)/.test(v);
   $('embedSource').disabled = !canAttach;

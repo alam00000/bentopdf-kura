@@ -29,7 +29,7 @@ const engine = createEngine((m) => {
 
 function kindOf(p) {
   if (p.level) return 'convert';
-  if (p.json && p.json.fixes && p.json.fixes.length) return 'fix';
+  if (p.json && ((p.json.fixes && p.json.fixes.length) || p.json.convert)) return 'fix';
   return 'check';
 }
 
@@ -181,7 +181,7 @@ async function run(fix) {
   const profile = selected;
   updateButtons();
   setStatus(fix ? `${primaryLabel(profile)}…` : `Analyzing with ${profile.name}…`);
-  const level = profile.level || '2b';
+  const level = profile.level || '';
   const opts = {};
   if (!fix) { opts.check = true; opts.analyze = true; }
   if (profile.ua) opts.ua = true;

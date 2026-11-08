@@ -18,6 +18,12 @@ const CURATED = [
     ['gwg', 'GWG 2022 heatset web offset: check'], ['gwg', 'GWG 2022 digital print: check'], ['gwg', 'GWG 2022 large format: check'],
     ['gwg', 'GWG 2022 packaging with spot colours: check'], ['gwg', 'GWG 2022 sheetfed offset, CMYK: check and fix'],
   ]],
+  ['Colour', [
+    ['colour-conversion', 'Convert all colours to grey'], ['colour-conversion', 'Convert all colours to sRGB'],
+    ['colour-conversion', 'Convert spot colours to CMYK, keeping the look of overprints'],
+    ['colour-conversion', 'Reduce total ink to 300%'], ['colour-conversion', 'Reduce total ink to 260%'],
+    ['colour-conversion', 'Reduce total ink to 240%'], ['colour-conversion', 'Lower midtones by 10%'],
+  ]],
   ['Online publishing', [
     ['online', 'Online publishing: check'], ['online', 'Online publishing: check and fix'], ['online', 'Email attachment: check'],
   ]],

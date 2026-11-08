@@ -8454,6 +8454,137 @@ export const PROFILES = {
    ]
   },
   {
+   "name": "Colour",
+   "profiles": [
+    {
+     "name": "Convert all colours to grey",
+     "description": "Converts every colour to greyscale (Dot Gain 15%). No standard is applied.",
+     "json": {
+      "kura-profile": 1,
+      "name": "Convert all colours to grey",
+      "description": "Converts every colour to greyscale (Dot Gain 15%). No standard is applied.",
+      "convert": {
+       "colors": {
+        "to": "gray"
+       }
+      },
+      "checks": []
+     }
+    },
+    {
+     "name": "Convert all colours to sRGB",
+     "description": "Converts every colour to sRGB, for screens and the web. No standard is applied.",
+     "json": {
+      "kura-profile": 1,
+      "name": "Convert all colours to sRGB",
+      "description": "Converts every colour to sRGB, for screens and the web. No standard is applied.",
+      "convert": {
+       "colors": {
+        "to": "rgb"
+       }
+      },
+      "checks": []
+     }
+    },
+    {
+     "name": "Convert spot colours to CMYK, keeping the look of overprints",
+     "description": "Flattens overprint first, so overprinting spot colours keep their appearance, then converts every colour to CMYK. No standard is applied.",
+     "json": {
+      "kura-profile": 1,
+      "name": "Convert spot colours to CMYK, keeping the look of overprints",
+      "description": "Flattens overprint first, so overprinting spot colours keep their appearance, then converts every colour to CMYK. No standard is applied.",
+      "convert": {
+       "colors": {
+        "to": "cmyk",
+        "keep_spots": false
+       }
+      },
+      "checks": [],
+      "fixes": [
+       {
+        "fix": "ink.flatten_overprint"
+       }
+      ]
+     }
+    },
+    {
+     "name": "Reduce total ink to 300%",
+     "description": "Lowers total ink coverage to at most 300% (typical for coated sheetfed and heatset web) by taking cyan, magenta and yellow out first and keeping black; colour below the limit is left as it is and spot colours stay spot colours. RGB and other colour is converted to CMYK on the way. No standard is applied.",
+     "json": {
+      "kura-profile": 1,
+      "name": "Reduce total ink to 300%",
+      "description": "Lowers total ink coverage to at most 300% (typical for coated sheetfed and heatset web) by taking cyan, magenta and yellow out first and keeping black; colour below the limit is left as it is and spot colours stay spot colours. RGB and other colour is converted to CMYK on the way. No standard is applied.",
+      "convert": {
+       "colors": {
+        "to": "cmyk",
+        "keep_spots": true,
+        "ink_limit": 300
+       }
+      },
+      "checks": []
+     }
+    },
+    {
+     "name": "Reduce total ink to 260%",
+     "description": "Lowers total ink coverage to at most 260% (typical for coldset and uncoated web) by taking cyan, magenta and yellow out first and keeping black; colour below the limit is left as it is and spot colours stay spot colours. RGB and other colour is converted to CMYK on the way. No standard is applied.",
+     "json": {
+      "kura-profile": 1,
+      "name": "Reduce total ink to 260%",
+      "description": "Lowers total ink coverage to at most 260% (typical for coldset and uncoated web) by taking cyan, magenta and yellow out first and keeping black; colour below the limit is left as it is and spot colours stay spot colours. RGB and other colour is converted to CMYK on the way. No standard is applied.",
+      "convert": {
+       "colors": {
+        "to": "cmyk",
+        "keep_spots": true,
+        "ink_limit": 260
+       }
+      },
+      "checks": []
+     }
+    },
+    {
+     "name": "Reduce total ink to 240%",
+     "description": "Lowers total ink coverage to at most 240% (typical for newspapers) by taking cyan, magenta and yellow out first and keeping black; colour below the limit is left as it is and spot colours stay spot colours. RGB and other colour is converted to CMYK on the way. No standard is applied.",
+     "json": {
+      "kura-profile": 1,
+      "name": "Reduce total ink to 240%",
+      "description": "Lowers total ink coverage to at most 240% (typical for newspapers) by taking cyan, magenta and yellow out first and keeping black; colour below the limit is left as it is and spot colours stay spot colours. RGB and other colour is converted to CMYK on the way. No standard is applied.",
+      "convert": {
+       "colors": {
+        "to": "cmyk",
+        "keep_spots": true,
+        "ink_limit": 240
+       }
+      },
+      "checks": []
+     }
+    },
+    {
+     "name": "Lower midtones by 10%",
+     "description": "Applies a tone curve to CMYK colour that prints 50% tones as 40%, leaving paper white and solids unchanged. No standard is applied.",
+     "json": {
+      "kura-profile": 1,
+      "name": "Lower midtones by 10%",
+      "description": "Applies a tone curve to CMYK colour that prints 50% tones as 40%, leaving paper white and solids unchanged. No standard is applied.",
+      "convert": {
+       "colors": {
+        "to": "cmyk",
+        "keep_spots": true,
+        "tone_curve": [
+         0,
+         0,
+         50,
+         40,
+         100,
+         100
+        ]
+       }
+      },
+      "checks": []
+     }
+    }
+   ]
+  },
+  {
    "name": "Online publishing",
    "profiles": [
     {
