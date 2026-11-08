@@ -45,6 +45,7 @@ export default defineConfig({
           { text: 'Getting Started', link: '/getting-started' },
           { text: 'The standards', link: '/standards' },
           { text: 'Check mode', link: '/check-mode' },
+          { text: 'Conformance', link: '/conformance' },
           { text: 'E-invoices', link: '/e-invoices' },
           { text: 'Preflight profiles', link: '/preflight' },
         ],

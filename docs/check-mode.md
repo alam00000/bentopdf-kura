@@ -34,6 +34,8 @@ Besides the repairs the converter would make, check mode runs the standards' own
 | PDF/UA-1 | 296 | 100% |
 | PDF/UA-2 | 133 | 100% |
 
+The full results, including PDF/X, PDF/E and PDF/VT, are on [Conformance](/conformance).
+
 If a pass could not finish, because a content stream or metadata packet could not be read, the report carries a `SCAN_INCOMPLETE` finding rather than staying silent. Treat it as "unknown", not "clean".
 
 So: use check mode as a preflight, to decide whether a document needs conversion and to see what conversion would do. Use an independent validator for certification.
