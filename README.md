@@ -22,6 +22,30 @@ Try the converter and preflight at [kura.bentopdf.com](https://kura.bentopdf.com
 
 ---
 
+## 📜 Licensing
+
+Kura is **dual-licensed** to fit your needs:
+
+| License | Best For | Price |
+| --- | --- | --- |
+| **AGPL-3.0** | Open-source projects with public source code | **Free** |
+| **Commercial** | Proprietary / closed-source products | **from $99/year** |
+| **OEM** | Redistribution, reselling as an SDK, or offering Kura as a service | **from $1,999/year** |
+
+<p align="center">
+  <a href="https://www.bentopdf.com/kura#pricing">
+    <img src="https://img.shields.io/badge/🚀_Get_Commercial_License-from_$99%2Fyear-6366f1?style=for-the-badge&labelColor=1f2937" alt="Get Commercial License">
+  </a>
+</p>
+
+> **Solo $99** · **Indie $199** · **Business $499** per year · **One closed-source product per license** · **Unlimited developers from Indie up** · **No AGPL obligations**
+
+For OEM terms, contact [contact@bentopdf.com](mailto:contact@bentopdf.com). See the [full license terms](COMMERCIAL-LICENSE.md) and the [pricing page](https://www.bentopdf.com/kura#pricing).
+
+📖 For more details, see the [Licensing Page](https://kura.bentopdf.com/docs/licensing).
+
+---
+
 ## Table of Contents
 
 * [Why Kura](#why-kura)
