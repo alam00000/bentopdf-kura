@@ -11,6 +11,7 @@ export type ColorObject = 'text' | 'vector' | 'shading' | 'images' | 'lossy' | '
 export interface KuraOptions {
   ua?: boolean;
   lang?: string;
+  vars?: Record<string, string>;
   pdfVersion?: '1.3' | '1.4' | '1.5' | '1.6' | '1.7' | '2.0';
   password?: string;
   allowVisualRisk?: boolean;

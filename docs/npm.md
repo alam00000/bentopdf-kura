@@ -8,7 +8,7 @@ Two packages carry the engine, with the same API:
 
 | Package | What it is | Use it when |
 |---|---|---|
-| `kura-pdf` | the native engine, installed through a platform package (`@bentopdf/kura-pdf-linux-x64`, `@bentopdf/kura-pdf-darwin-arm64`, `@bentopdf/kura-pdf-win32-x64`) and run in a subprocess | you are on Linux x64, macOS arm64 or Windows x64 and want speed, raster flattening, signing and OCR |
+| `kura-pdf` | the native engine, installed through a platform package (`@bentopdf/kura-pdf-linux-x64`, `@bentopdf/kura-pdf-darwin-arm64`, `@bentopdf/kura-pdf-win32-x64`) and run in a subprocess | you are on Linux x64, macOS arm64 or Windows x64 and want speed, signing, OCR, your own fonts and profile names |
 | `kura-pdf-wasm` | the engine compiled to WebAssembly, no native binaries, no postinstall downloads | any other platform, browsers, or environments that cannot ship native binaries |
 
 Both need Node 22 or newer and are ESM only. `kura-pdf` installs the `kura` command, the native CLI itself; `kura-pdf-wasm` installs `kura-wasm`. On a platform without a native package, `kura-pdf` throws `ENGINE_MISSING`; set `KURA_BIN` to a binary you built to use it anyway.
@@ -50,7 +50,7 @@ interface KuraOptions {
   facturxProfile?: string;
   embedSource?: boolean;        // attach the input document with /AFRelationship /Source
   embedSourceName?: string;
-  pdfVersion?: string;          // '1.3'..'2.0', with level 'none'
+  pdfVersion?: string;          // '1.3'..'2.0', with level 'none'; see below
   outputCondition?: string;     // PDF/X output intent identification
   outputConditionInfo?: string;
   registry?: string;
@@ -58,7 +58,8 @@ interface KuraOptions {
   defaultRgb?: Uint8Array;      // replace the bundled default profiles
   defaultCmyk?: Uint8Array;
   defaultGray?: Uint8Array;
-  convertColors?: 'cmyk' | 'gray' | 'rgb' | Uint8Array; // convert colour; an ICC profile as bytes also works
+  convertColors?: 'cmyk' | 'gray' | 'rgb' | Uint8Array; // convert colour; an ICC profile as bytes also works,
+                                // and in kura-pdf a profile name such as 'ISO Coated v2 (ECI)'
   intent?: 'perceptual' | 'relative' | 'saturation' | 'absolute';
   convertObjects?: string[];    // any of text, vector, shading, images, lossy, lossless
   keepSpots?: boolean;          // keep spot colours, convert only their alternate
@@ -75,6 +76,14 @@ interface KuraOptions {
   ocrEngine?: string;           // native only: path to tesseract
   fontFolder?: string;          // native only: extra fonts for substitution
   timeoutMs?: number;           // native only: time limit for this call
+}
+
+// kura-pdf-wasm only:
+interface KuraWasmExtras {
+  embedSource?: Uint8Array;     // the bytes of the file to attach (instead of a boolean)
+  embedSourceMime?: string;     // its MIME type, for example 'application/pdf'
+  vars?: Record<string, string | number | boolean>; // values for the profile's variables
+  now?: string;                 // a fixed PDF date such as 'D:20260101120000Z' for the dates Kura writes
 }
 
 interface SignOptions {
@@ -97,7 +106,40 @@ interface Issue { code: string; detail: string; fixed: boolean }
 interface Finding { code: string; detail: string }
 ```
 
-The options are the same as the [CLI flags](/cli) with the dashes turned into camelCase. Binary values, the ICC profiles and the invoice XML, are passed as `Uint8Array`. In `kura-pdf-wasm`, `embedSource` takes the bytes of the file to attach instead of a boolean, and the four native-only options are ignored.
+The options are the same as the [CLI flags](/cli) with the dashes turned into camelCase. Binary values, the ICC profiles and the invoice XML, are passed as `Uint8Array`. Options left out take the CLI defaults.
+
+The two packages differ in a few options:
+
+| Option | `kura-pdf` | `kura-pdf-wasm` |
+|---|---|---|
+| `embedSource` | `true` attaches the input itself | the bytes of the file to attach; `embedSourceMime` sets its type |
+| `convertColors` | `cmyk`, `gray`, `rgb`, ICC bytes, or a profile name looked up as on the [CLI](/cli#colour-profiles-what-is-included-and-where-kura-looks) | `cmyk`, `gray`, `rgb` or ICC bytes; a name throws `BAD_OPTION` |
+| `imageMaxPpi`, `timeoutMs`, `sign`, `ocr`, `ocrEngine`, `fontFolder` | supported | ignored |
+| `vars`, `now` | not available | supported |
+
+`issues` and `analysis` entries carry `code`, `detail` and, for issues, `fixed`. The severity and page numbers the CLI prints are not passed through; run the CLI with `--check` when you need them.
+
+### Without a standard
+
+Pass the level `'none'` to apply only a colour conversion, a profile's fixes or a PDF version, and leave the rest of the file alone:
+
+```js
+const { pdf } = await convert(input, 'none', { pdfVersion: '1.4' });               // save as PDF 1.4
+const gray = await convert(input, 'none', { convertColors: 'gray' });              // just make it grayscale
+```
+
+### Running a preflight profile
+
+`profile` takes the JSON text of a [preflight profile](/preflight). The bundled ones live in the repository under [`pdfa-engine/profiles/`](https://github.com/alam00000/bentopdf-kura/tree/main/pdfa-engine/profiles); download the file you want, or write your own:
+
+```js
+const profile = await readFile('sheetfed-offset-cmyk-check-and-fix.json', 'utf8');
+
+const report = await check(input, 'x4', { profile });                 // its checks, in report.analysis
+const fixed = await convert(input, 'x4', { profile });                // its checks and fixes
+```
+
+The level you pass is the target: a profile's `convert.level` is not applied through the npm API. In `kura-pdf-wasm` only, passing an empty level, `convert(input, '', { profile })`, lets the profile's `convert` section choose the target, as `kura --profile` does without `--level`. Profile variables can be set with `vars` in `kura-pdf-wasm`; `kura-pdf` always uses their defaults.
 
 To print-ready CMYK with your press profile as the output intent:
 
@@ -174,15 +216,20 @@ try {
 }
 ```
 
-Every rejection code is listed on [Rejection codes](/rejections). The package adds `BAD_LEVEL`, `BAD_INPUT`, `BAD_OPTION`, `ENGINE_MISSING` (no binary for this platform) and `TIMEOUT`.
+Every rejection code is listed on [Rejection codes](/rejections). The packages add `BAD_LEVEL` (a level not in `LEVELS` or `CHECK_ONLY_LEVELS`), `BAD_INPUT` (the input or an option is not a `Uint8Array` or `ArrayBuffer`), `BAD_OPTION` (an option value out of range), `ENGINE_MISSING` (no binary for this platform, `kura-pdf`), `ENGINE_LOAD` (the WebAssembly module failed to load, `kura-pdf-wasm`), `ENGINE_ERROR` (the engine stopped without a report) and `TIMEOUT` (`timeoutMs` ran out).
 
-## version() and binaryPath()
+## version(), load() and binaryPath()
 
 ```js
-import { version, binaryPath } from 'kura-pdf';
-console.log(await version());   // "BentoPDF Kura Engine 1.1.0"
-console.log(binaryPath());      // where the engine binary lives, or null
+import { version, load, binaryPath, LEVELS, CHECK_ONLY_LEVELS } from 'kura-pdf';
+console.log(await version());   // "BentoPDF Kura Engine 1.3.0"
+console.log(binaryPath());      // where the engine binary lives, or null (kura-pdf only)
+await load();                   // throws now rather than on the first call if the engine is missing
+console.log(LEVELS);            // ['1b', '1a', …, 'vt3', 'none']
+console.log(CHECK_ONLY_LEVELS); // ['x4p', 'x5g', 'x5n', 'x5pg', 'x6n', 'x6p', 'vt2']
 ```
+
+`load()` resolves once the engine is ready: in `kura-pdf-wasm` it loads the WebAssembly module ahead of the first call, in `kura-pdf` it only checks that a binary exists. `binaryPath()` looks at `KURA_BIN` first, then the platform package.
 
 ## The kura command
 
@@ -196,7 +243,7 @@ npx kura --sign key.p12 --sign-password secret --level 2b input.pdf output.pdf
 npx kura --level 2b -r -d out/ inbox/
 ```
 
-The output path is optional: left out, the result is written next to the input as `<input>.<level>.pdf`. `kura-pdf-wasm` installs `kura-wasm` with the same flags, the same JSON report and the same exit codes, minus the four flags that need the host (`--sign`, `--ocr`, `--font-folder`, `--substitute`).
+The output path is optional: left out, the result is written next to the input as `<input>.<level>.pdf`. `kura-pdf-wasm` installs `kura-wasm` with the same JSON report and exit codes and a subset of the flags; [The kura-wasm command](/cli#the-kura-wasm-command) lists them.
 
 ## Servers and concurrency
 

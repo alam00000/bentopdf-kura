@@ -9,8 +9,8 @@ Check mode runs the entire detection pipeline against a document, writes nothing
 ```json
 {"file":"in.pdf","ok":true,"level":"2b","engine":"BentoPDF Kura Engine 1.1.0",
  "mode":"check","compliant":false,"findings":2,"issues":[
-  {"code":"OUTPUT_INTENT_ADDED","detail":"added sRGB PDF/A output intent","fixed":true},
-  {"code":"FONT_SUBSTITUTED","detail":"embedded LiberationSans as substitute for /Helvetica","fixed":true}]}
+  {"code":"OUTPUT_INTENT_ADDED","detail":"added sRGB PDF/A output intent","fixed":true,"severity":3,"pages":[]},
+  {"code":"FONT_SUBSTITUTED","detail":"embedded LiberationSans as substitute for /Helvetica","fixed":true,"severity":3,"pages":[1]}]}
 ```
 
 `compliant` is true when the document already conforms. `findings` counts the repairs a conversion would make, and `issues` lists them. Exit status is 0 when compliant, 1 when there are findings, and 2 when the file cannot be read at all, so it drops into a shell pipeline like any other preflight tool.
@@ -42,7 +42,21 @@ So: use check mode as a preflight, to decide whether a document needs conversion
 
 ## Check-only flavours
 
-`x4p`, `x5g`, `x5n`, `x5pg`, `x6n`, `x6p` and `vt2` are PDF/X and PDF/VT flavours that reference an external press profile rather than embedding one. Kura validates against them but does not produce them, so they are only accepted with `--check`.
+`x4p`, `x5g`, `x5n`, `x5pg`, `x6n`, `x6p` and `vt2` are PDF/X and PDF/VT flavours that reference an external press profile rather than embedding one. Kura validates against them but does not produce them, so they are only accepted with `--check`. The one exception is `x5n`, which Kura produces when you give the press profile and its address (`--dest-profile` and `--profile-url`).
+
+`ua1` and `ua2` check a document against PDF/UA-1 or PDF/UA-2 alone, without the PDF/A rules. Each finding is reported as `UA_<rule>`, for example `UA_06-003` (PDF/UA-1) or `UA_7.18.1-1` (PDF/UA-2). To produce an accessible file, convert with `--level 2u --ua` or `--level 4 --ua`.
+
+```bash
+kura --check --level ua1 in.pdf
+```
+
+Using any of these levels for a conversion, without `--check`, is refused with `LEVEL_VERIFY_ONLY`.
+
+## Narrowing the report
+
+`--quick` stops at the first finding, for a fast yes or no. `--pages 1-3,5` (or `odd`, `even`, `4-`) keeps only findings on those pages, plus those that concern the whole document, and `compliant` then looks at those pages only. Add `--analyze` for a census of the document, or `--profile` to run a [preflight profile](/preflight) at the same time.
+
+What each finding code means is listed on [Issue codes](/issue-codes).
 
 ## Idempotence
 
@@ -50,4 +64,4 @@ Converting a document and then checking the result always reports `compliant: tr
 
 ## In the other surfaces
 
-The npm package exposes it as [`check()`](/npm#check-input-level-options); the C API as `verify_only` on `kura_options`; the browser build as `{ check: true }` in the options object.
+The npm package exposes it as [`check()`](/npm#check-input-level-options); the HTTP API as [`POST /api/check`](/http-api#post-api-check); the C API as `verify_only` on `kura_options`; the raw WebAssembly module as `{ check: true }` in the options object; and the web page at [kura.bentopdf.com](https://kura.bentopdf.com) as the "Check only" switch. The `ua1` and `ua2` levels and `--quick` and `--pages` are available on the CLI only.

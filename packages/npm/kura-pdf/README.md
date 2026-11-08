@@ -1,6 +1,6 @@
 # kura-pdf
 
-[Kura](https://github.com/alam00000/bentopdf-kura) is the open source PDF standards and preflight engine by [BentoPDF](https://www.bentopdf.com): it converts any PDF to PDF/A, PDF/UA, PDF/X, PDF/E or PDF/VT, runs print preflight with 396 bundled profiles, checks documents against those standards, signs them, and builds Factur-X, ZUGFeRD, XRechnung and Order-X e-invoices.
+[Kura](https://github.com/alam00000/bentopdf-kura) is the open source PDF standards and preflight engine by [BentoPDF](https://www.bentopdf.com): it converts any PDF to PDF/A, PDF/UA, PDF/X, PDF/E or PDF/VT, runs print preflight with 685 bundled profiles, checks documents against those standards, signs them, and builds Factur-X, ZUGFeRD, XRechnung and Order-X e-invoices.
 
 This package is the native engine for Node.js. Full documentation lives at [kura.bentopdf.com/docs](https://kura.bentopdf.com/docs/).
 
@@ -12,7 +12,7 @@ npm install kura-pdf
 
 Node 22 or newer, ESM only. The engine binary arrives automatically through a platform package (`@bentopdf/kura-pdf-darwin-arm64`, `@bentopdf/kura-pdf-linux-x64` or `@bentopdf/kura-pdf-win32-x64`); npm installs the one matching your machine. To use a binary you built yourself, set `KURA_BIN` to its path and it takes precedence.
 
-On platforms without a native package, or when you cannot ship native binaries at all, use [`kura-pdf-wasm`](https://www.npmjs.com/package/kura-pdf-wasm) instead: the same engine compiled to WebAssembly with the same API, running anywhere Node runs and in browsers, several times slower and without raster flattening, signing and OCR.
+On platforms without a native package, or when you cannot ship native binaries at all, use [`kura-pdf-wasm`](https://www.npmjs.com/package/kura-pdf-wasm) instead: the same engine compiled to WebAssembly with the same API, running anywhere Node runs and in browsers, several times slower and without signing, OCR and your own font folders.
 
 ## Quick start
 
@@ -74,7 +74,8 @@ interface KuraOptions {
   defaultRgb?: Uint8Array;      // replace the bundled default profiles
   defaultCmyk?: Uint8Array;
   defaultGray?: Uint8Array;
-  convertColors?: 'cmyk' | 'gray' | 'rgb' | Uint8Array; // convert colour through ICC profiles
+  convertColors?: 'cmyk' | 'gray' | 'rgb' | Uint8Array; // convert colour through ICC profiles;
+                                // a profile name such as 'ISO Coated v2 (ECI)' also works
   intent?: 'perceptual' | 'relative' | 'saturation' | 'absolute';
   convertObjects?: string[];    // any of text, vector, shading, images, lossy, lossless
   keepSpots?: boolean;          // keep spot colours, convert only their alternate
@@ -91,6 +92,7 @@ interface KuraOptions {
   ocrEngine?: string;           // path to tesseract
   fontFolder?: string;          // extra fonts for substitution
   timeoutMs?: number;           // time limit for this call
+  pdfVersion?: '1.3' | '1.4' | '1.5' | '1.6' | '1.7' | '2.0'; // with level 'none'
 }
 
 interface KuraResult {
@@ -101,6 +103,17 @@ interface KuraResult {
   analysis: { code: string; detail: string }[];
 }
 ```
+
+Every option maps to the [CLI flag](https://kura.bentopdf.com/docs/cli) of the same name with dashes, for example `allowVisualRisk` to `--allow-visual-risk`. The level `'none'` applies only the options (a colour conversion, a profile's fixes, a PDF version) without a standard:
+
+```js
+const gray = await convert(input, 'none', { convertColors: 'gray' });
+const press = await convert(input, 'x4', { convertColors: 'cmyk', destProfile: await readFile('press.icc') });
+const profile = await readFile('sheetfed-offset-cmyk-check-and-fix.json', 'utf8');
+const fixed = await convert(input, 'x4', { profile });
+```
+
+The bundled preflight profiles are in the repository under [`pdfa-engine/profiles/`](https://github.com/alam00000/bentopdf-kura/tree/main/pdfa-engine/profiles); see [Preflight profiles](https://kura.bentopdf.com/docs/preflight). The level you pass is always the target; a profile's variables keep their defaults.
 
 ### check(input, level, options?)
 
@@ -117,9 +130,9 @@ console.log(report.compliant, report.findings, report.issues);
 
 Returns whether the password opens the file, without converting it; `true` for a file that is not encrypted at all.
 
-### version()
+### version(), load(), LEVELS, CHECK_ONLY_LEVELS
 
-Returns the engine name and version, for example `BentoPDF Kura Engine 1.1.0`.
+`version()` returns the engine name and version, for example `BentoPDF Kura Engine 1.3.0`. `load()` throws `ENGINE_MISSING` straight away when no binary is available, instead of on the first call. `LEVELS` and `CHECK_ONLY_LEVELS` are the level names `convert()` and `check()` accept.
 
 ### binaryPath()
 
@@ -140,7 +153,7 @@ try {
 }
 ```
 
-`KuraError` carries `code`, `suggestedLevel` when one exists, and the `issues` the engine recorded before it stopped. `ENGINE_MISSING` means no binary is available for this platform, `TIMEOUT` that `timeoutMs` ran out. Every rejection code is documented at [kura.bentopdf.com/docs/rejections](https://kura.bentopdf.com/docs/rejections).
+`KuraError` carries `code`, `suggestedLevel` when one exists, and the `issues` the engine recorded before it stopped. `ENGINE_MISSING` means no binary is available for this platform, `TIMEOUT` that `timeoutMs` ran out, `BAD_LEVEL`, `BAD_INPUT` and `BAD_OPTION` that a level, the input or an option was not accepted, and `ENGINE_ERROR` that the engine stopped without a report. Every rejection code is documented at [kura.bentopdf.com/docs/rejections](https://kura.bentopdf.com/docs/rejections).
 
 ## License
 

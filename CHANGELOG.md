@@ -6,6 +6,8 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [1.4.0] - 2026-11-08
+
 ### Added
 
 - Colour conversion through the HTTP API and both npm packages: `convertColors`
@@ -37,6 +39,11 @@ All notable changes to this project are documented here. The format follows
   npm packages and the HTTP API accept level `none` and `pdfVersion`.
 - Public conformance results on 4,860 real-world PDFs at all 20 levels, with
   the scripts to reproduce them (`conformance/`).
+- Complete user documentation: every CLI flag, `kura tool` job and environment
+  variable; the `kura-wasm` flag subset; the npm options that differ between the
+  two packages; the full profile format (`shapes`, `convert`, `colors`, plan
+  steps, variable scripts); the C API's newer fields; every refusal code; and a
+  new Issue codes page explaining every code a report can contain.
 
 ### Changed
 

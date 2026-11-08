@@ -147,18 +147,24 @@ kura --einvoice invoice.xml in.pdf out.pdf         # Factur-X / ZUGFeRD / XRechn
 
 kura --level 2b -r -d out/ inbox/                  # a whole folder, JSON array on stdout
 
+kura --level x4 --convert-colors "Coated FOGRA39 (ISO 12647-2:2004)" in.pdf out.pdf   # CMYK for a named press profile
+
+kura --level none --convert-colors gray in.pdf out.pdf   # colour conversion only, no standard
+
+kura tool info in.pdf                              # one-shot jobs: info, plates, separations, certify, …
+
 kura --help                                        # every flag
 ```
 
 Every run prints a JSON report of what changed:
 
 ```json
-{"ok":true,"level":"2b","engine":"BentoPDF Kura Engine 1.1.0","issues":[
-  {"code":"OUTPUT_INTENT_ADDED","detail":"added sRGB PDF/A output intent","fixed":true},
-  {"code":"FONT_SUBSTITUTED","detail":"embedded LiberationSans as substitute for /Helvetica","fixed":true}]}
+{"file":"in.pdf","output":"out.pdf","ok":true,"level":"2b","engine":"BentoPDF Kura Engine 1.3.0","issues":[
+  {"code":"OUTPUT_INTENT_ADDED","detail":"added sRGB PDF/A output intent","fixed":true,"severity":3,"pages":[]},
+  {"code":"FONT_SUBSTITUTED","detail":"embedded LiberationSans as substitute for /Helvetica","fixed":true,"severity":3,"pages":[1]}]}
 ```
 
-Exit status is 0 on success, 1 when check mode found findings, 2 when the input was rejected, 3 on timeout and 64 on a usage error, so it drops into a shell pipeline like any other tool.
+Exit status is 0 on success, 1 when check mode found findings, 2 when the input was rejected, 3 on timeout and 64 on a usage error, so it drops into a shell pipeline like any other tool. Every flag, tool and environment variable is on the [CLI page](https://kura.bentopdf.com/docs/cli); every code in a report is explained under [Issue codes](https://kura.bentopdf.com/docs/issue-codes) and [Rejection codes](https://kura.bentopdf.com/docs/rejections).
 
 ### npm package
 
@@ -218,7 +224,7 @@ else       report(r->error_code, r->error);
 kura_result_free(r);
 ```
 
-Six functions, no exceptions across the boundary, additive only within a major version. Results carry every finding with a severity and the pages it concerns; the options reach preflight profiles, the analysis census, font folders, OCR words, image limits and rasterization.
+Seven functions, no exceptions across the boundary, additive only within a major version. Results carry every finding with a severity and the pages it concerns; the options reach preflight profiles, the analysis census, font folders, OCR words, image limits and rasterization.
 
 ---
 
@@ -231,7 +237,8 @@ Six functions, no exceptions across the boundary, additive only within a major v
 | **PDF/X** print | X-1a, X-3, X-4, X-6 | output intent, page boxes, trapping declared; X-1a converts every colour to CMYK through ICC |
 | **PDF/E** engineering | E-1 | 3D annotations kept, attachments kept, scripting removed |
 | **PDF/VT** variable print | VT-1, VT-3 | X-4 conformance plus a document-part record hierarchy |
-| **Check only** | X-4p, X-5g, X-5n, X-5pg, X-6n, X-6p, VT-2 | flavours that reference external press profiles: validated, not produced |
+| **Check only** | X-4p, X-5g, X-5n, X-5pg, X-6n, X-6p, VT-2 | flavours that reference external press profiles: validated, not produced (X-5n is produced when you give the press profile and its address) |
+| **Check only** | UA-1, UA-2 (`--level ua1`, `ua2`) | PDF/UA on its own, without the PDF/A rules |
 
 That is 25 targets. The [standards page](https://kura.bentopdf.com/docs/standards) explains what each one is for and which to pick.
 

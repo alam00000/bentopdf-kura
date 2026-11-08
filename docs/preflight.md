@@ -44,6 +44,16 @@ Each repair that changed the file is reported as a `FIX_DONE` issue. A profile t
 | `profiles/place-content` | 7 | stamps placed on every page: date, file name, page numbers on odd and even pages, a centred text, a job name, an EAN-13 barcode and a QR code, with the text taken from variables |
 | `profiles/plans` | 5 | multi-step plans: check then convert to PDF/A-2b, convert to CMYK and flatten transparency, find complex pages, add 3 mm bleed, scale to A4 |
 
+The bundled profiles are files in the repository; they are not inside the npm packages or the release archives. Where to find them on each surface:
+
+| Surface | How to use a bundled profile |
+|---|---|
+| browser | [kura.bentopdf.com/preflight](https://kura.bentopdf.com/preflight) offers a curated set; pick one and press Analyze, or Fix and download |
+| native CLI | download the file from [`pdfa-engine/profiles/`](https://github.com/alam00000/bentopdf-kura/tree/main/pdfa-engine/profiles) and pass it with `--profile` |
+| Docker | they are in the image at `/kura/pdfa-engine/profiles`, for example `--profile /kura/pdfa-engine/profiles/press/sheetfed-offset-cmyk-check.json` |
+| HTTP API | by id, `profile=press/sheetfed-offset-cmyk-check`; `GET /api/profiles` lists every id |
+| npm, C API | read the downloaded file and pass its text as `profile` or `preflight_profile` |
+
 The browser preflight tool shows a curated 45 of them plus the conversion targets. Every profile comes from `pdfa-engine/profiles/build_library.py`; the thresholds are named there, so a change to the script regenerates the library.
 
 ## Writing your own
@@ -101,7 +111,32 @@ A profile is one JSON document:
 }
 ```
 
-The top-level fields are `kura-profile` (always 1), `name`, `description`, `variables`, `shapes`, `checks`, `fixes`, `convert` and `plan`. Only `kura-profile` and `name` are required.
+The top-level fields are:
+
+| Field | Meaning |
+|---|---|
+| `kura-profile` | the format version, always `1`; required |
+| `name` | the display name |
+| `description` | what the profile is for |
+| `variables` | inputs of the profile; see [Variables](#variables) |
+| `shapes` | named reference shapes for the `content.shape_relation` check; see below |
+| `checks` | the checks; see [Checks](#checks) |
+| `fixes` | repairs to apply when converting; see [Fixes](#fixes) |
+| `convert` | the target standard, colour conversion and fallbacks; see [Converting](#converting) |
+| `plan` | a multi-step workflow; see [Plans](#plans) |
+
+Any other top-level field makes the profile invalid. `kura --list-profiles <dir>` shows each profile's name, description, kind and counts, and `kura --list-vars <file>` its variables.
+
+`shapes` names areas that `content.shape_relation` can test objects against. Each shape is either a page box grown or shrunk by an offset, or the area covered by the hits of a check:
+
+```json
+"shapes": {
+  "safe_area": { "box": "trim", "offset": "-5mm" },
+  "barcodes": { "check": "Barcode objects" }
+}
+```
+
+`box` is `media`, `crop`, `bleed`, `trim` or `art`; `offset` is a length, negative to shrink. Give either `box` or `check`, not both.
 
 ### Checks
 
@@ -122,6 +157,8 @@ A condition names a check from the catalogue, an operator and a value, plus any 
 ```json
 { "check": "page.box_size", "box": "trim", "dimension": "width", "op": ">=", "value": "210mm" }
 ```
+
+A condition can also take `objects`, a list of other check names whose hits it compares against; the `content.relation` check uses it to test, for example, whether text overlaps an image found by another check.
 
 The operators are `<`, `<=`, `==`, `!=`, `>=`, `>`, `multiple_of`, `is` (for true or false), `in` and `not_in` (a list of values), `contains`, `starts_with`, `ends_with`, `matches` and `finds` (regular expressions), `occurs_in`, `includes`, `excludes`, `count`, `fits_within` and `exceeds`. Every condition also takes `negate`, `case_sensitive` and `tolerance`. Lengths are in the check's unit unless the value carries one, such as `"3mm"`, `"1cm"`, `"0.5in"` or `"0.25pt"`.
 
@@ -162,9 +199,24 @@ kura --list-vars stamp.json
 kura --profile stamp.json --var job=4711 in.pdf out.pdf
 ```
 
-`--var-file <json>` reads several values at once. Each value used is reported as `VARIABLE_SET`.
+`--var-file <json>` reads several values at once. Each value used is reported as `VARIABLE_SET`. A value that is not one of a `choice` variable's `choices` is still used, with a warning. A `{name}` that matches no variable is left as it is.
 
-A `script` is a short piece of JavaScript. It can read `kura.variable(name, default)`, `kura.variables`, `kura.document` (the name, page count and page boxes) and, inside a plan, `kura.results` with the hits and pages of earlier steps. Scripts run for at most 5 seconds with 64 MB of memory and cannot reach files or the network.
+| Variable field | Meaning |
+|---|---|
+| `name` | the identifier used as `{name}`; required |
+| `label` | the prompt text shown by tools that ask for values |
+| `type` | `text` (default), `number`, `bool` or `choice` |
+| `choices` | the allowed values of a `choice` variable |
+| `default` | the value when none is given |
+| `script` | JavaScript that works the value out; it runs only when no value is given |
+
+A `script` is a short piece of JavaScript; the value of its last expression becomes the variable's value. It can read `kura.variable(name, default)`, `kura.variables`, `kura.document` (`name`, `pageCount` and `pages`, each with `number`, `mediaBox`, `cropBox`, `bleedBox`, `trimBox`, `artBox` as `{left, bottom, right, top}` in points, and `userUnit`) and, inside a plan, `kura.results`, one `{step, hits, pages}` per earlier step. Scripts run for at most 5 seconds with 64 MB of memory and cannot reach files or the network. A script that fails leaves the default in place and is reported as a `VARIABLE_SET` warning.
+
+```json
+{ "name": "label", "script": "kura.document.pageCount > 1 ? 'pages 1-' + kura.document.pageCount : 'single page'" }
+```
+
+Over HTTP, variables cannot be set and keep their defaults; in the npm packages, `kura-pdf-wasm` takes them as `vars`, and the C API as `profile_vars`.
 
 ### Converting
 
@@ -174,9 +226,45 @@ A `script` is a short piece of JavaScript. It can read `kura.variable(name, defa
 "convert": { "level": "pdfx-4", "reconvert": true, "raster_fallback": { "resolution": 300, "pages": "problem_pages" } }
 ```
 
-`profile` names the press profile for the output intent and any colour conversion, by its description (for example `"Coated FOGRA39 (ISO 12647-2:2004)"`); Kura finds it among its bundled profiles and the computer's colour folders. `pdf_version` writes the file as that PDF version without a standard. `colors` converts colour the way `--convert-colors` does: `to` (`cmyk`, `gray`, `rgb` or a profile name), `from` (the profile the document's untagged CMYK was made for), `keep_spots`, `intent`, `gray_to_black` and `device_link`.
+| Key | Meaning |
+|---|---|
+| `level` | the target standard. Written as on the CLI (`2b`, `x4`) or in full (`pdfa-2b`, `PDF/A-2b`, `pdfx-4`, `PDF/X-1a`, `PDF/E-1`, `PDF/VT-1`). It applies only when the run gives no level of its own: `kura --profile` without `--level`, or an empty level in `kura-pdf-wasm`. Leave it out to apply no standard |
+| `pdf_version` | write the file as PDF `1.3` to `2.0` without a standard, like `--pdf-version` |
+| `profile` | the press profile for the output intent, by its description, for example `"Coated FOGRA39 (ISO 12647-2:2004)"`; looked up like `--convert-colors` names |
+| `colors` | convert colour; see the next table |
+| `also` | a PDF/X standard to write into the same file as well, like `--dual`: a part 2 PDF/A level adds PDF/X-4, a part 4 level adds PDF/X-6 |
+| `reconvert` | `true`: convert the result once more when it is not yet compliant, like `--reconvert` |
+| `raster_fallback` | turn pages that still fail into images: `resolution` (24 to 1200, default 300), `pages` (`all`, the default, or `problem_pages`) and `keep_text` (default `true`, keep the text invisible on top) |
 
-`also` writes a second standard into the same file, such as PDF/A and PDF/X together. `reconvert` runs the conversion once more on the result when it is not yet compliant. `raster_fallback` turns pages that cannot be fixed into images, `all` of them or only the `problem_pages`, keeping the text invisible on top unless `keep_text` is false. The chosen target is reported as `PROFILE_TARGET`.
+`reconvert` and `raster_fallback` act on PDF/A targets only.
+
+`colors` converts colour the way [`--convert-colors`](/cli#converting-colour) does:
+
+| Key | Meaning |
+|---|---|
+| `to` | `cmyk`, `gray` (or `grey`), `rgb` (or `srgb`), or a profile name |
+| `from` | the CMYK profile the document's untagged CMYK was made for, by name; with it, existing CMYK is converted too, so CMYK for one press can be moved to another |
+| `intent` | `perceptual`, `relative`, `saturation` or `absolute` |
+| `keep_spots` | `true` keeps spot colours and converts only their alternate |
+| `gray_to_black` | `true` puts gray on the black plate only |
+| `rgb_gray_to_black` | a percentage: RGB colours whose channels lie within it of each other go on the black plate only |
+| `ink_limit` | total ink coverage limit, 100 to 400 |
+| `tone_curve` | pairs of input and output percentages applied to every CMYK channel after conversion, for example `[0, 0, 50, 40, 100, 100]` prints 50% tones as 40% |
+| `device_link` | a device link profile, by name, to convert through instead |
+
+A profile name that cannot be found is reported as `PROFILE_ICC_MISSING` and that part of the `convert` section is skipped. The chosen target is reported as `PROFILE_TARGET`.
+
+```json
+{
+  "kura-profile": 1,
+  "name": "To FOGRA39, 300% ink",
+  "convert": {
+    "level": "x4",
+    "profile": "Coated FOGRA39 (ISO 12647-2:2004)",
+    "colors": { "to": "Coated FOGRA39 (ISO 12647-2:2004)", "keep_spots": true, "ink_limit": 300 }
+  }
+}
+```
 
 ### Plans
 
@@ -201,11 +289,25 @@ A plan runs checks and fixes in an order you choose, and picks the next step fro
 }
 ```
 
-A step's `do` is `check`, `fix`, `profile` (run another profile file), `variable` or `revert`. `next` names the step to go to after a clean result (`pass`) or after `info`, `warning` or `error` hits, with `default` as the fallback and `end` to stop. Each step is reported as `PLAN_STEP` with its result and the next step. A converting step that fails is reported as `PLAN_STEP_FAILED`, and a plan that never converts reports `PLAN_NO_CONVERSION`.
+Each step has an `id` (default `step1`, `step2`, …), a `do`, and the field that `do` needs:
+
+| `do` | Field | What it does |
+|---|---|---|
+| `check` | `check`: a check name from the profile | runs only that check |
+| `fix` | `fix`: a fix id from the profile's `fixes`, or a whole fix object | applies that fix to the current file |
+| `profile` | `profile`: a path, relative to this profile, or a whole profile object | runs another profile: its fixes and `convert` section if it has them, then its checks on the result |
+| `variable` | `variable`: a variable name | runs that variable's script again; a result that is empty, `0`, `false`, `null` or `NaN` counts as an `error` result |
+| `revert` | | goes back to the original input file |
+
+`next` names the step to go to after a clean result (`pass`) or after `info`, `warning` or `error` hits, with `default` as the fallback and `end` to stop; without `next` the plan moves to the following step. `enabled: false` (or a variable that is `"false"`) skips a step. A plan stops after 256 steps, so a loop cannot run forever. The `convert` section, if any, applies to the converting steps.
+
+Each step is reported as `PLAN_STEP` with its result and the next step. A step that fails is reported as `PLAN_STEP_FAILED`, and a plan that never converts reports `PLAN_NO_CONVERSION` and writes the input unchanged. With `--check`, fixing steps are only checked, not applied.
 
 ## HTML stamps
 
-The `place.html` fix draws an HTML page onto every page of the document: slug lines, job tickets, barcodes. `template` is the path of an `.html` file, relative to the profile, or the HTML itself:
+The `place.html` fix draws an HTML page onto every page of the document: slug lines, job tickets, barcodes. `template` is the path of an `.html` file, relative to the profile, a `.zip` holding the page and its images, or the HTML itself.
+
+It needs the native `kura` and a Chrome, Chromium or Edge on the machine, which renders the HTML with network access switched off. Kura finds the browser on `PATH` or in its usual install folder; set `KURA_CHROME` to point at another. Without one, or in the WebAssembly build, the fix is reported as `FIX_NOT_NEEDED` with "HTML could not be rendered" and nothing is drawn.
 
 ```json
 { "fix": "place.html", "template": "slug.html", "anchor": "bottom", "relative_to": "media", "y": "3mm" }
@@ -250,14 +352,17 @@ The page's script sees `window.kura.document` (`name`, `pageCount`, `variables` 
 | `FIX_DONE` | a fix changed the document |
 | `FIX_NOT_NEEDED` | a fix's `only_where` checks found nothing |
 | `FIX_UNKNOWN` | the fix is not in the catalogue |
-| `ICC_PROFILE_MISSING` | a named ICC profile was not found; the conversion is refused |
+| `ICC_PROFILE_MISSING` | a colour profile named on the command line was not found; the conversion is refused |
+| `PROFILE_ICC_MISSING` | a colour profile named in the profile's `convert` section was not found; that part is skipped |
 | `PLAN_STEP`, `PLAN_STEP_FAILED`, `PLAN_NO_CONVERSION` | plan progress, as above |
 
 `kura --list-profiles <dir>` lists every profile in a folder with its name and description.
 
 ## In the other surfaces
 
-The npm package and the browser build take the profile text as `profile` in the options of `convert()` or `check()`. The C API takes it as `preflight_profile`, with variable values as a JSON object in `profile_vars`. The HTTP API takes a bundled profile's id as `profile=` or your own as a `profile` field.
+The npm package and the browser build take the profile text as `profile` in the options of `convert()` or `check()`. The C API takes it as `preflight_profile`, with variable values as a JSON object in `profile_vars`. The HTTP API takes a bundled profile's id as `profile=` or your own as a `profile` field. In all of them the level you pass is the target; only `kura --profile` without `--level`, and `kura-pdf-wasm` with an empty level, let the profile's `convert.level` choose. A `place.html` template given as a file path and a plan step's `profile` path are read relative to the profile file, so they work on the CLI; elsewhere, put the HTML or the profile inline.
+
+Every code a profile run can report is on [Issue codes](/issue-codes#profiles-and-plans).
 
 ## Provenance
 

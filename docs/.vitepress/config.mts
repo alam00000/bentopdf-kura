@@ -58,6 +58,7 @@ export default defineConfig({
           { text: 'HTTP API', link: '/http-api' },
           { text: 'C API', link: '/c-api' },
           { text: 'Rejection codes', link: '/rejections' },
+          { text: 'Issue codes', link: '/issue-codes' },
           { text: 'Profile checks and fixes', link: '/profile-checks' },
         ],
       },

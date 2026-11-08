@@ -1,6 +1,6 @@
 # kura-pdf-wasm
 
-[Kura](https://github.com/alam00000/bentopdf-kura) is the open source PDF standards and preflight engine by [BentoPDF](https://www.bentopdf.com): it converts any PDF to PDF/A, PDF/UA, PDF/X, PDF/E or PDF/VT, runs print preflight with 396 bundled profiles, checks documents against those standards, and builds Factur-X, ZUGFeRD, XRechnung and Order-X e-invoices.
+[Kura](https://github.com/alam00000/bentopdf-kura) is the open source PDF standards and preflight engine by [BentoPDF](https://www.bentopdf.com): it converts any PDF to PDF/A, PDF/UA, PDF/X, PDF/E or PDF/VT, runs print preflight with 685 bundled profiles, checks documents against those standards, and builds Factur-X, ZUGFeRD, XRechnung and Order-X e-invoices.
 
 This package is the engine compiled to WebAssembly. No native binaries, no postinstall downloads; it runs on any platform Node 22 or newer runs on, and in browsers. On Linux x64, macOS arm64 and Windows x64, [`kura-pdf`](https://www.npmjs.com/package/kura-pdf) installs the native engine instead: the same API, several times faster, with raster flattening, signing and OCR.
 
@@ -25,7 +25,7 @@ await writeFile('output.pdf', result.pdf);
 for (const issue of result.issues) console.log(`${issue.code}: ${issue.detail}`);
 ```
 
-The package also installs a `kura-wasm` command with the same flags and the same JSON report as the native CLI, minus the flags that need the host (`--sign`, `--ocr`, `--font-folder`, `--substitute`):
+The package also installs a `kura-wasm` command with the same JSON report and exit codes as the native CLI. It takes the conversion, check, PDF/UA, output intent, default profile, preflight profile, e-invoice, attachment, rasterizing and folder flags; colour conversion, `--pdf-version`, `--var`, the invoice readers and `kura tool` need the native `kura` (or the API below, which takes the colour and version options). The [CLI page](https://kura.bentopdf.com/docs/cli#the-kura-wasm-command) lists exactly what `kura-wasm` accepts.
 
 ```bash
 npx kura-wasm --level 2b input.pdf output.pdf
@@ -80,7 +80,10 @@ interface KuraOptions {
   deviceLink?: Uint8Array;      // convert through a device link profile
   vtRecords?: string;           // PDF/VT record ranges, "1-3,4-6"
   profile?: string;             // a preflight profile, as JSON text
+  vars?: Record<string, string | number | boolean>; // values for the profile's variables
   analyze?: boolean;            // add the document census to `analysis`
+  pdfVersion?: '1.3' | '1.4' | '1.5' | '1.6' | '1.7' | '2.0'; // with level 'none'
+  now?: string;                 // a fixed PDF date such as 'D:20260101120000Z' for the dates Kura writes
 }
 
 interface KuraResult {
@@ -91,6 +94,16 @@ interface KuraResult {
   analysis: { code: string; detail: string }[];
 }
 ```
+
+`level` `'none'` applies only the options (a colour conversion, a profile's fixes, a PDF version) without a standard. An empty level `''` with a `profile` lets the profile's `convert` section choose the target. `convertColors` takes `cmyk`, `gray`, `rgb` or the bytes of an ICC profile; profile names cannot be looked up in this build.
+
+```js
+const gray = await convert(input, 'none', { convertColors: 'gray' });
+const profile = await readFile('sheetfed-offset-cmyk-check-and-fix.json', 'utf8');
+const fixed = await convert(input, 'x4', { profile });
+```
+
+The bundled preflight profiles are in the repository under [`pdfa-engine/profiles/`](https://github.com/alam00000/bentopdf-kura/tree/main/pdfa-engine/profiles); see [Preflight profiles](https://kura.bentopdf.com/docs/preflight).
 
 ### check(input, level, options?)
 
@@ -120,9 +133,13 @@ try {
 
 `KuraError` carries `code`, `suggestedLevel` when one exists, and the `issues` the engine recorded before it stopped. Every code is documented at [kura.bentopdf.com/docs/rejections](https://kura.bentopdf.com/docs/rejections).
 
-### version()
+### version(), load(), LEVELS, CHECK_ONLY_LEVELS
 
-Returns the engine name and version, for example `BentoPDF Kura Engine 1.1.0`.
+`version()` returns the engine name and version, for example `BentoPDF Kura Engine 1.3.0`. `load()` loads the WebAssembly module ahead of the first call; otherwise the first call loads it. `LEVELS` and `CHECK_ONLY_LEVELS` are the level names `convert()` and `check()` accept.
+
+### Errors besides rejections
+
+`BAD_LEVEL`, `BAD_INPUT` (input not a `Uint8Array` or `ArrayBuffer`), `BAD_OPTION` (an option out of range), `ENGINE_LOAD` (the module failed to load) and `ENGINE_ERROR`.
 
 ## Blocking and worker threads
 

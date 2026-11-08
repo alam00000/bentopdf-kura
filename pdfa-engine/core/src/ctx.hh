@@ -33,7 +33,7 @@ struct Ctx {
   int inlineImagesFixed = 0;
   int contentPuaFixed = 0;
   std::set<std::string> incompleteScans{};
-  int currentPage = 0;  // 1-based page a pass is working on; 0 = document level
+  int currentPage = 0;
   std::vector<std::shared_ptr<QPDF>> foreignDocs{};
   std::vector<std::shared_ptr<std::string>> foreignBuffers{};
   std::map<std::string, std::set<int>> ruleHitPages{};
@@ -115,7 +115,6 @@ struct Ctx {
   bool failed() const { return !res.errorCode.empty(); }
 };
 
-// Marks the page a pass is working on so every issue raised inside carries it.
 struct PageScope {
   Ctx& ctx;
   int previous;

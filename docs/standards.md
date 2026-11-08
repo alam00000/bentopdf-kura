@@ -27,6 +27,8 @@ It is not a level of its own in Kura but a flag, `--ua`, applied on top of a PDF
 
 What conversion does: builds a structure tree from scratch when the document has none, tagging paragraphs, figures, links and form fields; repairs one that exists, merging split headings, numbering lists and marking decorative content as artifacts; sets the document language and title; and adds alternative text and structure elements for every annotation.
 
+To check a file against PDF/UA alone, without the PDF/A rules, use the check-only levels `ua1` and `ua2`: `kura --check --level ua1 in.pdf`.
+
 Machine conformance is guaranteed. The semantic depth of an automatically built tree, real headings and tables and reading order inferred from layout, is what every tool in this class leaves to assisted remediation.
 
 ## PDF/X: print
@@ -44,7 +46,9 @@ What conversion does: adds the output intent and, for X-1a, converts images, vec
 
 At `x3`, `x4` and `x6`, colour is kept as it is under the output intent; add `--convert-colors cmyk` to convert it to CMYK as well ([converting colour](/cli#converting-colour)).
 
-The output intent defaults to a bundled CMYK profile with the identifier `Custom`. For production work, supply your press characterization with `--output-condition`, `--output-condition-info` and `--registry`, and the profile itself with `--dest-profile`.
+The output intent defaults to the built-in Coated GRACoL 2006 profile, registered as `CGATS TR 006`. For production work, supply your press profile with `--dest-profile` (a file or, with `--convert-colors`, a name such as `"Coated FOGRA39 (ISO 12647-2:2004)"`); Kura writes its registered condition into the output intent. `--output-condition`, `--output-condition-info` and `--registry` override what is written.
+
+`--dual` with a part 2 PDF/A level writes one file that is PDF/A and PDF/X-4 at once; with a part 4 level, PDF/A-4 and PDF/X-6.
 
 ## PDF/E: engineering
 
@@ -70,6 +74,6 @@ A bare JPEG file is accepted at every level: Kura wraps it as a single-page PDF 
 
 - At PDF/A-1 and PDF/X-1a/X-3, vector transparency is flattened by rasterizing the affected page. A build without PDFium cannot do that and rejects the document with `TRANSPARENCY_P1` and a suggested level instead.
 - PDF/A-1 with both RGB and CMYK vector content under one output intent is rejected with a suggested level; only the CMYK-only path converts at part 1.
-- JBIG2 images are passed through, which every part permits; they are not transcoded.
+- JBIG2 images are kept at PDF/A levels. At PDF/X levels they are re-encoded when the build has the page renderer; at PDF/X-1a and X-3 this is required, and a build without the renderer rejects the document with `JBIG2_NOT_ALLOWED`.
 - The structure tree Kura builds for PDF/UA is machine-valid and semantically minimal. Real headings, tables and reading order inferred from layout are the assisted-remediation step every tool in this class leaves to a person.
 - The signature applied by `--sign` is a basic PKCS#7 detached signature, not PAdES.
