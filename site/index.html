@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Kura · BentoPDF</title>
-<meta name="description" content="Convert any PDF to PDF/A, PDF/UA, PDF/X, PDF/E or PDF/VT, convert its colours, or check it against the standard, in your browser. Files never leave your machine.">
+<meta name="description" content="Convert any PDF to PDF/A, PDF/UA, PDF/X, PDF/E or PDF/VT, convert its colours, build ZUGFeRD and Factur-X e-invoices, or check it against the standard, in your browser. Files never leave your machine.">
 <link rel="icon" href="./logo.svg" type="image/svg+xml">
 <link rel="stylesheet" href="./app.css">
 </head>
@@ -34,6 +34,7 @@
         <span class="ic" data-icon="upload-simple"></span>
         <strong>Drop PDFs here</strong>
         <span>or click to choose files. JPEG scans work too.</span>
+        <span>To make a ZUGFeRD or Factur-X e-invoice, add the invoice XML on the right.</span>
         <span class="note">Everything runs in your browser. This version has no fonts for scripts such as Arabic, Hindi, Chinese, Japanese or Korean, so a page whose text in those scripts uses a font the file does not include becomes an image. It still conforms, but that text can no longer be selected. The <a href="/docs/getting-started" onclick="event.stopPropagation()">downloadable versions</a> keep it as text.</span>
       </div>
       <input id="file" type="file" accept="application/pdf,image/jpeg,.pdf,.jpg,.jpeg" multiple hidden>
@@ -149,14 +150,14 @@
     <hr class="tool-field-divider">
 
     <div class="tool-field-group">
-      <span class="tool-field-label">E-invoice XML</span>
+      <span class="tool-field-label">E-invoice (ZUGFeRD, Factur-X, XRechnung)</span>
       <div class="filepick">
         <label class="btn-ghost" for="invxml"><span class="ic" data-icon="file-code"></span>Choose XML</label>
         <input type="file" id="invxml" accept=".xml,text/xml" hidden>
         <span class="picked" id="invName">none</span>
         <button class="icon-x hidden" id="invClear" type="button" title="Remove"><span class="ic" data-icon="x"></span></button>
       </div>
-      <p class="tool-field-help">Factur-X, ZUGFeRD, XRechnung or Order-X. Switches the level to PDF/A-3b.</p>
+      <p class="tool-field-help">Add the XML from your invoicing software to turn this PDF into an e-invoice: a PDF/A-3 file with the XML inside, named and declared the way the standard requires. Order-X works too.</p>
     </div>
 
     <div class="tool-field-group">

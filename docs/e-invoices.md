@@ -2,6 +2,16 @@
 
 Factur-X, ZUGFeRD, XRechnung and Order-X are hybrid documents: a PDF/A-3 invoice a person can read, with the machine-readable XML embedded inside and declared in the metadata. Kura builds them, reads them back, and validates the container.
 
+What it does, in one list:
+
+- **builds** a hybrid invoice from a PDF and the invoice XML with one flag, deriving the file name, relationship and metadata from the XML ([Building one](#building-one))
+- **covers** Factur-X (MINIMUM to EXTENDED), ZUGFeRD 2.x and 1.0, XRechnung, and Order-X orders, changes and responses, in CII or UBL, invoices and credit notes
+- **writes** a PDF/A-3 container that passes veraPDF, from a PDF, a scanned invoice with OCR, or a JPEG scan, and can sign it in the same pass ([Scanned and signed invoices](#scanned-and-signed-invoices))
+- **refuses** XML that is not an invoice or declares no profile, and warns about profiles the German mandate does not accept ([What is refused](#what-is-refused))
+- **extracts** the XML from any hybrid invoice and **checks** that the PDF and the XML agree ([Reading one back](#reading-one-back))
+- **summarises** an embedded invoice as a readable report in six languages, and lets preflight profiles require or inspect one ([Reports and preflight](#reports-and-preflight))
+- works the same from the CLI, npm, the HTTP API, the C API and the browser ([In the other surfaces](#in-the-other-surfaces))
+
 ## Building one
 
 ```bash
@@ -65,6 +75,32 @@ kura --check-invoice invoice.pdf
 ```
 
 `--check-invoice` compares what the attachment declares with what the container says: the file name, the relationship, the catalog's `/AF` array, and the XMP extension schema's file name, conformance level and document type. Exit status is 0 when consistent, 1 when there are problems, 2 when the file cannot be read.
+
+## Scanned and signed invoices
+
+The input does not have to be a clean PDF. A JPEG scan becomes a one-page PDF first, and `--ocr` lays a searchable text layer over scanned pages (native build, with Tesseract installed):
+
+```bash
+kura --einvoice invoice.xml scan.jpg e-invoice.pdf
+kura --einvoice invoice.xml --ocr scanned.pdf e-invoice.pdf
+```
+
+`--sign <id.p12>` signs the finished e-invoice in the same pass, so the signature covers the PDF/A-3 file with the XML already inside:
+
+```bash
+kura --einvoice invoice.xml --sign id.p12 --sign-password '…' invoice.pdf e-invoice.pdf
+```
+
+## Reports and preflight
+
+`kura tool invoice-synopsis <in.pdf> [out]` prints the key fields of an embedded invoice: format, number, dates, currency, seller and buyer with address and VAT ID, line items, taxes and totals. With an output file it writes the same as an `.html`, `.pdf`, `.xml` or `.json` report. `--report` adds the same section to any run on an e-invoice, and `--report-lang` writes it in English, German, French, Spanish, Dutch or Italian:
+
+```bash
+kura tool invoice-synopsis e-invoice.pdf summary.pdf
+kura --check --level 3b --report check.html --report-lang de e-invoice.pdf
+```
+
+`--check --level 3b` checks the PDF/A-3 container with the same verdict as veraPDF. In a [preflight profile](/preflight), `einvoice.present`, `einvoice.valid`, `einvoice.relationship_valid` and `einvoice.metadata` require or inspect an invoice; see [Profile checks](/profile-checks).
 
 ## In the other surfaces
 

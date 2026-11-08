@@ -1,7 +1,7 @@
 {
   "name": "kura-pdf-wasm",
   "version": "1.4.1",
-  "description": "Kura, the open source PDF standards and preflight engine by BentoPDF, compiled to WebAssembly: runs on any platform and in browsers, no native binaries.",
+  "description": "Kura, the open source PDF standards and preflight engine by BentoPDF, compiled to WebAssembly: convert to PDF/A, PDF/UA, PDF/X, PDF/E or PDF/VT, check, preflight and build ZUGFeRD and Factur-X e-invoices on any platform and in browsers, no native binaries.",
   "license": "AGPL-3.0-only",
   "type": "module",
   "main": "index.js",

@@ -8,6 +8,8 @@
 
 Kura converts everyday PDFs into archival, print and accessible ones: every PDF/A level, PDF/UA, PDF/X, PDF/E and PDF/VT, from one engine. It repairs what is wrong, embeds what is missing, converts colour where the standard demands it, and writes a file that validates clean, or tells you exactly why it cannot.
 
+It also builds e-invoices: give it an invoice PDF and the XML from your invoicing software, and it writes a ZUGFeRD, Factur-X, XRechnung or Order-X hybrid invoice, a PDF/A-3 file with the XML inside, named and declared the way each standard requires.
+
 It is also a full print preflight engine: 685 bundled profiles check and repair what a press cares about, such as hairlines, rich black, low-resolution images, overprint, transparency, page boxes, fonts and colour, and you can write your own in JSON from a published catalogue of checks and fixes.
 
 The name comes from the 蔵 (*kura*), the traditional Japanese storehouse where a family kept the things meant to outlast them.
@@ -34,6 +36,7 @@ Try the converter and preflight at [kura.bentopdf.com](https://kura.bentopdf.com
   * [Self-hosted service](#self-hosted-service)
   * [C API](#c-api)
 * [The standards](#the-standards)
+* [E-invoices](#e-invoices)
 * [Preflight](#preflight)
 * [What the engine does](#what-the-engine-does)
 * [Building from source](#building-from-source)
@@ -241,6 +244,39 @@ Seven functions, no exceptions across the boundary, additive only within a major
 | **Check only** | UA-1, UA-2 (`--level ua1`, `ua2`) | PDF/UA on its own, without the PDF/A rules |
 
 That is 25 targets. The [standards page](https://kura.bentopdf.com/docs/standards) explains what each one is for and which to pick.
+
+---
+
+## E-invoices
+
+ZUGFeRD, Factur-X, XRechnung and Order-X documents are one PDF with two layers: the page a person reads, and the invoice data a computer reads, embedded inside as XML. EU e-invoicing rules require them, and the PDF must be PDF/A-3. Many rejected e-invoices fail in that PDF container, not in the XML. Kura handles the whole life of one.
+
+**Create**
+
+```bash
+kura --einvoice invoice.xml invoice.pdf e-invoice.pdf
+```
+
+* one flag: Kura reads which standard and profile the XML declares and sets the embedded file name, the attachment relationship and the XMP metadata to match, with nothing to configure
+* every format: Factur-X (MINIMUM, BASIC WL, BASIC, EN 16931, EXTENDED), ZUGFeRD 2.x and the older ZUGFeRD 1.0, XRechnung, and Order-X orders, order changes and order responses; CII and UBL payloads, invoices and credit notes
+* a container that passes veraPDF: the invoice PDF becomes PDF/A-3b by default (3u, 3a or 4f on request), with fonts, colour and metadata fixed on the way
+* any starting point: a PDF from your invoicing software, a scanned invoice made searchable with OCR, or a JPEG scan, which becomes a one-page PDF first
+* signed in the same pass with `--sign`, so the signature covers the finished e-invoice
+* refuses XML that is not an invoice or declares no profile, rather than guessing, and warns when a profile (MINIMUM, BASIC WL) is not accepted by the German mandate
+
+**Read and check**
+
+* `--extract-invoice` pulls the XML back out of any ZUGFeRD, Factur-X, XRechnung or Order-X file
+* `--check-invoice` checks that the PDF and the XML agree: file name, relationship, attachment list and XMP metadata
+* `--check --level 3b` checks the PDF/A-3 container itself, with the same verdict as veraPDF
+* `kura tool invoice-synopsis` and `--report` turn the embedded invoice into a readable summary (seller, buyer, line items, taxes, totals) as HTML, PDF, XML or JSON, in English, German, French, Spanish, Dutch or Italian
+* preflight checks `einvoice.present`, `einvoice.valid`, `einvoice.relationship_valid` and `einvoice.metadata` let a profile require or inspect an invoice
+
+**Everywhere**
+
+The same works from the CLI, npm (`attachXml`), the HTTP API (an `xml` form field), the C API (`invoice_xml`, `kura_read_invoice`) and the browser at [kura.bentopdf.com](https://kura.bentopdf.com), where the invoice never leaves your computer.
+
+Kura checks the PDF and how the invoice is attached to it; to check the invoice data itself against the EN 16931 business rules, use a dedicated invoice validator (the project tests its output against Mustang). Details: [E-invoices](https://kura.bentopdf.com/docs/e-invoices).
 
 ---
 

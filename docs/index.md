@@ -24,6 +24,8 @@ features:
     details: A file either conforms or the engine tells you why it cannot. Kura checks its own output, and a veraPDF-validated sample of every benchmark run is published, misses included.
   - title: Every standard
     details: All eleven PDF/A levels, PDF/UA-1 and UA-2, PDF/X-1a to X-6, PDF/E-1, PDF/VT, and Factur-X, ZUGFeRD, XRechnung and Order-X e-invoices. Twenty-five targets, one set of options.
+  - title: E-invoices
+    details: Give it an invoice PDF and the XML from your invoicing software, and it writes a ZUGFeRD, Factur-X, XRechnung or Order-X invoice as PDF/A-3 that passes veraPDF, with the file name and metadata each standard requires. It reads them back and checks them too.
   - title: Print preflight
     details: 685 bundled profiles check and repair what a press cares about, such as hairlines, rich black, low-resolution images, overprint, transparency, page boxes and fonts, and you can write your own in JSON.
   - title: Content preserving
