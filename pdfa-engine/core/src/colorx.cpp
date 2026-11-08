@@ -1013,8 +1013,18 @@ void convertColorsX1a(Ctx& ctx) {
     }
     if (st.failed) break;
   }
+  if (st.failed && ctx.opt.verifyOnly && ctx.isA()) {
+    ctx.issue("RGB_UNDER_CMYK_P1", "RGB content under a CMYK output intent, which PDF/A-1 does not allow (" + st.failReason + ")", true);
+    return;
+  }
   if (st.failed && ctx.opt.verifyOnly) {
     ctx.issue("X1A_COLOR_UNCONVERTIBLE", "colour that PDF/X-1a does not allow is used (" + st.failReason + ")", true);
+    return;
+  }
+  if (st.failed && ctx.isA()) {
+    ctx.fatal("RGB_UNDER_CMYK_P1",
+              "RGB content could not be fully converted to CMYK (" + st.failReason +
+                  "), which PDF/A-1 needs here because the output intent is CMYK; target PDF/A-2 or 3");
     return;
   }
   if (st.failed) {
