@@ -10,7 +10,7 @@ extern "C" {
 #define KURA_NOEXCEPT
 #endif
 
-#define KURA_VERSION "1.3.0"
+#define KURA_VERSION "1.4.0"
 
 /* One OCR word in PDF points, x/y from the top-left corner of the page as it
  * renders (y grows downwards).  Kura maps them onto the page it rasterizes. */
