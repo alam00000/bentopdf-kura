@@ -6,6 +6,17 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [1.4.1] - 2026-11-08
+
+### Fixed
+
+- Chinese, Japanese and Korean text in an unembedded font with a Unicode map
+  but no CJK ordering is now set in the bundled Noto CJK fonts instead of
+  rasterizing the page.
+- Docs: the HTTP API reads `password` from the `X-Password` header or a form
+  field, never from the URL; the JSON printed by each `kura tool` is described
+  correctly.
+
 ## [1.4.0] - 2026-11-08
 
 ### Added
