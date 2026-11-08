@@ -23,7 +23,8 @@
     "index.d.ts",
     "bin",
     "engine",
-    "NOTICE.md"
+    "NOTICE.md",
+    "ICC-PROFILE-TERMS.md"
   ],
   "engines": {
     "node": ">=22"

@@ -1,0 +1,13 @@
+{
+  "kura-profile": 1,
+  "name": "Generate 3 mm bleed",
+  "description": "Adds 3 mm of bleed by mirroring the content at the trim edge where the page has none.",
+  "checks": [],
+  "fixes": [
+    {
+      "fix": "bleed.generate",
+      "amount": "3mm",
+      "method": "mirror"
+    }
+  ]
+}

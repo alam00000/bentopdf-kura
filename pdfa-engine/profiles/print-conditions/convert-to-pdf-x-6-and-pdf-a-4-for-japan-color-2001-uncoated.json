@@ -1,0 +1,11 @@
+{
+  "kura-profile": 1,
+  "name": "Convert to PDF/X-6 and PDF/A-4 for Japan Color 2001 Uncoated",
+  "description": "Makes one file that is both PDF/X-6 and PDF/A-4, with the Japan Color 2001 Uncoated profile (Japanese uncoated paper, Japan Color 2001).",
+  "convert": {
+    "level": "pdfa-4",
+    "also": "pdfx-6",
+    "profile": "Japan Color 2001 Uncoated"
+  },
+  "checks": []
+}

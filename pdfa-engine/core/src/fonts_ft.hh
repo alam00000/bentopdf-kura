@@ -131,6 +131,14 @@ inline FT_UInt glyphForCode(FT_Face face, int code, const SimpleEncoding& enc, b
       if (gid) return gid;
     }
   }
+  if (!enc.base) {
+    for (int i = 0; i < face->num_charmaps; ++i) {
+      FT_Encoding e = face->charmaps[i]->encoding;
+      if (e != FT_ENCODING_ADOBE_CUSTOM && e != FT_ENCODING_ADOBE_STANDARD && e != FT_ENCODING_ADOBE_EXPERT) continue;
+      FT_Set_Charmap(face, face->charmaps[i]);
+      if (FT_UInt gid = FT_Get_Char_Index(face, code)) return gid;
+    }
+  }
   if (!symbolic && enc.base) {
     uint16_t uni = enc.base(code);
     if (uni && FT_Select_Charmap(face, FT_ENCODING_UNICODE) == 0) {
@@ -327,9 +335,114 @@ inline FT_UInt resolveSimpleGid(const FtFace& face, int code, const SimpleEncodi
   }
   return glyphForCode(face.face, code, enc, symbolic);
 }
+inline FT_CharMap findCmap(FT_Face face, int platform, int encoding) {
+  for (int i = 0; i < face->num_charmaps; ++i) {
+    FT_CharMap cm = face->charmaps[i];
+    if (cm->platform_id == platform && cm->encoding_id == encoding) return cm;
+  }
+  return nullptr;
+}
+
+inline FT_UInt strictTrueTypeGid(FT_Face face, int code, QPDFObjectHandle font, bool symbolic, bool& present,
+                                 bool* unnamed = nullptr) {
+  present = false;
+  if (unnamed) *unnamed = false;
+  QPDFObjectHandle e = font.getKey("/Encoding");
+  if (symbolic || e.isNull()) {
+    if (FT_CharMap cm = findCmap(face, 3, 0)) {
+      FT_Set_Charmap(face, cm);
+      FT_UInt first = 0;
+      FT_ULong high = FT_Get_First_Char(face, &first) & 0xFF00;
+      if (high != 0 && high != 0xF000 && high != 0xF100 && high != 0xF200) return 0;
+      FT_UInt gid = FT_Get_Char_Index(face, high + static_cast<FT_ULong>(code));
+      present = gid != 0;
+      return gid;
+    }
+    if (FT_CharMap cm = findCmap(face, 1, 0)) {
+      FT_Set_Charmap(face, cm);
+      FT_UInt gid = FT_Get_Char_Index(face, static_cast<FT_ULong>(code));
+      present = gid != 0;
+      return gid;
+    }
+    return 0;
+  }
+  std::string baseName = e.isName() ? e.getName() : e.isDictionary() ? nameOf(e.getKey("/BaseEncoding")) : "";
+  uint16_t (*table)(int) = baseName == "/MacRomanEncoding" ? macRomanToUnicode
+                           : baseName == "/WinAnsiEncoding" || e.isName() ? winAnsiToUnicode
+                                                                           : standardToUnicode;
+  std::string name;
+  if (e.isDictionary()) {
+    QPDFObjectHandle diffs = e.getKey("/Differences");
+    int c = 0;
+    for (int i = 0; diffs.isArray() && i < diffs.getArrayNItems(); ++i) {
+      QPDFObjectHandle item = diffs.getArrayItem(i);
+      if (item.isInteger()) {
+        c = static_cast<int>(item.getIntValue());
+      } else if (item.isName()) {
+        if (c == code) name = item.getName().substr(1);
+        ++c;
+      }
+    }
+  }
+  uint32_t uni = 0;
+  if (name.empty()) {
+    uni = table(code);
+    if (table == winAnsiToUnicode && (code == 0xA0 || code == 0xAD)) uni = code == 0xA0 ? 0x20 : 0x2D;
+    if (table == winAnsiToUnicode && !uni && code >= 0x7F) uni = 0x2022;
+    static const std::set<int> kMacGaps = {0x7F, 0xAD, 0xB0, 0xB2, 0xB3, 0xB6, 0xB7, 0xB8,
+                                           0xB9, 0xBA, 0xBD, 0xC3, 0xC5, 0xC6, 0xD7, 0xF0};
+    if (table == macRomanToUnicode && kMacGaps.count(code)) uni = 0;
+    if (!uni && e.isDictionary()) uni = standardToUnicode(code);
+    if (!uni) {
+      if (unnamed) *unnamed = true;
+      return 0;
+    }
+    name = unicodeToAglName(uni);
+  } else {
+    if (name == ".notdef") {
+      if (unnamed) *unnamed = true;
+      return 0;
+    }
+    uni = aglNameToUnicode(name);
+  }
+  FT_UInt gid = 0;
+  FT_CharMap cm31 = findCmap(face, 3, 1);
+  if (cm31 && uni) {
+    FT_Set_Charmap(face, cm31);
+    gid = FT_Get_Char_Index(face, uni);
+  }
+  FT_CharMap cm10 = findCmap(face, 1, 0);
+  if (!gid && cm10 && uni) {
+    for (int m = 0; m < 256; ++m) {
+      if (macRomanToUnicode(m) != uni) continue;
+      FT_Set_Charmap(face, cm10);
+      gid = FT_Get_Char_Index(face, static_cast<FT_ULong>(m));
+      break;
+    }
+  }
+  if (!gid && !name.empty() && FT_HAS_GLYPH_NAMES(face)) gid = FT_Get_Name_Index(face, name.c_str());
+  present = gid > 0 && static_cast<long>(gid) < face->num_glyphs;
+  return gid;
+}
+
+struct CmapSpace {
+  int bytes;
+  uint32_t lo;
+  uint32_t hi;
+};
+bool predefinedCmap(const std::string& name, std::vector<CmapSpace>& spaces, std::map<uint32_t, int>& code2cid,
+                    std::string* ordering = nullptr);
+uint32_t orderingCidToUnicode(const std::string& ordering, uint32_t cid);
+uint32_t orderingCidCount(const std::string& ordering);
+bool loadEncodingCmap(QPDFObjectHandle enc, std::vector<CmapSpace>& spaces, std::map<uint32_t, int>& code2cid,
+                      std::string* ordering = nullptr, bool* complete = nullptr, std::string* body = nullptr);
+
 struct FontUse {
   std::set<uint32_t> codes, visibleCodes, cids, visibleCids;
   bool partialCode = false;
+  bool visibleShow = false;
+  uint32_t firstCode = 0;
+  bool hasFirstCode = false;
   std::set<std::tuple<uint32_t, QPDFObjGen, long long>> bareCodes;
 };
 std::map<QPDFObjGen, FontUse> collectFontUse(QPDF& pdf, std::set<QPDFObjGen>* reached = nullptr);

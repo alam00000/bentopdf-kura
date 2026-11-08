@@ -1,0 +1,11 @@
+{
+  "kura-profile": 1,
+  "name": "Convert all colours to sRGB",
+  "description": "Converts every colour to sRGB, for screens and the web. No standard is applied.",
+  "convert": {
+    "colors": {
+      "to": "rgb"
+    }
+  },
+  "checks": []
+}

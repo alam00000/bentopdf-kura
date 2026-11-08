@@ -1,0 +1,13 @@
+{
+  "kura-profile": 1,
+  "name": "Convert RGB to CMYK, neutral greys to black only",
+  "description": "Converts RGB to CMYK (PSO Coated v3) and prints greys whose red, green and blue are within 1% of each other with black ink only. Spot colours stay spot colours. No standard is applied.",
+  "convert": {
+    "colors": {
+      "to": "PSO Coated v3",
+      "keep_spots": true,
+      "rgb_gray_to_black": 1
+    }
+  },
+  "checks": []
+}

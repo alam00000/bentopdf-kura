@@ -275,16 +275,8 @@ class ArtifactWrapFilter : public QPDFObjectHandle::TokenFilter {
   void handleToken(QPDFTokenizer::Token const& token) override {
     QPDFTokenizer::token_type_e type = token.getType();
     if (type == QPDFTokenizer::tt_inline_image) {
-      if (mcDepth == 0) {
-        write("/Artifact BMC ");
-        flushOperands();
-        writeToken(token);
-        write(" EMC ");
-        ++wrapped;
-      } else {
-        flushOperands();
-        writeToken(token);
-      }
+      flushOperands();
+      writeToken(token);
       return;
     }
     if (type != QPDFTokenizer::tt_word) {
@@ -292,6 +284,24 @@ class ArtifactWrapFilter : public QPDFObjectHandle::TokenFilter {
       return;
     }
     std::string op = token.getValue();
+    if (op == "BI") {
+      flushPath(false);
+      flushOperands();
+      inlineWrapped = mcDepth == 0;
+      if (inlineWrapped) {
+        write("/Artifact BMC ");
+        ++wrapped;
+      }
+      writeToken(token);
+      return;
+    }
+    if (op == "EI") {
+      flushOperands();
+      writeToken(token);
+      if (inlineWrapped) write(" EMC ");
+      inlineWrapped = false;
+      return;
+    }
     if (op == "BDC" || op == "BMC") {
       flushPath(false);
       ++mcDepth;
@@ -398,6 +408,7 @@ class ArtifactWrapFilter : public QPDFObjectHandle::TokenFilter {
   }
 
   const std::set<std::string>& taggedForms;
+  bool inlineWrapped = false;
   std::vector<QPDFTokenizer::Token> operands;
   std::vector<QPDFTokenizer::Token> pathBuf;
   int mcDepth = 0;
@@ -509,7 +520,7 @@ void passSemanticRepair(Ctx& ctx, bool mergeHeadings) {
               true);
   }
 
-  int artifacts = artifactMarkUntagged(ctx);
+  int artifacts = ctx.opt.ua || !ctx.opt.verifyOnly ? artifactMarkUntagged(ctx) : 0;
   if (artifacts) {
     ctx.issue("ARTIFACT_MARKED",
               "marked " + std::to_string(artifacts) +

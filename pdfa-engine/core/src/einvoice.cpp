@@ -134,7 +134,7 @@ InvoiceProfile detectInvoice(const std::string& xml, const std::string& profileO
       inv.standard = "ZUGFeRD 2.0";
       inv.filename = "zugferd-invoice.xml";
       inv.prefix = "zf";
-      inv.nsUri = "urn:zugferd:pdfa:CrossIndustryDocument:invoice:1p0#";
+      inv.nsUri = "urn:zugferd:pdfa:CrossIndustryDocument:invoice:2p0#";
       inv.schemaName = "ZUGFeRD PDFA Extension Schema";
       inv.version = "2p0";
       if (contains(urn, ":minimum")) inv.profile = "MINIMUM";

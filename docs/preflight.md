@@ -24,19 +24,25 @@ Each repair that changed the file is reported as a `FIX_DONE` issue. A profile t
 
 | Folder | Profiles | What is in it |
 |---|---|---|
-| `profiles/report` | 18 | report-only profiles: hairlines, small text, rich black, white objects, invisible text, images, spot colours, overprint, transparency, fonts, pages, annotations, layers, ink, document health, and one that runs everything |
+| `profiles/report` | 19 | report-only profiles: hairlines, small text, rich black, white objects, invisible text, images, spot colours, overprint, transparency, fonts, pages, annotations, layers, ink, document health, and one that runs everything |
 | `profiles/press` | 30 | one check profile and one check-and-fix profile for each print process: sheetfed offset, web offset, newspaper, gravure, flexography, screen, digital toner and inkjet, large format, packaging, labels, book text |
-| `profiles/gwg` | 24 | the Ghent Workgroup 2022 workflows, written from the published specification: PDF/X-4 conformance plus each workflow's resolution, ink, hairline, text, font, colour and page requirements |
+| `profiles/gwg` | 80 | the Ghent Workgroup 2022 workflows, written from the published specification: PDF/X-4 conformance plus each workflow's resolution, ink, hairline, text, font, colour and page requirements, including the CMYK + RGB variants, web offset with spot colours, magazine and newspaper ads, and the 18 packaging variants (offset, flexo and gravure for folding carton boxes, corrugated boxes, corrugated displays, labels, leaflets and flexible packaging, each with the processing steps that product may carry) |
 | `profiles/online` | 5 | files meant for screens, downloads, email and phones |
 | `profiles/archive` | 13 | conformance checks for every PDF/A level and for embedded files |
-| `profiles/accessibility` | 3 | the tagged archival levels and an accessibility readiness report |
-| `profiles/standards` | 14 | conformance checks for every PDF/X, PDF/E and PDF/VT flavour |
-| `profiles/images` | 37 | resolution thresholds, compression filters, bit depths, soft masks, interpolation, pixel sizes |
+| `profiles/accessibility` | 4 | the tagged archival levels and an accessibility readiness report |
+| `profiles/standards` | 15 | conformance checks for every PDF/X, PDF/E and PDF/VT flavour, and PDF/X-4 with one layer view per language |
+| `profiles/print-conditions` | 96 | conversion to PDF/X-1a, X-3, X-4 and X-6, and to PDF/X-4 + PDF/A-2b or PDF/X-6 + PDF/A-4 in one file, for 16 printing conditions (FOGRA27, 28, 29, 39 and 51, GRACoL 2006 and 2013, SWOP, Japan Color 2001 to 2011), each writing the registered condition into the output intent |
+| `profiles/compatibility` | 5 | save as PDF 1.3 to 1.7 without applying a standard, removing what the older version cannot hold |
+| `profiles/packaging` | 4 | processing steps (ISO 19593-1): put die lines, creases, varnish, white, Braille and other technical inks on step layers by their spot colour names, prepare a file, check it and report its steps |
+| `profiles/images` | 42 | resolution thresholds, compression filters, bit depths, soft masks, interpolation, pixel sizes |
 | `profiles/colour` | 46 | colour spaces, spot colour limits, registration colour, rich black, total ink thresholds, overprint and knockout |
 | `profiles/objects` | 50 | hairlines, small text, render modes, transparency, blend modes, alpha, path complexity, safety margins |
-| `profiles/pages` | 40 | page sizes, empty and rotated pages, boxes, page counts, and the geometry repairs: boxes, bleed, clipping, rotation, scaling to standard sizes |
+| `profiles/pages` | 42 | page sizes, empty and rotated pages, boxes, page counts, and the geometry repairs: boxes, bleed, clipping, rotation, scaling to standard sizes |
 | `profiles/document` | 72 | file size, PDF version, encryption, damage, syntax, annotations by type, layers, output intents, fonts, halftones, transfer curves, signatures |
-| `profiles/actions` | 44 | repair-only profiles: rotation, trapped flag, rendering intents, blending space, cleanup of flatness and curves, spot colour merging, overprint and knockout, hairline thickening, stamps, layers, initial view |
+| `profiles/actions` | 49 | repair-only profiles: rotation, trapped flag, rendering intents, blending space, cleanup of flatness and curves, spot colour merging, overprint and knockout, flattening overprint, hairline thickening, stamps, layers by object type, transparency or overprint, flattening annotations and form fields, initial view |
+| `profiles/colour-conversion` | 101 | conversion without a standard: to each of the 14 printing conditions keeping spot colours or turning them into process colour, to grey, to sRGB, from one printing condition to another, and total ink reduction to 240, 260, 280, 300, 320 or 340%, neutral RGB greys to black only, a midtone tone curve, registration to black, spot colours to CMYK keeping overprint looks, and replacing one colour with another |
+| `profiles/place-content` | 7 | stamps placed on every page: date, file name, page numbers on odd and even pages, a centred text, a job name, an EAN-13 barcode and a QR code, with the text taken from variables |
+| `profiles/plans` | 5 | multi-step plans: check then convert to PDF/A-2b, convert to CMYK and flatten transparency, find complex pages, add 3 mm bleed, scale to A4 |
 
 The browser preflight tool shows a curated 45 of them plus the conversion targets. Every profile comes from `pdfa-engine/profiles/build_library.py`; the thresholds are named there, so a change to the script regenerates the library.
 
@@ -168,6 +174,8 @@ A `script` is a short piece of JavaScript. It can read `kura.variable(name, defa
 "convert": { "level": "pdfx-4", "reconvert": true, "raster_fallback": { "resolution": 300, "pages": "problem_pages" } }
 ```
 
+`profile` names the press profile for the output intent and any colour conversion, by its description (for example `"Coated FOGRA39 (ISO 12647-2:2004)"`); Kura finds it among its bundled profiles and the computer's colour folders. `pdf_version` writes the file as that PDF version without a standard. `colors` converts colour the way `--convert-colors` does: `to` (`cmyk`, `gray`, `rgb` or a profile name), `from` (the profile the document's untagged CMYK was made for), `keep_spots`, `intent`, `gray_to_black` and `device_link`.
+
 `also` writes a second standard into the same file, such as PDF/A and PDF/X together. `reconvert` runs the conversion once more on the result when it is not yet compliant. `raster_fallback` turns pages that cannot be fixed into images, `all` of them or only the `problem_pages`, keeping the text invisible on top unless `keep_text` is false. The chosen target is reported as `PROFILE_TARGET`.
 
 ### Plans
@@ -242,7 +250,7 @@ The page's script sees `window.kura.document` (`name`, `pageCount`, `variables` 
 | `FIX_DONE` | a fix changed the document |
 | `FIX_NOT_NEEDED` | a fix's `only_where` checks found nothing |
 | `FIX_UNKNOWN` | the fix is not in the catalogue |
-| `ICC_PROFILE_MISSING` | a named ICC profile was not found |
+| `ICC_PROFILE_MISSING` | a named ICC profile was not found; the conversion is refused |
 | `PLAN_STEP`, `PLAN_STEP_FAILED`, `PLAN_NO_CONVERSION` | plan progress, as above |
 
 `kura --list-profiles <dir>` lists every profile in a folder with its name and description.

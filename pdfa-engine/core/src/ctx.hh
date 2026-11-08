@@ -1,5 +1,7 @@
 #pragma once
 
+#include <algorithm>
+
 #include <qpdf/QPDF.hh>
 #include <qpdf/QPDFObjGen.hh>
 #include <qpdf/QPDFObjectHandle.hh>
@@ -21,6 +23,12 @@ struct Ctx {
   char conf;
   Family fam;
   std::set<QPDFObjGen> identityCmaps{};
+  std::set<QPDFObjGen> keepWholeForms{};
+  bool flattenOverprint = false;
+  std::set<QPDFObjGen> redrawnPages{};
+  std::set<QPDFObjGen> iccChecked{};
+  std::map<QPDFObjGen, std::vector<std::vector<uint32_t>>> textRuns{};
+  bool textRunsReady = false;
   InvoiceProfile inv{};
   int inlineImagesFixed = 0;
   int contentPuaFixed = 0;
@@ -29,6 +37,8 @@ struct Ctx {
   std::vector<std::shared_ptr<QPDF>> foreignDocs{};
   std::vector<std::shared_ptr<std::string>> foreignBuffers{};
   std::map<std::string, std::set<int>> ruleHitPages{};
+  const unsigned char* src = nullptr;
+  size_t srcSize = 0;
 
   bool isA() const { return fam == Family::PDFA; }
   bool isX() const { return fam == Family::PDFX || fam == Family::PDFVT; }
@@ -76,6 +86,16 @@ struct Ctx {
     if (currentPage > 0) i.pages.push_back(currentPage);
     if (opt.trace) opt.trace("issue " + code + (currentPage > 0 ? " p" + std::to_string(currentPage) : "") + ": " + detail);
     res.issues.push_back(std::move(i));
+  }
+
+  void issueMerged(const std::string& code, const std::string& detail, bool fixed) {
+    for (Issue& i : res.issues) {
+      if (i.code != code || i.detail != detail || i.fixed != fixed) continue;
+      if (currentPage > 0 && std::find(i.pages.begin(), i.pages.end(), currentPage) == i.pages.end())
+        i.pages.push_back(currentPage);
+      return;
+    }
+    issue(code, detail, fixed);
   }
 
   void scanIncomplete(const std::string& what) {

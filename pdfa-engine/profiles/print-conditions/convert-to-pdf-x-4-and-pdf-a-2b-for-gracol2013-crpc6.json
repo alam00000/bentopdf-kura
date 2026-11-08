@@ -1,0 +1,11 @@
+{
+  "kura-profile": 1,
+  "name": "Convert to PDF/X-4 and PDF/A-2b for GRACoL2013_CRPC6",
+  "description": "Makes one file that is both PDF/X-4 and PDF/A-2b, with the GRACoL2013_CRPC6 profile (US sheetfed coated paper, GRACoL 2013 (CGATS21-2 CRPC6)).",
+  "convert": {
+    "level": "pdfa-2b",
+    "also": "pdfx-4",
+    "profile": "GRACoL2013_CRPC6"
+  },
+  "checks": []
+}

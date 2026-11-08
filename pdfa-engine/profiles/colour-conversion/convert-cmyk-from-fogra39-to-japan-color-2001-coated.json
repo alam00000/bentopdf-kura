@@ -1,0 +1,13 @@
+{
+  "kura-profile": 1,
+  "name": "Convert CMYK from FOGRA39 to Japan Color 2001 Coated",
+  "description": "Re-separates CMYK made for Coated FOGRA39 (ISO 12647-2:2004) so it prints the same on Japan Color 2001 Coated, through both profiles; spot colours stay spot colours and the new profile becomes the output intent.",
+  "convert": {
+    "colors": {
+      "from": "Coated FOGRA39 (ISO 12647-2:2004)",
+      "to": "Japan Color 2001 Coated",
+      "keep_spots": true
+    }
+  },
+  "checks": []
+}

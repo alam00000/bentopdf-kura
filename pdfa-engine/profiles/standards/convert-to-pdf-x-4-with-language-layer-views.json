@@ -1,0 +1,52 @@
+{
+  "kura-profile": 1,
+  "name": "Convert to PDF/X-4 with language layer views",
+  "description": "Converts to PDF/X-4 and adds one layer view per language (English, German, French, Italian, Spanish); each view hides the layers named for the other languages, for example \"de\", \"Text_fr\" or \"es-Copy\".",
+  "convert": {
+    "level": "pdfx-4"
+  },
+  "checks": [
+    {
+      "name": "Layer views break PDF/X-4 rules",
+      "severity": "error",
+      "all": [
+        {
+          "check": "layer.configuration",
+          "op": "includes",
+          "value": [
+            "config_missing_name",
+            "config_name_not_unique",
+            "has_as_entry"
+          ]
+        }
+      ]
+    }
+  ],
+  "fixes": [
+    {
+      "fix": "layer.add_view",
+      "name": "English",
+      "hide": "^(de|fr|it|es)([\\W_].*)?$|[\\W_](de|fr|it|es)([\\W_].*)?$"
+    },
+    {
+      "fix": "layer.add_view",
+      "name": "German",
+      "hide": "^(en|fr|it|es)([\\W_].*)?$|[\\W_](en|fr|it|es)([\\W_].*)?$"
+    },
+    {
+      "fix": "layer.add_view",
+      "name": "French",
+      "hide": "^(en|de|it|es)([\\W_].*)?$|[\\W_](en|de|it|es)([\\W_].*)?$"
+    },
+    {
+      "fix": "layer.add_view",
+      "name": "Italian",
+      "hide": "^(en|de|fr|es)([\\W_].*)?$|[\\W_](en|de|fr|es)([\\W_].*)?$"
+    },
+    {
+      "fix": "layer.add_view",
+      "name": "Spanish",
+      "hide": "^(en|de|fr|it)([\\W_].*)?$|[\\W_](en|de|fr|it)([\\W_].*)?$"
+    }
+  ]
+}

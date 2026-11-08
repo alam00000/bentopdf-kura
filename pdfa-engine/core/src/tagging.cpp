@@ -2,6 +2,7 @@
 #include <cstdlib>
 #include <qpdf/Pl_Buffer.hh>
 #include <qpdf/QPDF.hh>
+#include <qpdf/QPDFNameTreeObjectHelper.hh>
 #include <qpdf/QPDFPageDocumentHelper.hh>
 #include <qpdf/QPDFPageObjectHelper.hh>
 #include <qpdf/QPDFTokenizer.hh>
@@ -21,6 +22,22 @@
 #include "util.hh"
 
 namespace pdfa {
+bool pdfaLangTag(const std::string& s, int part) {
+  if (s.empty()) return true;
+  size_t i = 0;
+  for (int seg = 0;; ++seg) {
+    size_t start = i;
+    while (i < s.size() && s[i] != '-') {
+      unsigned char c = static_cast<unsigned char>(s[i]);
+      if (c >= 0x80 || !(std::isalpha(c) || (seg > 0 && part >= 2 && std::isdigit(c)))) return false;
+      ++i;
+    }
+    if (i - start < 1 || i - start > 8) return false;
+    if (i == s.size()) return true;
+    ++i;
+  }
+}
+
 namespace {
 bool validLangTag(const std::string& s) {
   if (s.empty()) return false;
@@ -88,7 +105,37 @@ void fixRoleMap(Ctx& ctx) {
       if (!s.empty() && standard.count(s) == 0) usedNonStandard.insert(s);
     }
   }
+  std::set<std::string> reachedNonStandard;
+  std::set<QPDFObjGen> seen;
+  std::function<void(QPDFObjectHandle, int)> walk = [&](QPDFObjectHandle k, int depth) {
+    if (depth > 512) return;
+    if (k.isArray()) {
+      for (int i = 0; i < k.getArrayNItems(); ++i) walk(k.getArrayItem(i), depth + 1);
+      return;
+    }
+    if (!k.isDictionary() || (k.isIndirect() && !seen.insert(k.getObjGen()).second)) return;
+    std::string s = nameOf(k.getKey("/S"));
+    if (s.empty()) return;
+    if (standard.count(s) == 0) reachedNonStandard.insert(s);
+    walk(k.getKey("/K"), depth + 1);
+  };
+  walk(str.getKey("/K"), 0);
   QPDFObjectHandle rm = str.getKey("/RoleMap");
+  bool violation = false;
+  for (const std::string& t : reachedNonStandard) {
+    std::set<std::string> chain{t};
+    std::string cur = t;
+    bool ok = false;
+    while (rm.isDictionary() && rm.getKey(cur).isName()) {
+      cur = rm.getKey(cur).getName();
+      if (standard.count(cur)) {
+        ok = true;
+        break;
+      }
+      if (!chain.insert(cur).second) break;
+    }
+    if (!ok) violation = true;
+  }
   if (!rm.isDictionary()) {
     if (usedNonStandard.empty()) return;
     str.replaceKey("/RoleMap", QPDFObjectHandle::newDictionary());
@@ -128,7 +175,7 @@ void fixRoleMap(Ctx& ctx) {
       changed = true;
     }
   }
-  if (changed) {
+  if (changed && (violation || !ctx.opt.verifyOnly || ctx.opt.ua)) {
     ctx.issue("ROLEMAP_NORMALIZED",
               "normalized structure role map (standard types unmapped, cycles broken, "
               "non-standard types mapped)",
@@ -139,9 +186,31 @@ void fixRoleMap(Ctx& ctx) {
 void fixLang(Ctx& ctx, QPDFObjectHandle dict, const std::string& where) {
   QPDFObjectHandle lang = dict.getKey("/Lang");
   if (lang.isNull()) return;
-  if (!lang.isString() || (!validLangTag(lang.getUTF8Value()) && !(ctx.opt.verifyOnly && lang.getUTF8Value().empty()))) {
+  bool pdfaRule = !ctx.opt.ua && ctx.isA() && ctx.conf == 'A';
+  if (pdfaRule && ctx.opt.verifyOnly && !lang.isString()) return;
+  bool bad = pdfaRule ? !lang.isString() || !pdfaLangTag(lang.getUTF8Value(), ctx.part)
+                      : !lang.isString() || (!validLangTag(lang.getUTF8Value()) &&
+                                             !(ctx.opt.verifyOnly && lang.getUTF8Value().empty()));
+  if (bad) {
     dict.removeKey("/Lang");
     ctx.issue("LANG_REMOVED", "removed invalid language tag from " + where, true);
+    return;
+  }
+  std::string tag = lang.getUTF8Value(), canon;
+  for (size_t i = 0, seg = 0; i <= tag.size(); ++seg) {
+    size_t j = std::min(tag.find('-', i), tag.size());
+    std::string part = tag.substr(i, j - i);
+    for (size_t k = 0; k < part.size(); ++k) {
+      unsigned char c = static_cast<unsigned char>(part[k]);
+      bool upper = seg > 0 && (part.size() == 2 || (part.size() == 4 && k == 0));
+      part[k] = static_cast<char>(upper ? std::toupper(c) : std::tolower(c));
+    }
+    canon += (seg ? "-" : "") + part;
+    i = j + 1;
+  }
+  if (canon != tag && !ctx.opt.verifyOnly) {
+    dict.replaceKey("/Lang", QPDFObjectHandle::newUnicodeString(canon));
+    ctx.issue("LANG_NORMALIZED", "wrote the language tag of " + where + " in standard letter case", true);
   }
 }
 
@@ -159,37 +228,8 @@ class StripMcFilter : public QPDFObjectHandle::TokenFilter {
       return;
     }
     std::string op = token.getValue();
-    if (op == "BMC" || op == "BDC") {
-      std::string tag;
-      for (const auto& t : operands) {
-        if (t.getType() == QPDFTokenizer::tt_name) {
-          tag = t.getValue();
-          break;
-        }
-      }
-      if (tag == "/Artifact") {
-        flush();
-        writeToken(token);
-        stack.push_back(true);
-      } else {
-        operands.clear();
-        stack.push_back(false);
-      }
-      return;
-    }
-    if (op == "EMC") {
-      if (!stack.empty()) {
-        bool kept = stack.back();
-        stack.pop_back();
-        if (kept) {
-          flush();
-          writeToken(token);
-        } else {
-          operands.clear();
-        }
-      } else {
-        operands.clear();
-      }
+    if (op == "BMC" || op == "BDC" || op == "EMC") {
+      operands.clear();
       return;
     }
     flush();
@@ -203,7 +243,6 @@ class StripMcFilter : public QPDFObjectHandle::TokenFilter {
     operands.clear();
   }
   std::vector<QPDFTokenizer::Token> operands;
-  std::vector<bool> stack;
 };
 
 void stripFormMarkedContent(Ctx& ctx, QPDFObjectHandle res, Visited& visited) {
@@ -245,7 +284,6 @@ class TagWrapFilter : public QPDFObjectHandle::TokenFilter {
   void handleToken(QPDFTokenizer::Token const& token) override {
     QPDFTokenizer::token_type_e type = token.getType();
     if (type == QPDFTokenizer::tt_inline_image) {
-      openP();
       flushOperands();
       writeToken(token);
       return;
@@ -415,6 +453,39 @@ bool contentsDecodable(QPDFObjectHandle page) {
     }
   }
   return true;
+}
+
+bool artifactWrapped(const std::string& s) {
+  size_t i = s.find_first_not_of(" \t\r\n");
+  return i != std::string::npos && s.compare(i, 9, "/Artifact") == 0;
+}
+
+int wrapAppearanceAsArtifact(QPDFObjectHandle a) {
+  QPDFObjectHandle ap = a.getKey("/AP");
+  if (!ap.isDictionary()) return 0;
+  int n = 0;
+  auto wrap = [&](QPDFObjectHandle st) {
+    if (!st.isStream()) return;
+    std::string data;
+    try {
+      auto buf = st.getStreamData(qpdf_dl_generalized);
+      data.assign(reinterpret_cast<const char*>(buf->getBuffer()), buf->getSize());
+    } catch (...) {
+      return;
+    }
+    if (artifactWrapped(data)) return;
+    st.replaceStreamData("/Artifact BMC\n" + data + "\nEMC\n", QPDFObjectHandle::newNull(), QPDFObjectHandle::newNull());
+    ++n;
+  };
+  for (const char* k : {"/N", "/D", "/R"}) {
+    QPDFObjectHandle v = ap.getKey(k);
+    if (v.isStream()) {
+      wrap(v);
+    } else if (v.isDictionary()) {
+      for (const std::string& state : v.getKeys()) wrap(v.getKey(state));
+    }
+  }
+  return n;
 }
 
 void fillAnnotText(QPDFObjectHandle a) {
@@ -868,6 +939,8 @@ bool uaRepairTree(Ctx& ctx, QPDFObjectHandle tree, std::string& reason) {
       QPDFObjectHandle a = an.getArrayItem(i);
       if (!a.isDictionary()) continue;
       if (nameIs(a.getKey("/Subtype"), "/PrinterMark")) {
+        fillAnnotText(a);
+        wrapAppearanceAsArtifact(a);
         auto it = a.isIndirect() ? ix.objr.find(a.getObjGen()) : ix.objr.end();
         if (it != ix.objr.end()) {
           QPDFObjectHandle e = it->second.second;
@@ -915,6 +988,40 @@ bool uaRepairTree(Ctx& ctx, QPDFObjectHandle tree, std::string& reason) {
     }
   }
   if (annots) changes.push_back("tagged or retyped " + std::to_string(annots) + " annotation structure element(s)");
+  int adopted = 0;
+  for (auto& ph : pages) {
+    QPDFObjectHandle page = ph.getObjectHandle();
+    std::string body;
+    try {
+      for (QPDFObjectHandle c : ph.getPageContents()) {
+        auto b = c.getStreamData(qpdf_dl_generalized);
+        body.append(reinterpret_cast<const char*>(b->getBuffer()), b->getSize());
+        body += "\n";
+      }
+    } catch (...) {
+      continue;
+    }
+    std::set<int> found;
+    for (size_t at = body.find("/MCID"); at != std::string::npos; at = body.find("/MCID", at + 5)) {
+      size_t p = at + 5;
+      while (p < body.size() && std::isspace(static_cast<unsigned char>(body[p]))) ++p;
+      size_t q = p;
+      while (q < body.size() && std::isdigit(static_cast<unsigned char>(body[q]))) ++q;
+      if (q > p && q - p < 7) found.insert(std::stoi(body.substr(p, q - p)));
+    }
+    QPDFObjectHandle holder;
+    for (int mcid : found) {
+      if (ix.mc.count({page.getObjGen(), mcid})) continue;
+      if (!holder.isInitialized()) {
+        holder = makeElem(ctx, "/P", docElem, page, QPDFObjectHandle());
+        appendKid(docElem, holder);
+      }
+      appendKid(holder, QPDFObjectHandle::newInteger(mcid));
+      ix.mc[{page.getObjGen(), mcid}] = holder;
+      ++adopted;
+    }
+  }
+  if (adopted) changes.push_back("attached " + std::to_string(adopted) + " tagged content item(s) missing from the structure tree");
   std::map<QPDFObjGen, std::map<int, QPDFObjectHandle>> owners;
   for (const auto& [key, elem] : ix.mc) owners[key.first][key.second] = elem;
   QPDFObjectHandle nums = QPDFObjectHandle::newArray();
@@ -966,7 +1073,7 @@ bool uaRepairTree(Ctx& ctx, QPDFObjectHandle tree, std::string& reason) {
   }
   fixRoleMap(ctx);
   for (QPDFObjectHandle obj : ctx.pdf.getAllObjects()) {
-    if (obj.isDictionary() && nameIs(obj.getKey("/Type"), "/StructElem")) fixLang(ctx, obj, "structure element");
+    if (obj.isDictionary() && (nameIs(obj.getKey("/Type"), "/StructElem") || (obj.getKey("/S").isName() && obj.hasKey("/P") && !obj.hasKey("/Type")))) fixLang(ctx, obj, "structure element");
   }
   passSemanticRepair(ctx, false);
   return true;
@@ -1083,7 +1190,7 @@ void uaTagging(Ctx& ctx) {
       segments = filter.segments;
       if (filter.sawContent) ++wrapped;
     } else {
-      ctx.issue("CONTENT_UNDECODABLE",
+      ctx.issueMerged("CONTENT_UNDECODABLE",
                 "page content could not be decoded for tagging; left untagged", false);
     }
 
@@ -1131,7 +1238,15 @@ void uaTagging(Ctx& ctx) {
         QPDFObjectHandle a = annots.getArrayItem(i);
         if (!a.isDictionary()) continue;
         if (!a.isIndirect()) a = ctx.pdf.makeIndirectObject(a);
-        if (nameIs(a.getKey("/Subtype"), "/PrinterMark")) continue;
+        if (nameIs(a.getKey("/Subtype"), "/PrinterMark")) {
+          fillAnnotText(a);
+          wrapAppearanceAsArtifact(a);
+          continue;
+        }
+        if (ctx.ua2() && nameIs(a.getKey("/Subtype"), "/Popup")) {
+          a.removeKey("/StructParent");
+          continue;
+        }
         QPDFObjectHandle elem = annotElem(ctx, a, page, docElem, gNsRef);
         a.replaceKey("/StructParent", QPDFObjectHandle::newInteger(nextKey));
         nums.appendItem(QPDFObjectHandle::newInteger(nextKey));
@@ -1148,11 +1263,34 @@ void uaTagging(Ctx& ctx) {
     int fixedDest = 0;
     int keptDest = 0;
     auto elemForDest = [&](QPDFObjectHandle dest) {
+      if (dest.isString()) {
+        QPDFObjectHandle nm = root.getKey("/Names");
+        QPDFObjectHandle tree = nm.isDictionary() ? nm.getKey("/Dests") : QPDFObjectHandle::newNull();
+        QPDFObjectHandle found;
+        if (tree.isDictionary()) {
+          try {
+            QPDFNameTreeObjectHelper(tree, ctx.pdf).findObject(dest.getUTF8Value(), found);
+          } catch (...) {
+          }
+        }
+        dest = found.isInitialized() ? found : QPDFObjectHandle::newNull();
+      } else if (dest.isName()) {
+        QPDFObjectHandle dd = root.getKey("/Dests");
+        dest = dd.isDictionary() ? dd.getKey(dest.getName()) : QPDFObjectHandle::newNull();
+      }
+      if (dest.isDictionary()) dest = dest.getKey("/D");
       if (dest.isArray() && dest.getArrayNItems() >= 1) {
         QPDFObjectHandle target = dest.getArrayItem(0);
         if (target.isIndirect()) {
+          if (target.isDictionary() && target.hasKey("/S") && target.hasKey("/P")) return target;
           auto it = pageFirstElem.find(target.getObjGen());
           if (it != pageFirstElem.end()) return it->second;
+          if (nameIs(target.getKey("/Type"), "/Page")) {
+            QPDFObjectHandle part = makeElem(ctx, "/Part", docElem, target, gNsRef);
+            appendKid(docElem, part);
+            pageFirstElem[target.getObjGen()] = part;
+            return part;
+          }
         }
       }
       return QPDFObjectHandle();
@@ -1336,7 +1474,7 @@ void passTagging(Ctx& ctx) {
 
   fixLang(ctx, root, "document catalog");
   for (QPDFObjectHandle obj : ctx.pdf.getAllObjects()) {
-    if (obj.isDictionary() && nameIs(obj.getKey("/Type"), "/StructElem")) {
+    if (obj.isDictionary() && (nameIs(obj.getKey("/Type"), "/StructElem") || (obj.getKey("/S").isName() && obj.hasKey("/P") && !obj.hasKey("/Type")))) {
       fixLang(ctx, obj, "structure element");
     }
   }

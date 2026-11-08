@@ -48,6 +48,13 @@ The names match the [npm package](/npm) options; every one maps to a [CLI](/cli)
 | `outlineFonts=true` | convert text to outlines |
 | `imageMaxPpi` | downsample images above this resolution |
 | `outputCondition`, `outputConditionInfo`, `registry` | the PDF/X output intent |
+| `convertColors` | convert colour to `cmyk`, `gray` or `rgb` through ICC profiles; `cmyk` uses the uploaded `destProfile` when there is one. See [converting colour](/cli#converting-colour) |
+| `intent` | rendering intent: `perceptual`, `relative`, `saturation` or `absolute` |
+| `convertObjects` | limit conversion to a comma list of `text`, `vector`, `shading`, `images`, `lossy`, `lossless` |
+| `keepSpots=true` | keep spot colours and convert only their alternate |
+| `noBpc=true` | turn off black point compensation |
+| `grayToK=true`, `rgbGrayToK` | put gray, and RGB within this many percent of neutral, on the black plate only |
+| `inkLimit` | total ink coverage limit, 100 to 400 percent |
 | `vtRecords` | PDF/VT record boundaries, for example `1-3,4-6` |
 | `embedSource=true`, `embedSourceName` | attach the original file to the result |
 | `attachXmlName`, `facturxProfile` | e-invoice attachment name and profile |
@@ -66,6 +73,7 @@ Either the document itself as the raw body, or `multipart/form-data` with these 
 | `xml` | an e-invoice XML to attach |
 | `destProfile` | an ICC profile for the output intent |
 | `defaultRgb`, `defaultCmyk`, `defaultGray` | ICC profiles for uncalibrated colour |
+| `deviceLink` | a device link profile to convert through |
 
 Any query parameter may also be sent as a text field.
 

@@ -5598,6 +5598,24 @@
       "notes": "Values: piece_info, separation_info, application_private."
     },
     {
+      "id": "page.processing_steps",
+      "group": "page",
+      "title": "Processing steps on the page",
+      "description": "Processing step types used by the page's layers, such as Structural/Cutting or Structural/Creasing.",
+      "value": "list",
+      "operators": [
+        "includes",
+        "excludes",
+        "count"
+      ],
+      "params": [],
+      "standards": [
+        "ISO 19593-1 5"
+      ],
+      "applies_to": "page",
+      "notes": "Lists group/type labels; use layer.processing_step for single objects."
+    },
+    {
       "id": "page.processing_steps_entry",
       "group": "page",
       "title": "Page declares processing steps",
@@ -9024,6 +9042,37 @@
       ]
     },
     {
+      "id": "layer.add_view",
+      "group": "layer",
+      "title": "Add a layer view",
+      "description": "Adds a named layer configuration (view) that shows every layer except those whose names match a pattern; used for language versions in PDF/X-4.",
+      "params": [
+        {
+          "name": "name",
+          "type": "text",
+          "required": true
+        },
+        {
+          "name": "hide",
+          "type": "text",
+          "description": "Regular expression for layer names switched off in this view (case-insensitive)."
+        },
+        {
+          "name": "show",
+          "type": "text",
+          "description": "Regular expression for layer names always kept on in this view."
+        },
+        {
+          "name": "creator",
+          "type": "text"
+        }
+      ],
+      "standards": [
+        "ISO 32000-1 8.11.4.3",
+        "ISO 15930-7 6.10"
+      ]
+    },
+    {
       "id": "layer.flatten",
       "group": "layer",
       "title": "Flatten layers",
@@ -9057,20 +9106,8 @@
         },
         {
           "name": "processing_step",
-          "type": "enum",
-          "enum": [
-            "Structural",
-            "Dimensions",
-            "Cutting",
-            "Creasing",
-            "Perforating",
-            "Folding",
-            "Varnish",
-            "White",
-            "Braille",
-            "Positions",
-            "Legend"
-          ]
+          "type": "text",
+          "description": "Processing-step group (Structural, Dimensions, Braille, Legend, Positions, White, Varnish), a step type (Cutting, Creasing, Perforating, Folding, Gluing, Embossing, Hologram, Barcode and so on; the group is implied), or Group/Type."
         }
       ],
       "standards": [
@@ -10323,6 +10360,16 @@
       ],
       "standards": [
         "ISO 32000-2 9.3.6"
+      ]
+    },
+    {
+      "id": "ink.flatten_overprint",
+      "group": "ink",
+      "title": "Flatten overprint",
+      "description": "Works out what each overprinting object leaves of the inks underneath and paints the result, so the page looks the same with overprint switched off.",
+      "params": [],
+      "standards": [
+        "ISO 32000-1 8.6.7"
       ]
     },
     {

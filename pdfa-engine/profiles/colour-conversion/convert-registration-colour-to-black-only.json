@@ -1,0 +1,11 @@
+{
+  "kura-profile": 1,
+  "name": "Convert registration colour to black only",
+  "description": "Replaces the registration colour (all inks) with 100% black.",
+  "checks": [],
+  "fixes": [
+    {
+      "fix": "spot.registration_to_black"
+    }
+  ]
+}

@@ -1,0 +1,16 @@
+{
+  "kura-profile": 1,
+  "name": "Place the date on every page",
+  "description": "Places today's date (YYYY-MM-DD) in the lower right corner of every page.",
+  "checks": [],
+  "fixes": [
+    {
+      "fix": "place.text",
+      "text": "{date}",
+      "size": "8pt",
+      "anchor": "lower_right",
+      "x": "-10mm",
+      "y": "5mm"
+    }
+  ]
+}

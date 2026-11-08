@@ -7,10 +7,12 @@
 
 #include <chrono>
 #include <set>
+#include <cctype>
 #include <cstring>
 #include <exception>
 
 #include "colorconv.hh"
+#include "images.hh"
 #include "ctx.hh"
 #include "passes.hh"
 #include "ocr.hh"
@@ -19,6 +21,8 @@
 #include "util.hh"
 
 namespace pdfa {
+void fixIccChannelCounts(Ctx& ctx);
+
 namespace {
 struct LevelRow {
   Level level;
@@ -115,6 +119,44 @@ std::string detectSecurityHandler(const unsigned char* data, std::size_t size) {
   return std::string();
 }
 
+double versionNumber(const std::string& v) { return v.empty() ? 0 : std::atof(v.c_str()); }
+
+void applyVersionCompat(Ctx& ctx, const std::string& version) {
+  double v = versionNumber(version);
+  if (v <= 0) return;
+  std::vector<QPDFPageObjectHelper> pages = QPDFPageDocumentHelper(ctx.pdf).getAllPages();
+  int images16 = 0, jpx = 0, flattened = 0;
+  if (v < 1.5) {
+    long long marks = 0, objects = 0;
+    bool hadLayers = ctx.pdf.getRoot().getKey("/OCProperties").isDictionary();
+    flattenOptionalContent(ctx, pages, false, marks, objects);
+    if (hadLayers)
+      ctx.issue("VERSION_LAYERS_FLATTENED", "merged layers into the page (layers need PDF 1.5); " +
+                std::to_string(marks + objects) + " piece(s) of hidden content dropped", true);
+    for (QPDFObjectHandle o : ctx.pdf.getAllObjects()) {
+      if (!o.isStream() || !nameIs(o.getDict().getKey("/Subtype"), "/Image")) continue;
+      QPDFObjectHandle d = o.getDict();
+      QPDFObjectHandle f = d.getKey("/Filter");
+      bool isJpx = nameIs(f, "/JPXDecode") || (f.isArray() && f.getArrayNItems() > 0 && nameIs(f.getArrayItem(f.getArrayNItems() - 1), "/JPXDecode"));
+      if (isJpx && transcodeJpxImage(ctx, o, false)) ++jpx;
+      else if (d.getKey("/BitsPerComponent").isInteger() && d.getKey("/BitsPerComponent").getIntValue() == 16 && reduceImageDepth(ctx, o)) ++images16;
+    }
+  }
+  if (v < 1.4) {
+    for (size_t i = 0; i < pages.size(); ++i) {
+      if (!pageHasTransparency(ctx, pages[i])) continue;
+      if (vectorFlattenPage(ctx, pages[i], static_cast<int>(i), nullptr, 300) ||
+          (ctx.opt.rasterizePage && rasterFlattenPage(ctx, pages[i], static_cast<int>(i), true, 300)))
+        ++flattened;
+    }
+    if (flattened)
+      ctx.issue("VERSION_TRANSPARENCY_FLATTENED", "flattened transparency on " + std::to_string(flattened) +
+                " page(s) (transparency needs PDF 1.4)", true);
+  }
+  if (jpx) ctx.issue("VERSION_JPX_RECODED", "re-encoded " + std::to_string(jpx) + " JPEG 2000 image(s) as JPEG (JPEG 2000 needs PDF 1.5)", true);
+  if (images16) ctx.issue("VERSION_IMAGES_REDUCED", "reduced " + std::to_string(images16) + " 16-bit image(s) to 8 bits (16-bit images need PDF 1.5)", true);
+}
+
 void serialize(Ctx& ctx) {
   QPDFWriter w(ctx.pdf);
   const bool signing = static_cast<bool>(ctx.opt.signDocument);
@@ -127,7 +169,15 @@ void serialize(Ctx& ctx) {
   w.setDecodeLevel(qpdf_dl_generalized);
   w.setRecompressFlate(true);
   w.setPreserveUnreferencedObjects(false);
-  if (ctx.pdf14Target()) {
+  if (ctx.opt.noStandard) {
+    double v = versionNumber(ctx.opt.pdfVersion);
+    if (v > 0) {
+      w.setObjectStreamMode(v < 1.5 || signing ? qpdf_o_disable : qpdf_o_preserve);
+      w.forcePDFVersion(ctx.opt.pdfVersion);
+    } else {
+      w.setObjectStreamMode(signing ? qpdf_o_disable : qpdf_o_preserve);
+    }
+  } else if (ctx.pdf14Target()) {
     w.setObjectStreamMode(qpdf_o_disable);
     w.forcePDFVersion("1.4");
   } else if (!ctx.isA()) {
@@ -229,6 +279,62 @@ std::string wrapJpegAsPdf(const unsigned char* data, std::size_t size) {
 }
 }
 
+bool repairPageTree(QPDF& pdf) {
+  try {
+    QPDFPageDocumentHelper(pdf).getAllPages();
+    return false;
+  } catch (std::exception&) {
+  }
+  QPDFObjectHandle root = pdf.getRoot();
+  std::vector<QPDFObjectHandle> pages;
+  std::set<QPDFObjGen> seen;
+  struct Item {
+    QPDFObjectHandle node;
+    std::map<std::string, QPDFObjectHandle> inherited;
+  };
+  std::vector<Item> stack{{root.getKey("/Pages"), {}}};
+  while (!stack.empty() && pages.size() < 1000000) {
+    Item it = stack.back();
+    stack.pop_back();
+    QPDFObjectHandle n = it.node;
+    if (!n.isDictionary() || (n.isIndirect() && !seen.insert(n.getObjGen()).second)) continue;
+    for (const char* k : {"/Resources", "/MediaBox", "/CropBox", "/Rotate"}) {
+      if (n.hasKey(k)) it.inherited[k] = n.getKey(k);
+    }
+    QPDFObjectHandle kids = n.getKey("/Kids");
+    if (kids.isArray() && !nameIs(n.getKey("/Type"), "/Page")) {
+      for (int i = kids.getArrayNItems() - 1; i >= 0; --i) stack.push_back({kids.getArrayItem(i), it.inherited});
+      continue;
+    }
+    if (!nameIs(n.getKey("/Type"), "/Page") && !n.hasKey("/Contents") && !n.hasKey("/MediaBox")) continue;
+    for (const auto& [k, v] : it.inherited) {
+      if (!n.hasKey(k)) n.replaceKey(k, v);
+    }
+    pages.push_back(n);
+  }
+  if (pages.empty()) {
+    for (QPDFObjectHandle o : pdf.getAllObjects()) {
+      if (o.isDictionary() && nameIs(o.getKey("/Type"), "/Page")) pages.push_back(o);
+    }
+  }
+  if (pages.empty()) return false;
+  QPDFObjectHandle tree = pdf.makeIndirectObject(QPDFObjectHandle::newDictionary());
+  QPDFObjectHandle kids = QPDFObjectHandle::newArray();
+  for (QPDFObjectHandle pg : pages) {
+    if (!pg.isIndirect()) pg = pdf.makeIndirectObject(pg);
+    pg.replaceKey("/Type", QPDFObjectHandle::newName("/Page"));
+    pg.replaceKey("/Parent", tree);
+    if (!pg.getKey("/MediaBox").isArray()) pg.replaceKey("/MediaBox", QPDFObjectHandle::parse("[0 0 612 792]"));
+    kids.appendItem(pg);
+  }
+  tree.replaceKey("/Type", QPDFObjectHandle::newName("/Pages"));
+  tree.replaceKey("/Kids", kids);
+  tree.replaceKey("/Count", QPDFObjectHandle::newInteger(static_cast<long long>(pages.size())));
+  root.replaceKey("/Pages", tree);
+  pdf.updateAllPagesCache();
+  return true;
+}
+
 bool issueIsNormalization(const std::string& code) {
   return code == "XMP_REBUILT" || code == "CONTENT_FILTERED" ||
          code == "OUTPUT_INTENT_PRESENT";
@@ -299,8 +405,18 @@ Result convertOnce(const unsigned char* data, std::size_t size, const Options& o
   }
   try {
     if (!opt.preflightProfile.empty() && !opt.verifyOnly) applyProfileFixes(opt, res.analysis);
-    if (opt.colorJob.enabled && !opt.verifyOnly) prepareColorJob(opt, res.analysis);
-    res.level = levelToString(opt.level);
+    if (opt.colorJob.enabled && !opt.verifyOnly) {
+      const ColorJob& cj = opt.colorJob;
+      std::string wanted = cj.destProfile.empty() && cj.deviceLink.empty() ? cj.destName : std::string();
+      size_t before = res.analysis.size();
+      prepareColorJob(opt, res.analysis);
+      if (!wanted.empty() && opt.colorJob.destName.empty()) {
+        res.errorCode = "ICC_PROFILE_MISSING";
+        res.error = before < res.analysis.size() ? res.analysis[before].detail : "colour profile \"" + wanted + "\" was not found";
+        return res;
+      }
+    }
+    res.level = opt.noStandard ? std::string("none") : levelToString(opt.level);
     if (size > 4 && data[0] == 0xFF && data[1] == 0xD8) {
       wrapped = wrapJpegAsPdf(data, size);
       if (!wrapped.empty()) {
@@ -326,6 +442,14 @@ Result convertOnce(const unsigned char* data, std::size_t size, const Options& o
     QPDF decrypted;
     QPDF* active = &pdf;
     bool wasEncrypted = pdf.isEncrypted();
+    bool encryptionAllowed = false;
+    if (wasEncrypted && levelFamily(opt.level) == Family::PDFE) {
+      QPDFObjectHandle enc = trailer.getKey("/Encrypt");
+      QPDFObjectHandle r = enc.isDictionary() ? enc.getKey("/R") : QPDFObjectHandle::newNull();
+      QPDFObjectHandle em = enc.isDictionary() ? enc.getKey("/EncryptMetadata") : QPDFObjectHandle::newNull();
+      encryptionAllowed = nameIs(enc.getKey("/Filter"), "/Standard") && r.isInteger() && r.getIntValue() >= 2 &&
+                          r.getIntValue() <= 4 && em.isBool() && !em.getBoolValue();
+    }
     if (wasEncrypted) {
       QPDFWriter dw(pdf);
       dw.setOutputMemory();
@@ -349,8 +473,21 @@ Result convertOnce(const unsigned char* data, std::size_t size, const Options& o
     }
     Ctx ctx{*active, opt, res, levelPart(opt.level), levelConformance(opt.level),
             levelFamily(opt.level)};
+    if (!wasEncrypted) {
+      ctx.src = data;
+      ctx.srcSize = size;
+    }
     if (!opt.attachXml.empty()) {
       ctx.inv = detectInvoice(opt.attachXml, opt.facturxProfile, opt.attachXmlName);
+    }
+    if (!opt.verifyOnly && repairPageTree(*active)) {
+      ctx.issue("PAGE_TREE_REBUILT", "rebuilt a damaged page tree as a single list of pages", true);
+    }
+    if (!opt.verifyOnly) {
+      try {
+        active->pushInheritedAttributesToPage();
+      } catch (std::exception&) {
+      }
     }
     if (opt.ua && !ctx.isA()) {
       res.errorCode = "UA_UNSUPPORTED_LEVEL";
@@ -374,7 +511,7 @@ Result convertOnce(const unsigned char* data, std::size_t size, const Options& o
       return res;
     }
     if (wasEncrypted) {
-      ctx.issue("ENCRYPTION_REMOVED", "document was encrypted; encryption removed", true);
+      ctx.issue("ENCRYPTION_REMOVED", "document was encrypted; encryption removed", !(opt.verifyOnly && encryptionAllowed));
     }
     {
       int maxDepth = 0;
@@ -430,36 +567,64 @@ Result convertOnce(const unsigned char* data, std::size_t size, const Options& o
     if (!opt.preflightProfile.empty()) passProfile(ctx, data, size);
     if (!opt.profileFixOps.empty() && !opt.verifyOnly) passProfileFixups(ctx);
     lap("analyze");
-    passStructure(ctx);
-    if (opt.verifyOnly && ctx.isA()) checkFileSyntax(ctx, data, size, wasEncrypted);
+    const bool fullRun = !opt.noStandard;
+    if (fullRun) passStructure(ctx);
+    if (fullRun && opt.verifyOnly && (ctx.isA() || ctx.isX() || ctx.isE())) checkFileSyntax(ctx, data, size, wasEncrypted && !encryptionAllowed);
     lap("structure");
-    if (!ctx.failed()) passPages(ctx);
-    if (!ctx.failed()) passImageResolution(ctx);
+    if (fullRun && !ctx.failed()) fixIccChannelCounts(ctx);
+    if (fullRun && !ctx.failed()) passPages(ctx);
+    if (fullRun && !ctx.failed() && ctx.pdf14Target() && !opt.verifyOnly) {
+      for (QPDFObjectHandle obj : ctx.pdf.getAllObjects()) {
+        if (!obj.isStream() || !nameIs(obj.getDict().getKey("/Subtype"), "/Image")) continue;
+        std::string f = obj.getDict().getKey("/Filter").unparse();
+        if (f.find("/JPXDecode") != std::string::npos) transcodeJpxImage(ctx, obj, false);
+      }
+    }
+    if (fullRun && !ctx.failed()) passImageResolution(ctx);
     lap("pages");
-    if (!ctx.failed() && !opt.verifyOnly) passOcr(ctx);
+    if (fullRun && !ctx.failed() && !opt.verifyOnly) passOcr(ctx);
     lap("ocr");
-    if (!ctx.failed()) passCompleteResources(ctx);
+    if (fullRun && !ctx.failed()) passCompleteResources(ctx);
     lap("resources");
     if (!ctx.failed()) passColorConvert(ctx);
     lap("colorconvert");
-    if (!ctx.failed()) passColor(ctx);
+    if (fullRun && !ctx.failed()) passDowngradeIcc(ctx);
+    if (fullRun && !ctx.failed()) passColor(ctx);
     lap("color");
-    if (!ctx.failed()) passPrint(ctx);
+    if (fullRun && !ctx.failed()) passPrint(ctx);
     lap("print");
-    if (!ctx.failed() && !opt.verifyOnly) passOutlineFonts(ctx);
+    if (fullRun && !ctx.failed()) passDowngradeIcc(ctx);
+    if (fullRun && !ctx.failed() && !opt.verifyOnly) passOutlineFonts(ctx);
     lap("outline");
-    if (!ctx.failed()) passFonts(ctx);
+    if (fullRun && !ctx.failed()) passFonts(ctx);
     lap("fonts");
-    if (!ctx.failed()) passGlyphClean(ctx);
+    if (fullRun && !ctx.failed()) passGlyphClean(ctx);
     lap("glyphclean");
-    if (!ctx.failed()) passTagging(ctx);
+    if (fullRun && !ctx.failed()) passTagging(ctx);
     lap("tagging");
+    if (!fullRun && !ctx.failed() && !opt.verifyOnly) applyVersionCompat(ctx, opt.pdfVersion);
     if (!ctx.failed() && !opt.verifyOnly && opt.signDocument) addSignaturePlaceholder(ctx);
     if (!ctx.failed() && !opt.verifyOnly) passBookmarks(ctx);
-    if (!ctx.failed()) passMetadata(ctx);
+    if (fullRun && !ctx.failed()) passMetadata(ctx);
     lap("metadata");
-    if (!ctx.failed()) passLimits(ctx);
+    if (fullRun && !ctx.failed()) passLimits(ctx);
     lap("limits");
+    if (!ctx.failed() && opt.verifyOnly && ctx.isX()) {
+      bool damaged = false, noBox = false;
+      for (const QPDFExc& w : active->getWarnings()) {
+        std::string m = w.what();
+        if (m.find("MediaBox is undefined") != std::string::npos) noBox = true;
+        size_t at = m.find("expected ");
+        if (at != std::string::npos && at + 9 < m.size() && std::isdigit(static_cast<unsigned char>(m[at + 9])) &&
+            m.find(" obj", at) != std::string::npos)
+          damaged = true;
+      }
+      if (noBox) ctx.issue("PAGE_BOXES_NORMALIZED", "a page has no usable MediaBox", true);
+      if (damaged) {
+        ctx.issue("FILE_STRUCTURE_NONCONFORMING",
+                  "the cross-reference data is damaged and the file had to be repaired to be read", true);
+      }
+    }
     if (!ctx.failed() && !opt.verifyOnly) serialize(ctx);
     if (!ctx.failed() && ctx.inlineImagesFixed) {
       ctx.issue("INLINE_IMAGE_FILTER_FIXED",
@@ -500,12 +665,12 @@ Result convertOnce(const unsigned char* data, std::size_t size, const Options& o
       }
     }
     if (!res.ok && ctx.isA() && ctx.part == 1 &&
-        (res.errorCode == "TRANSPARENCY_P1" || res.errorCode == "JPX_IN_PDFA1" ||
+        (res.errorCode == "TRANSPARENCY_P1" || res.errorCode == "JPX_UNREADABLE" ||
          res.errorCode == "CMYK_MIXED_P1" || res.errorCode == "RGB_UNDER_CMYK_P1")) {
       res.suggestedLevel = ctx.conf == 'A' ? "2a" : "2b";
     }
     if (!res.ok && ctx.isX() &&
-        (res.errorCode == "TRANSPARENCY_P1" || res.errorCode == "JPX_IN_PDFA1" ||
+        (res.errorCode == "TRANSPARENCY_P1" || res.errorCode == "JPX_UNREADABLE" ||
          res.errorCode == "X1A_COLOR_UNCONVERTIBLE")) {
       res.suggestedLevel = "x4";
     }

@@ -1,0 +1,20 @@
+{
+  "kura-profile": 1,
+  "name": "Downsample images to 300 ppi",
+  "description": "Reduces colour and grey images above 450 ppi to 300 ppi and 1-bit images above 900 ppi to 600 ppi.",
+  "checks": [],
+  "fixes": [
+    {
+      "fix": "image.downsample",
+      "kind": "colour_and_grey",
+      "target": "300 ppi",
+      "above": "450 ppi"
+    },
+    {
+      "fix": "image.downsample",
+      "kind": "bitmap",
+      "target": "600 ppi",
+      "above": "900 ppi"
+    }
+  ]
+}

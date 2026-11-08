@@ -1,0 +1,43 @@
+{
+  "kura-profile": 1,
+  "name": "Report non-CMYK colour, convert to CMYK and flatten transparency",
+  "description": "Lists RGB, Lab and calibrated colour, converts everything to CMYK for Coated FOGRA39 (spot colours kept) and flattens transparency.",
+  "convert": {
+    "colors": {
+      "to": "Coated FOGRA39 (ISO 12647-2:2004)",
+      "keep_spots": true
+    }
+  },
+  "checks": [
+    {
+      "name": "RGB colour",
+      "severity": "warning",
+      "all": [
+        {
+          "check": "color.space",
+          "op": "in",
+          "value": [
+            "DeviceRGB",
+            "CalRGB"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Lab colour",
+      "severity": "warning",
+      "all": [
+        {
+          "check": "color.space",
+          "op": "==",
+          "value": "Lab"
+        }
+      ]
+    }
+  ],
+  "fixes": [
+    {
+      "fix": "transparency.flatten"
+    }
+  ]
+}

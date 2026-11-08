@@ -1,0 +1,13 @@
+{
+  "kura-profile": 1,
+  "name": "Convert CMYK from FOGRA28 to ISO Coated v2",
+  "description": "Re-separates CMYK made for Web Coated FOGRA28 (ISO 12647-2:2004) so it prints the same on ISO Coated v2 (ECI), through both profiles; spot colours stay spot colours and the new profile becomes the output intent.",
+  "convert": {
+    "colors": {
+      "from": "Web Coated FOGRA28 (ISO 12647-2:2004)",
+      "to": "ISO Coated v2 (ECI)",
+      "keep_spots": true
+    }
+  },
+  "checks": []
+}

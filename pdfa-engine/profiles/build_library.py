@@ -6,7 +6,8 @@ import shutil
 
 ROOT = os.path.dirname(os.path.abspath(__file__))
 FOLDERS = ["report", "press", "gwg", "online", "archive", "accessibility", "standards",
-           "images", "colour", "objects", "pages", "document", "actions"]
+           "images", "colour", "objects", "pages", "document", "actions", "print-conditions",
+           "compatibility", "packaging", "colour-conversion", "place-content", "plans"]
 PROFILES = []
 
 
@@ -349,6 +350,66 @@ for name, w in GWG:
     profile("gwg", f"{name}: check and fix",
             "The Ghent Workgroup 2022 checks for this workflow, with the safe repairs applied, converted to PDF/X-4.",
             checks, press_fixes(cmyk_blend=w["policy"] != "rgb"), convert={"level": "pdfx-4"})
+
+PACK_PROCESSES = {
+    "offset": dict(tac=320, img_error=240, img_warn=300, multi_text=8, multi_line=0.3, white_line=0.15),
+    "flexo": dict(tac=320, img_error=200, img_warn=240, multi_text=14, multi_line=1.5, white_line=0.3),
+    "gravure": dict(tac=310, img_error=240, img_warn=300, multi_text=6, multi_line=0.3, white_line=0.2),
+}
+CREASING_STEPS = ["Structural/Creasing", "Structural/ReverseCreasing", "Structural/CuttingCreasing",
+                  "Structural/ReverseCuttingCreasing", "Structural/PartialCuttingCreasing",
+                  "Structural/ReversePartialCuttingCreasing"]
+PACK_PRODUCTS = {
+    "folding carton box": dict(crease=True, banned=["Structural/Folding"]),
+    "corrugated box": dict(crease=True, banned=["Structural/Folding"]),
+    "corrugated display": dict(crease=True, banned=["Structural/Folding"]),
+    "label": dict(crease=False, banned=CREASING_STEPS + ["Structural/Drilling", "Structural/Stapling"]),
+    "leaflet": dict(crease=False, banned=CREASING_STEPS + ["Structural/Drilling", "Structural/Stapling"]),
+    "flexible packaging": dict(crease=False, banned=CREASING_STEPS + [
+        "Structural/PartialCutting", "Structural/ReversePartialCutting", "Structural/Drilling",
+        "Structural/Embossing", "Structural/Debossing", "Structural/Stapling"]),
+}
+HAS_STEPS = c("page.processing_steps", "count", 0, compare=">")
+
+
+def packaging_checks(p, product):
+    out = [
+        check("Not PDF/X-4", "error", [c("conformance.meets", "is", False, standard="pdfx-4")]),
+        check(f"Total ink above {p['tac']}%", "error", [c("print.ink_coverage", ">", p["tac"])]),
+        check(f"Image below {p['img_error']} ppi", "error", [c("image.resolution", "<", p["img_error"], kind="colour_or_grey")]),
+        check(f"Image between {p['img_error']} and {p['img_warn']} ppi", "warning",
+              [c("image.resolution", "<", p["img_warn"], kind="colour_or_grey"), c("image.resolution", ">=", p["img_error"], kind="colour_or_grey")]),
+        check(f"Text smaller than {p['multi_text']} pt in more than one ink", "error", text_between(0.01, p["multi_text"]) + [MULTI_INK]),
+        check(f"Line thinner than {p['multi_line']} pt in more than one ink", "error", [c("content.stroke_width", "<", p["multi_line"]), MULTI_INK]),
+        check(f"White line thinner than {p['white_line']} pt", "error", [c("content.stroke_width", "<", p["white_line"]), WHITE]),
+        check(f"White text smaller than {p['multi_text']} pt", "warning", text_between(0.01, p["multi_text"]) + [WHITE]),
+        check("Black text below 12 pt not set to overprint", "warning", [TEXT, SOLID_BLACK, c("text.size", "<", 12), FILL_KNOCKOUT]),
+        check("No processing steps in the file", "warning", [c("page.processing_steps", "count", 0, compare="==")]),
+        check("Cutting die line missing", "error", [HAS_STEPS, c("page.processing_steps", "excludes", ["Structural/Cutting"])]),
+        either(f"Processing step not allowed for this product ({product})", "error",
+               [[c("page.processing_steps", "includes", [step])] for step in PACK_PRODUCTS[product]["banned"]]),
+        check("Processing step layer without a type", "error", [c("layer.processing_step_problem", "includes", ["missing_type"])]),
+        check("A step's spot colour is also used for print content", "error", [c("layer.processing_step_problem", "includes", ["spot_used_by_print_content"])]),
+        check("RGB or calibrated alternate colour for a spot colour", "error",
+              [c("color.space", "in", ["Separation", "DeviceN"]), c("color.space", "in", ["DeviceRGB", "CalRGB", "CalGray", "ICCBased", "Lab"], level="alternate")]),
+    ]
+    if PACK_PRODUCTS[product]["crease"]:
+        out.append(check("Creasing line missing", "warning",
+                         [HAS_STEPS, c("page.processing_steps", "excludes", ["Structural/Creasing", "Structural/ReverseCreasing"])]))
+    return out + font_checks() + page_checks()
+
+
+for process, p in PACK_PROCESSES.items():
+    for product in PACK_PRODUCTS:
+        checks = packaging_checks(p, product)
+        name = f"GWG 2022 packaging, {process} {product}"
+        what = (f"{process} printing, {product}: total ink {p['tac']}%, images from {p['img_error']} ppi, multi-ink text "
+                f"from {p['multi_text']} pt, multi-ink lines from {p['multi_line']} pt, white lines from {p['white_line']} pt, "
+                "and the processing steps this product may carry (ISO 19593-1)")
+        profile("gwg", f"{name}: check", f"Written from the Ghent Workgroup 2022 packaging specification for {what}.", checks)
+        profile("gwg", f"{name}: check and fix",
+                "The same Ghent Workgroup 2022 packaging checks, with the safe repairs applied, converted to PDF/X-4.",
+                checks, press_fixes(cmyk_blend=True), convert={"level": "pdfx-4"})
 
 online_checks = [
     check("Spot colour in use", "warning", [SPOT]),
@@ -859,6 +920,13 @@ for folder, sl, body in PROFILES:
         b["description"] = "Reports the compression filters and bit depths in use."
         PROFILES.append(("report", slug(b["name"]), b))
         break
+
+
+import extra_presets  # noqa: E402
+
+extra_presets.add_extra(profile, PROFILES)
+extra_presets.profiles_ref = PROFILES
+extra_presets.add_more(profile)
 
 
 def main():

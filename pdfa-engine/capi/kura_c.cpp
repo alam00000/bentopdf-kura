@@ -153,6 +153,15 @@ void applyOptions(const kura_options* options, pdfa::Options& opt) {
       return false;
     };
   }
+  {
+    const char* env = std::getenv("KURA_FONT_DIR");
+    std::string cjk = options->cjk_font_folder && *options->cjk_font_folder ? options->cjk_font_folder : env ? env : "";
+    if (!cjk.empty()) {
+      opt.loadCjkFont = [cjk](const std::string& script, bool bold, std::string& bytes) {
+        return pdfa::loadCjkFontFromFolder(cjk, script, bold, bytes);
+      };
+    }
+  }
   if (options->ocr_pages && options->ocr_page_count > 0) {
     auto pages = std::make_shared<std::map<int, OcrPageWords>>();
     for (size_t p = 0; p < options->ocr_page_count; ++p) {
@@ -210,6 +219,7 @@ extern "C" kura_result* kura_convert(const unsigned char* data, size_t size, con
     applyOptions(options, opt);
 #ifdef KURA_WITH_PDFIUM
     opt.rasterizePage = kura::makeRasterizer(data, size, opt.password);
+    opt.renderPdf = kura::renderFirstPage;
 #endif
     pdfa::Result r = pdfa::convert(data, size, opt);
     impl->pdf.assign(r.pdf.begin(), r.pdf.end());

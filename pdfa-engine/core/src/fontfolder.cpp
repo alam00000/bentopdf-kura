@@ -41,4 +41,13 @@ bool loadFontFromFolder(const std::string& folder, const std::string& wanted,
   }
   return false;
 }
+
+bool loadCjkFontFromFolder(const std::string& folder, const std::string& script, bool bold,
+                           std::string& bytes) {
+  std::ifstream in(std::filesystem::path(folder) / ("NotoSans" + script + (bold ? "-Bold.ttf" : "-Regular.ttf")),
+                   std::ios::binary);
+  if (!in) return false;
+  bytes.assign(std::istreambuf_iterator<char>(in), std::istreambuf_iterator<char>());
+  return bytes.size() > 64;
+}
 }  // namespace pdfa

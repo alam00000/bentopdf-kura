@@ -1,0 +1,12 @@
+{
+  "kura-profile": 1,
+  "name": "Convert colours to PSO Coated v3, keeping spot colours",
+  "description": "Converts RGB, calibrated and Lab colour to CMYK for premium coated paper, FOGRA51 and sets it as the output intent; spot colours stay spot colours. No standard is applied.",
+  "convert": {
+    "colors": {
+      "to": "PSO Coated v3",
+      "keep_spots": true
+    }
+  },
+  "checks": []
+}

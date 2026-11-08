@@ -9,6 +9,7 @@
 #include <zlib.h>
 
 #include <algorithm>
+#include <cctype>
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
@@ -813,6 +814,322 @@ std::string toolSeparations(const Args& a) {
 #endif
 }
 
+std::string infoString(OH o) {
+  if (o.isString()) return o.getUTF8Value();
+  if (o.isName()) return o.getName().substr(1);
+  return std::string();
+}
+
+std::string xmpValue(const std::string& xmp, const std::string& tag) {
+  size_t p = xmp.find(tag);
+  if (p == std::string::npos) return std::string();
+  p += tag.size();
+  if (p < xmp.size() && (xmp[p] == '=')) {
+    char q = p + 1 < xmp.size() ? xmp[p + 1] : '"';
+    size_t e = xmp.find(q, p + 2);
+    return e == std::string::npos ? std::string() : xmp.substr(p + 2, e - p - 2);
+  }
+  size_t gt = xmp.find('>', p);
+  size_t lt = gt == std::string::npos ? std::string::npos : xmp.find('<', gt);
+  return lt == std::string::npos ? std::string() : xmp.substr(gt + 1, lt - gt - 1);
+}
+
+std::string boxString(OH b) {
+  if (!b.isArray() || b.getArrayNItems() != 4) return std::string();
+  std::string out;
+  for (int i = 0; i < 4; ++i) out += (i ? " " : "") + num(b.getArrayItem(i).isNumber() ? b.getArrayItem(i).getNumericValue() : 0);
+  return out;
+}
+
+std::string toolInfo(const Args& a) {
+  std::string path = a.pos[0];
+  auto q = openPdf(path, a.get("password"));
+  OH info = q->getTrailer().getKey("/Info");
+  OH root = q->getRoot();
+  std::string xmp;
+  if (root.getKey("/Metadata").isStream()) {
+    try {
+      xmp = streamBytes(root.getKey("/Metadata"));
+    } catch (...) {
+    }
+  }
+  auto field = [&](const char* key) { return info.isDictionary() ? infoString(info.getKey(key)) : std::string(); };
+  auto pages = allPages(*q);
+  std::string size, trim, bleed;
+  if (!pages.empty()) {
+    OH mb = pages[0].getAttribute("/MediaBox", false);
+    if (mb.isArray() && mb.getArrayNItems() == 4)
+      size = num(mb.getArrayItem(2).getNumericValue() - mb.getArrayItem(0).getNumericValue()) + " x " +
+             num(mb.getArrayItem(3).getNumericValue() - mb.getArrayItem(1).getNumericValue()) + " pt";
+    trim = boxString(pages[0].getObjectHandle().getKey("/TrimBox"));
+    bleed = boxString(pages[0].getObjectHandle().getKey("/BleedBox"));
+  }
+  std::string pdfa;
+  std::string part = xmpValue(xmp, "pdfaid:part"), conf = xmpValue(xmp, "pdfaid:conformance");
+  if (!part.empty()) pdfa = "PDF/A-" + part + conf;
+  std::string pdfx = field("/GTS_PDFXVersion");
+  if (pdfx.empty()) pdfx = xmpValue(xmp, "pdfxid:GTS_PDFXVersion");
+  std::string pdfe = xmpValue(xmp, "pdfe:ISO_PDFEVersion");
+  std::string pdfvt = xmpValue(xmp, "pdfvtid:GTS_PDFVTVersion");
+  std::string pdfua = xmpValue(xmp, "pdfuaid:part");
+  if (!pdfua.empty()) pdfua = "PDF/UA-" + pdfua;
+  std::error_code ec;
+  auto bytes = fs::file_size(path, ec);
+  std::vector<std::string> items = {
+      "\"title\":" + js(field("/Title")), "\"author\":" + js(field("/Author")), "\"subject\":" + js(field("/Subject")),
+      "\"keywords\":" + js(field("/Keywords")), "\"creator\":" + js(field("/Creator")), "\"producer\":" + js(field("/Producer")),
+      "\"created\":" + js(field("/CreationDate")), "\"modified\":" + js(field("/ModDate")),
+      "\"version\":" + js(q->getPDFVersion()), "\"fileSize\":" + std::to_string(ec ? 0 : bytes),
+      "\"pages\":" + std::to_string(pages.size()), "\"pageSize\":" + js(size), "\"trimBox\":" + js(trim), "\"bleedBox\":" + js(bleed),
+      "\"pageMode\":" + js(infoString(root.getKey("/PageMode"))), "\"pageLayout\":" + js(infoString(root.getKey("/PageLayout"))),
+      "\"encrypted\":" + std::string(q->isEncrypted() ? "true" : "false"), "\"tagged\":" +
+          std::string(root.getKey("/MarkInfo").isDictionary() && root.getKey("/MarkInfo").getKey("/Marked").isBool() &&
+                              root.getKey("/MarkInfo").getKey("/Marked").getBoolValue() ? "true" : "false"),
+      "\"pdfa\":" + js(pdfa), "\"pdfx\":" + js(pdfx), "\"pdfe\":" + js(pdfe), "\"pdfvt\":" + js(pdfvt), "\"pdfua\":" + js(pdfua)};
+  std::string out;
+  for (size_t i = 0; i < items.size(); ++i) out += (i ? "," : "") + items[i];
+  return out;
+}
+
+std::string toolCxf(const Args& a) {
+  auto q = openPdf(a.pos[0], a.get("password"));
+  OH ois = q->getRoot().getKey("/OutputIntents");
+  std::vector<OH> intents;
+  for (int i = 0; ois.isArray() && i < ois.getArrayNItems(); ++i)
+    if (ois.getArrayItem(i).isDictionary()) intents.push_back(ois.getArrayItem(i));
+  std::set<std::string> spots;
+  walkAll(*q, [&](OH h, OH) {
+    if (h.isArray() && h.getArrayNItems() >= 2 && nameIs(h.getArrayItem(0), "/Separation") && h.getArrayItem(1).isName()) {
+      std::string n = h.getArrayItem(1).getName().substr(1);
+      if (n != "All" && n != "None" && n != "Cyan" && n != "Magenta" && n != "Yellow" && n != "Black") spots.insert(n);
+    }
+    if (h.isArray() && h.getArrayNItems() >= 2 && nameIs(h.getArrayItem(0), "/DeviceN") && h.getArrayItem(1).isArray()) {
+      OH names = h.getArrayItem(1);
+      for (int i = 0; i < names.getArrayNItems(); ++i) {
+        if (!names.getArrayItem(i).isName()) continue;
+        std::string n = names.getArrayItem(i).getName().substr(1);
+        if (n != "Cyan" && n != "Magenta" && n != "Yellow" && n != "Black" && n != "None" && n != "All") spots.insert(n);
+      }
+    }
+  });
+  if (a.has("embed")) {
+    if (intents.empty()) fail("the document has no output intent to attach colour data to", 2);
+    if (a.pos.size() < 2) fail("missing output file", 64);
+    std::string dir = a.get("embed");
+    OH sd = OH::newDictionary();
+    int added = 0;
+    for (const auto& e : fs::directory_iterator(dir)) {
+      std::string ext = e.path().extension().string();
+      std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
+      if (ext != ".cxf" && ext != ".xml") continue;
+      std::string data = readFile(e.path().string());
+      if (data.find("CxF") == std::string::npos) continue;
+      OH st = q->makeIndirectObject(OH::newStream(q.get(), data));
+      sd.replaceKey("/" + e.path().stem().string(), st);
+      ++added;
+    }
+    if (!added) fail("no CxF files found in " + dir, 2);
+    for (OH& oi : intents) oi.replaceKey("/SpectralData", sd);
+    savePdf(*q, a.pos[1], [](QPDFWriter& w) { w.setMinimumPDFVersion("2.0"); });
+    return "\"embedded\":" + std::to_string(added) + ",\"output\":" + js(a.pos[1]);
+  }
+  if (a.has("remove")) {
+    if (a.pos.size() < 2) fail("missing output file", 64);
+    int removed = 0;
+    for (OH& oi : intents)
+      if (oi.hasKey("/SpectralData")) oi.removeKey("/SpectralData"), ++removed;
+    savePdf(*q, a.pos[1]);
+    return "\"removed\":" + std::to_string(removed) + ",\"output\":" + js(a.pos[1]);
+  }
+  std::string dir = a.pos.size() > 1 ? a.pos[1] : std::string();
+  if (!dir.empty()) ensureDir(dir);
+  std::map<std::string, std::string> entries;
+  for (OH& oi : intents) {
+    OH sd = oi.getKey("/SpectralData");
+    if (!sd.isDictionary()) continue;
+    for (const std::string& k : sd.getKeys()) {
+      if (!sd.getKey(k).isStream()) continue;
+      try {
+        entries[k.substr(1)] = streamBytes(sd.getKey(k));
+      } catch (...) {
+      }
+    }
+  }
+  std::vector<std::string> items, findings;
+  int full = 0, paperOnly = 0, solidOnly = 0;
+  for (auto& [name, data] : entries) {
+    bool wellFormed = data.find("<") != std::string::npos && data.find("CxF") != std::string::npos;
+    bool onBlack = data.find("Black") != std::string::npos || data.find("black") != std::string::npos;
+    int samples = 0;
+    for (size_t p = data.find("<cc:Object"); p != std::string::npos; p = data.find("<cc:Object", p + 1))
+      if (p + 10 < data.size() && (data[p + 10] == ' ' || data[p + 10] == '>' || data[p + 10] == '/')) ++samples;
+    std::string level = samples <= 1 ? "X-4b" : onBlack ? "X-4" : "X-4a";
+    (level == "X-4" ? full : level == "X-4a" ? paperOnly : solidOnly)++;
+    std::string file;
+    if (!dir.empty()) {
+      for (char c : name) file += std::isalnum(static_cast<unsigned char>(c)) || c == '-' || c == '_' || c == ' ' ? c : '_';
+      file = (file.empty() || file.find_first_not_of('_') == std::string::npos ? "colorant" : file) + ".cxf";
+      writeFile((fs::path(dir) / file).string(), data);
+    }
+    if (!wellFormed) findings.push_back("{\"severity\":\"error\",\"message\":" + js("colour data for " + name + " is not a valid CxF document") + "}");
+    if (!spots.count(name)) findings.push_back("{\"severity\":\"info\",\"message\":" + js("colour data for " + name + " has no matching spot colour in the document") + "}");
+    items.push_back("{\"colorant\":" + js(name) + ",\"level\":" + js(level) + ",\"samples\":" + std::to_string(samples) +
+                    (file.empty() ? "" : ",\"file\":" + js(file)) + "}");
+  }
+  if (entries.empty()) findings.push_back("{\"severity\":\"error\",\"message\":\"the document carries no CxF colour data\"}");
+  for (const std::string& sp : spots)
+    if (!entries.count(sp)) findings.push_back("{\"severity\":\"warning\",\"message\":" + js("spot colour " + sp + " has no CxF colour data") + "}");
+  return "\"entries\":" + joinJs(items) + ",\"spotColours\":" + std::to_string(spots.size()) + ",\"findings\":" + joinJs(findings);
+}
+
+struct PlateScan : public QPDFObjectHandle::ParserCallbacks {
+  OH res;
+  std::map<std::string, double>& maxTint;
+  int depth;
+  std::set<QPDFObjGen>& seen;
+  std::vector<OH> ops;
+  std::vector<std::string> fillNames, strokeNames;
+  PlateScan(OH r, std::map<std::string, double>& m, int d, std::set<QPDFObjGen>& s) : res(r), maxTint(m), depth(d), seen(s) {}
+  std::vector<std::string> colorantsOf(OH cs) {
+    std::vector<std::string> out;
+    if (cs.isName() && res.isDictionary() && res.getKey("/ColorSpace").isDictionary()) cs = res.getKey("/ColorSpace").getKey(cs.getName());
+    if (!cs.isArray() || cs.getArrayNItems() < 2) return out;
+    if (nameIs(cs.getArrayItem(0), "/Separation") && cs.getArrayItem(1).isName()) out.push_back(cs.getArrayItem(1).getName().substr(1));
+    if (nameIs(cs.getArrayItem(0), "/DeviceN") && cs.getArrayItem(1).isArray())
+      for (int i = 0; i < cs.getArrayItem(1).getArrayNItems(); ++i)
+        if (cs.getArrayItem(1).getArrayItem(i).isName()) out.push_back(cs.getArrayItem(1).getArrayItem(i).getName().substr(1));
+    return out;
+  }
+  void note(const std::vector<std::string>& names) {
+    size_t n = std::min(names.size(), ops.size());
+    for (size_t i = 0; i < n; ++i) {
+      if (!ops[i].isNumber()) continue;
+      const std::string& nm = names[i];
+      if (nm == "Cyan" || nm == "Magenta" || nm == "Yellow" || nm == "Black" || nm == "None" || nm == "All") continue;
+      double v = ops[i].getNumericValue() * 100;
+      if (v > maxTint[nm]) maxTint[nm] = v;
+    }
+  }
+  void handleObject(OH o, size_t, size_t) override {
+    if (!o.isOperator()) {
+      ops.push_back(o);
+      return;
+    }
+    std::string op = o.getOperatorValue();
+    if (op == "cs" && !ops.empty()) fillNames = colorantsOf(ops.back());
+    else if (op == "CS" && !ops.empty()) strokeNames = colorantsOf(ops.back());
+    else if (op == "scn" || op == "sc") note(fillNames);
+    else if (op == "SCN" || op == "SC") note(strokeNames);
+    else if (op == "Do" && !ops.empty() && ops.back().isName() && res.isDictionary() && res.getKey("/XObject").isDictionary()) {
+      OH x = res.getKey("/XObject").getKey(ops.back().getName());
+      if (x.isStream()) {
+        OH d = x.getDict();
+        if (nameIs(d.getKey("/Subtype"), "/Image")) {
+          for (const std::string& nm : colorantsOf(d.getKey("/ColorSpace")))
+            if (nm != "Cyan" && nm != "Magenta" && nm != "Yellow" && nm != "Black" && nm != "None" && nm != "All") maxTint[nm] = std::max(maxTint[nm], 100.0);
+        } else if (nameIs(d.getKey("/Subtype"), "/Form") && depth < 10 && (!x.isIndirect() || seen.insert(x.getObjGen()).second)) {
+          OH fr = d.getKey("/Resources");
+          PlateScan sub(fr.isDictionary() ? fr : res, maxTint, depth + 1, seen);
+          try {
+            OH::parseContentStream(x, &sub);
+          } catch (...) {
+          }
+        }
+      }
+    }
+    ops.clear();
+  }
+  void handleEOF() override {}
+};
+
+std::string toolPlates(const Args& a) {
+#ifdef KURA_WITH_PDFIUM
+  std::string bytes = readFile(a.pos[0]);
+  auto q = openPdf(a.pos[0], a.get("password"));
+  auto pages = allPages(*q);
+  auto raster = rasterizerFor(bytes, a.get("password"));
+  double threshold = a.number("threshold", 1);
+  double areaMm = a.number("area", 10);
+  double dpi = a.number("dpi", 72);
+  if (dpi < 18 || dpi > 600) fail("--dpi must be 18..600", 64);
+  std::string iccBytes = a.has("profile") ? readFile(a.get("profile")) : std::string(reinterpret_cast<const char*>(pdfa::kCmykIcc), pdfa::kCmykIccLen);
+  cmsHPROFILE src = cmsCreate_sRGBProfile();
+  cmsHPROFILE dst = cmsOpenProfileFromMem(iccBytes.data(), static_cast<cmsUInt32Number>(iccBytes.size()));
+  if (!dst || cmsGetColorSpace(dst) != cmsSigCmykData) {
+    if (dst) cmsCloseProfile(dst);
+    cmsCloseProfile(src);
+    fail("CMYK output profile is not usable", 64);
+  }
+  cmsHTRANSFORM xf = cmsCreateTransform(src, TYPE_RGB_8, dst, TYPE_CMYK_8, INTENT_RELATIVE_COLORIMETRIC, cmsFLAGS_BLACKPOINTCOMPENSATION);
+  cmsCloseProfile(src);
+  cmsCloseProfile(dst);
+  if (!xf) fail("colour transform failed");
+  std::unique_ptr<void, void (*)(void*)> guard(xf, [](void* t) { cmsDeleteTransform(t); });
+  const char* process[4] = {"Cyan", "Magenta", "Yellow", "Black"};
+  std::vector<std::string> out;
+  int onlyBlack = 0, withSpot = 0, withCmy = 0;
+  for (int p : pageSel(a, pages.size())) {
+    int w = 0, h = 0;
+    std::string rgb;
+    if (!raster(p, dpi, w, h, rgb)) fail("rendering page " + std::to_string(p + 1) + " failed");
+    size_t px = static_cast<size_t>(w) * h;
+    std::string cmyk(px * 4, '\0');
+    cmsDoTransform(xf, rgb.data(), &cmyk[0], static_cast<cmsUInt32Number>(px));
+    for (size_t i = 0; i < px; ++i) {
+      int r = static_cast<unsigned char>(rgb[i * 3]), g = static_cast<unsigned char>(rgb[i * 3 + 1]),
+          b = static_cast<unsigned char>(rgb[i * 3 + 2]);
+      if (std::max({r, g, b}) - std::min({r, g, b}) > 2) continue;
+      cmyk[i * 4] = cmyk[i * 4 + 1] = cmyk[i * 4 + 2] = '\0';
+      cmyk[i * 4 + 3] = static_cast<char>(255 - (r + g + b) / 3);
+    }
+    int cell = std::max(1, static_cast<int>(std::lround(areaMm / 25.4 * dpi)));
+    double best[4] = {0, 0, 0, 0};
+    for (int cy = 0; cy < h; cy += cell) {
+      for (int cx = 0; cx < w; cx += cell) {
+        double sum[4] = {0, 0, 0, 0};
+        int count = 0;
+        for (int y = cy; y < std::min(h, cy + cell); ++y)
+          for (int x = cx; x < std::min(w, cx + cell); ++x, ++count)
+            for (int c = 0; c < 4; ++c) sum[c] += static_cast<unsigned char>(cmyk[(static_cast<size_t>(y) * w + x) * 4 + c]);
+        for (int c = 0; c < 4; ++c) best[c] = std::max(best[c], count ? 100.0 * sum[c] / (255.0 * count) : 0);
+      }
+    }
+    std::map<std::string, double> spot;
+    std::set<QPDFObjGen> seen;
+    OH res = pages[p].getAttribute("/Resources", false);
+    PlateScan scan(res, spot, 0, seen);
+    try {
+      pages[p].parseContents(&scan);
+    } catch (...) {
+    }
+    std::vector<std::string> plates;
+    bool cmy = false, black = best[3] >= threshold, anySpot = false;
+    for (int c = 0; c < 4; ++c) {
+      bool used = best[c] >= threshold;
+      if (c < 3 && used) cmy = true;
+      plates.push_back("{\"plate\":" + js(process[c]) + ",\"maxInk\":" + num(best[c]) + ",\"used\":" + (used ? "true" : "false") + "}");
+    }
+    for (auto& [name, tint] : spot) {
+      bool used = tint >= threshold;
+      anySpot = anySpot || used;
+      plates.push_back("{\"plate\":" + js(name) + ",\"maxInk\":" + num(tint) + ",\"used\":" + (used ? "true" : "false") + ",\"spot\":true}");
+    }
+    int count = 0;
+    for (int c = 0; c < 4; ++c) count += best[c] >= threshold;
+    for (auto& [name, tint] : spot) count += tint >= threshold;
+    if (black && !cmy && !anySpot) ++onlyBlack;
+    if (anySpot) ++withSpot;
+    if (cmy) ++withCmy;
+    out.push_back("{\"page\":" + std::to_string(p + 1) + ",\"platesUsed\":" + std::to_string(count) + ",\"plates\":" + joinJs(plates) + "}");
+  }
+  return "\"threshold\":" + num(threshold) + ",\"areaMm\":" + num(areaMm) + ",\"pagesOnlyBlack\":" + std::to_string(onlyBlack) +
+         ",\"pagesWithSpot\":" + std::to_string(withSpot) + ",\"pagesWithCmy\":" + std::to_string(withCmy) + ",\"pages\":" + joinJs(out);
+#else
+  (void)a;
+  fail("this build has no page renderer");
+#endif
+}
+
 struct Tool {
   const char* name;
   const char* usage;
@@ -830,6 +1147,9 @@ const std::vector<Tool>& tools() {
       {"set-dparts", "set-dparts <in.pdf> <dparts.json> <out.pdf>", {}, {}, 3, 3, toolSetDparts},
       {"set-xmp", "set-xmp <in.pdf> <metadata.xmp> <out.pdf>", {}, {}, 3, 3, toolSetXmp},
       {"separations", "separations <in.pdf> <outdir> [--dpi N] [--profile cmyk.icc] [--pages R]", {"dpi", "profile"}, {}, 2, 2, toolSeparations},
+      {"info", "info <in.pdf>", {}, {}, 1, 1, toolInfo},
+      {"cxf", "cxf <in.pdf> [<outdir>]  |  cxf <in.pdf> <out.pdf> --embed <dir>  |  cxf <in.pdf> <out.pdf> --remove", {"embed"}, {"remove"}, 1, 2, toolCxf},
+      {"plates", "plates <in.pdf> [--threshold 1] [--area 10] [--dpi 72] [--profile cmyk.icc] [--pages R]", {"threshold", "area", "dpi", "profile"}, {}, 1, 1, toolPlates},
   };
   return t;
 }

@@ -1,0 +1,17 @@
+{
+  "kura-profile": 1,
+  "name": "Convert spot colours to CMYK, keeping the look of overprints",
+  "description": "Flattens overprint first, so overprinting spot colours keep their appearance, then converts every colour to CMYK. No standard is applied.",
+  "convert": {
+    "colors": {
+      "to": "cmyk",
+      "keep_spots": false
+    }
+  },
+  "checks": [],
+  "fixes": [
+    {
+      "fix": "ink.flatten_overprint"
+    }
+  ]
+}

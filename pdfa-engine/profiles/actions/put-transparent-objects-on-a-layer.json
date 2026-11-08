@@ -1,0 +1,25 @@
+{
+  "kura-profile": 1,
+  "name": "Put transparent objects on a layer",
+  "description": "Moves every object that uses transparency onto a layer named Transparency.",
+  "checks": [
+    {
+      "name": "Transparent objects",
+      "severity": "info",
+      "all": [
+        {
+          "check": "transparency.used",
+          "op": "is",
+          "value": true
+        }
+      ]
+    }
+  ],
+  "fixes": [
+    {
+      "fix": "layer.move_objects",
+      "layer": "Transparency",
+      "objects": "Transparent objects"
+    }
+  ]
+}

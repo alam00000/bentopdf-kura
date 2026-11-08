@@ -1,0 +1,243 @@
+{
+  "kura-profile": 1,
+  "name": "Add processing-step layers",
+  "description": "Finds die lines, creases, perforations, varnish, white, Braille and other technical inks by their spot colour names (English, German, French, Italian and Spanish) and puts them on processing-step layers (ISO 19593-1).",
+  "checks": [
+    {
+      "name": "Objects in a cutting spot colour",
+      "severity": "info",
+      "all": [
+        {
+          "check": "color.spot",
+          "op": "finds",
+          "value": "(^|[\\W_])(die|die[-_ ]?lines?|dieline|die[-_ ]?cut|cut|cutting|cut[-_ ]?lines?|kiss[-_ ]?cut|stanze|stanzkontur|stanzlinie|schnitt|schnittlinie|d[eé]coupe|fustella|troquel|troquelado|corte|contour|kontur)($|[\\W_])",
+          "case_sensitive": false
+        }
+      ]
+    },
+    {
+      "name": "Objects in a creasing spot colour",
+      "severity": "info",
+      "all": [
+        {
+          "check": "color.spot",
+          "op": "finds",
+          "value": "(^|[\\W_])(crease|creases|creasing|rill|rillen|rillung|rainage|cordonatura|hendido|plegado)($|[\\W_])",
+          "case_sensitive": false
+        }
+      ]
+    },
+    {
+      "name": "Objects in a perforating spot colour",
+      "severity": "info",
+      "all": [
+        {
+          "check": "color.spot",
+          "op": "finds",
+          "value": "(^|[\\W_])(perf|perfo|perforation|perforating|perforierung|perforaci[oó]n|perforazione)($|[\\W_])",
+          "case_sensitive": false
+        }
+      ]
+    },
+    {
+      "name": "Objects in a folding spot colour",
+      "severity": "info",
+      "all": [
+        {
+          "check": "color.spot",
+          "op": "finds",
+          "value": "(^|[\\W_])(fold|folds|folding|falz|falzlinie|pli|pliage|piega|pliegue)($|[\\W_])",
+          "case_sensitive": false
+        }
+      ]
+    },
+    {
+      "name": "Objects in a gluing spot colour",
+      "severity": "info",
+      "all": [
+        {
+          "check": "color.spot",
+          "op": "finds",
+          "value": "(^|[\\W_])(glue|gluing|glue[-_ ]?area|kleber|klebe|leim|leimung|colle|collage|colla|pegado|cola)($|[\\W_])",
+          "case_sensitive": false
+        }
+      ]
+    },
+    {
+      "name": "Objects in a embossing spot colour",
+      "severity": "info",
+      "all": [
+        {
+          "check": "color.spot",
+          "op": "finds",
+          "value": "(^|[\\W_])(emboss|embossing|pr[aä]gung|pr[aä]gen|gaufrage|embossage|rilievo|gofrado)($|[\\W_])",
+          "case_sensitive": false
+        }
+      ]
+    },
+    {
+      "name": "Objects in a foil stamping spot colour",
+      "severity": "info",
+      "all": [
+        {
+          "check": "color.spot",
+          "op": "finds",
+          "value": "(^|[\\W_])(foil|hot[-_ ]?foil|foil[-_ ]?stamping|hei(ss|ß)folie|pr[aä]gefolie|dorure|lamina|stampa a caldo|estampado)($|[\\W_])",
+          "case_sensitive": false
+        }
+      ]
+    },
+    {
+      "name": "Objects in a drilling spot colour",
+      "severity": "info",
+      "all": [
+        {
+          "check": "color.spot",
+          "op": "finds",
+          "value": "(^|[\\W_])(drill|drilling|bohrung|bohren|per[cç]age|foratura|taladro)($|[\\W_])",
+          "case_sensitive": false
+        }
+      ]
+    },
+    {
+      "name": "Objects in a dimensions spot colour",
+      "severity": "info",
+      "all": [
+        {
+          "check": "color.spot",
+          "op": "finds",
+          "value": "(^|[\\W_])(dimension|dimensions|measure|measurement|bema(ss|ß)ung|ma(ss|ß)e|cotes|cotation|quote|quotatura|cotas)($|[\\W_])",
+          "case_sensitive": false
+        }
+      ]
+    },
+    {
+      "name": "Objects in a varnish spot colour",
+      "severity": "info",
+      "all": [
+        {
+          "check": "color.spot",
+          "op": "finds",
+          "value": "(^|[\\W_])(varnish|spot[-_ ]?varnish|uv[-_ ]?varnish|spot[-_ ]?uv|lack|lacquer|drucklack|vernis|vernice|barniz)($|[\\W_])",
+          "case_sensitive": false
+        }
+      ]
+    },
+    {
+      "name": "Objects in a white spot colour",
+      "severity": "info",
+      "all": [
+        {
+          "check": "color.spot",
+          "op": "finds",
+          "value": "(^|[\\W_])(white|opaque[-_ ]?white|white[-_ ]?ink|wei(ss|ß)|deckwei(ss|ß)|blanc|bianco|blanco)($|[\\W_])",
+          "case_sensitive": false
+        }
+      ]
+    },
+    {
+      "name": "Objects in a braille spot colour",
+      "severity": "info",
+      "all": [
+        {
+          "check": "color.spot",
+          "op": "finds",
+          "value": "(^|[\\W_])(braille|blindenschrift|braile)($|[\\W_])",
+          "case_sensitive": false
+        }
+      ]
+    },
+    {
+      "name": "Objects in a legend spot colour",
+      "severity": "info",
+      "all": [
+        {
+          "check": "color.spot",
+          "op": "finds",
+          "value": "(^|[\\W_])(legend|legende|leyenda|legenda|info[-_ ]?box|technical[-_ ]?info)($|[\\W_])",
+          "case_sensitive": false
+        }
+      ]
+    }
+  ],
+  "fixes": [
+    {
+      "fix": "layer.move_objects",
+      "layer": "Cutting",
+      "processing_step": "Cutting",
+      "objects": "Objects in a cutting spot colour"
+    },
+    {
+      "fix": "layer.move_objects",
+      "layer": "Creasing",
+      "processing_step": "Creasing",
+      "objects": "Objects in a creasing spot colour"
+    },
+    {
+      "fix": "layer.move_objects",
+      "layer": "Perforating",
+      "processing_step": "Perforating",
+      "objects": "Objects in a perforating spot colour"
+    },
+    {
+      "fix": "layer.move_objects",
+      "layer": "Folding",
+      "processing_step": "Folding",
+      "objects": "Objects in a folding spot colour"
+    },
+    {
+      "fix": "layer.move_objects",
+      "layer": "Gluing",
+      "processing_step": "Gluing",
+      "objects": "Objects in a gluing spot colour"
+    },
+    {
+      "fix": "layer.move_objects",
+      "layer": "Embossing",
+      "processing_step": "Embossing",
+      "objects": "Objects in a embossing spot colour"
+    },
+    {
+      "fix": "layer.move_objects",
+      "layer": "Foil stamping",
+      "processing_step": "FoilStamping",
+      "objects": "Objects in a foil stamping spot colour"
+    },
+    {
+      "fix": "layer.move_objects",
+      "layer": "Drilling",
+      "processing_step": "Drilling",
+      "objects": "Objects in a drilling spot colour"
+    },
+    {
+      "fix": "layer.move_objects",
+      "layer": "Dimensions",
+      "processing_step": "Dimensions",
+      "objects": "Objects in a dimensions spot colour"
+    },
+    {
+      "fix": "layer.move_objects",
+      "layer": "Varnish",
+      "processing_step": "Varnish",
+      "objects": "Objects in a varnish spot colour"
+    },
+    {
+      "fix": "layer.move_objects",
+      "layer": "White",
+      "processing_step": "White",
+      "objects": "Objects in a white spot colour"
+    },
+    {
+      "fix": "layer.move_objects",
+      "layer": "Braille",
+      "processing_step": "Braille",
+      "objects": "Objects in a braille spot colour"
+    },
+    {
+      "fix": "layer.move_objects",
+      "layer": "Legend",
+      "processing_step": "Legend",
+      "objects": "Objects in a legend spot colour"
+    }
+  ]
+}

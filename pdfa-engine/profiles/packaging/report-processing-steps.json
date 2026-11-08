@@ -1,0 +1,108 @@
+{
+  "kura-profile": 1,
+  "name": "Report processing steps",
+  "description": "Lists the processing steps in the document and any problems, without changing it.",
+  "checks": [
+    {
+      "name": "Processing steps present",
+      "severity": "info",
+      "all": [
+        {
+          "check": "layer.processing_step",
+          "op": "count",
+          "value": 0,
+          "compare": ">"
+        }
+      ]
+    },
+    {
+      "name": "Objects not on a processing-step or other layer",
+      "severity": "info",
+      "all": [
+        {
+          "check": "layer.membership",
+          "op": "count",
+          "value": 0,
+          "compare": "=="
+        }
+      ]
+    },
+    {
+      "name": "Structural or Positions step without a type",
+      "severity": "warning",
+      "all": [
+        {
+          "check": "layer.processing_step_problem",
+          "op": "includes",
+          "value": "missing_type"
+        }
+      ]
+    },
+    {
+      "name": "Custom step key is not a second-class name",
+      "severity": "warning",
+      "all": [
+        {
+          "check": "layer.processing_step_problem",
+          "op": "includes",
+          "value": "custom_key_not_second_class"
+        }
+      ]
+    },
+    {
+      "name": "The same step is used on several layers",
+      "severity": "warning",
+      "all": [
+        {
+          "check": "layer.processing_step_problem",
+          "op": "includes",
+          "value": "same_step_in_several_layers"
+        }
+      ]
+    },
+    {
+      "name": "One spot colour used by several steps",
+      "severity": "warning",
+      "all": [
+        {
+          "check": "layer.processing_step_problem",
+          "op": "includes",
+          "value": "spot_used_by_several_steps"
+        }
+      ]
+    },
+    {
+      "name": "A step's spot colour is also used for print content",
+      "severity": "warning",
+      "all": [
+        {
+          "check": "layer.processing_step_problem",
+          "op": "includes",
+          "value": "spot_used_by_print_content"
+        }
+      ]
+    },
+    {
+      "name": "One step uses several spot colours",
+      "severity": "warning",
+      "all": [
+        {
+          "check": "layer.processing_step_problem",
+          "op": "includes",
+          "value": "step_uses_several_spots"
+        }
+      ]
+    },
+    {
+      "name": "Step layers missing on a page",
+      "severity": "warning",
+      "all": [
+        {
+          "check": "layer.processing_step_problem",
+          "op": "includes",
+          "value": "layers_missing_on_page"
+        }
+      ]
+    }
+  ]
+}

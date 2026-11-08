@@ -914,6 +914,18 @@ The page carries private application data (PieceInfo, separation info, private d
 
 No parameters.
 
+#### `page.processing_steps`: Processing steps on the page
+
+Processing step types used by the page's layers, such as Structural/Cutting or Structural/Creasing.
+
+- Value: `list`
+- Operators: `includes`, `excludes`, `count`
+- Applies to: page
+- References: ISO 19593-1 5
+- Notes: Lists group/type labels; use layer.processing_step for single objects.
+
+No parameters.
+
 #### `page.processing_steps_entry`: Page declares processing steps
 
 The page has a processing-steps entry in its metadata or dictionary.
@@ -4097,6 +4109,19 @@ Raises images below a threshold to the target resolution.
 
 ### Layers
 
+#### `layer.add_view`: Add a layer view
+
+Adds a named layer configuration (view) that shows every layer except those whose names match a pattern; used for language versions in PDF/X-4.
+
+- References: ISO 32000-1 8.11.4.3; ISO 15930-7 6.10
+
+| Parameter | Type | Default | Values | Notes |
+|---|---|---|---|---|
+| `name` | text | required |  |  |
+| `hide` | text | empty |  | Regular expression for layer names switched off in this view (case-insensitive). |
+| `show` | text | empty |  | Regular expression for layer names always kept on in this view. |
+| `creator` | text | empty |  |  |
+
 #### `layer.flatten`: Flatten layers
 
 Merges visible layers into the page and discards hidden ones.
@@ -4117,7 +4142,7 @@ Puts selected objects (or all page content) on a layer, also inside form XObject
 |---|---|---|---|---|
 | `layer` | text | required |  |  |
 | `objects` | text | empty |  | Check that selects the objects; empty: all content. |
-| `processing_step` | enum | empty | Structural, Dimensions, Cutting, Creasing, Perforating, Folding, Varnish, White, Braille, Positions, Legend |  |
+| `processing_step` | text | empty |  | Processing-step group (Structural, Dimensions, Braille, Legend, Positions, White, Varnish), a step type (Cutting, Creasing, Perforating, Folding, Gluing, Embossing, Hologram, Barcode and so on; the group is implied), or Group/Type. |
 
 #### `layer.set`: Change layer properties
 

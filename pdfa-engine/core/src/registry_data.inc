@@ -828,6 +828,13 @@ static const ParamDef kParams_f_ink_white_plate[] = {
     {"objects", "text", "", false, false, ""},
 };
 
+static const ParamDef kParams_f_layer_add_view[] = {
+    {"name", "text", "", false, true, ""},
+    {"hide", "text", "", false, false, ""},
+    {"show", "text", "", false, false, ""},
+    {"creator", "text", "", false, false, ""},
+};
+
 static const ParamDef kParams_f_layer_flatten[] = {
     {"keep_hidden", "bool", "false", true, false, ""},
 };
@@ -835,7 +842,7 @@ static const ParamDef kParams_f_layer_flatten[] = {
 static const ParamDef kParams_f_layer_move_objects[] = {
     {"layer", "text", "", false, true, ""},
     {"objects", "text", "", false, false, ""},
-    {"processing_step", "enum", "", false, false, "Structural|Dimensions|Cutting|Creasing|Perforating|Folding|Varnish|White|Braille|Positions|Legend"},
+    {"processing_step", "text", "", false, false, ""},
 };
 
 static const ParamDef kParams_f_layer_set[] = {
@@ -1234,6 +1241,7 @@ static const CheckDef kChecks[] = {
     {"page.output_intent", "page", "Page-level output intent", "enum", Domain::kPage, "==|!=|in|not_in", kParams_c_page_output_intent, 1},
     {"page.parity", "page", "Odd or even page", "enum", Domain::kPage, "==|!=|in|not_in", nullptr, 0},
     {"page.private_data", "page", "Private application data", "list", Domain::kPage, "includes|excludes|count", nullptr, 0},
+    {"page.processing_steps", "page", "Processing steps on the page", "list", Domain::kPage, "includes|excludes|count", nullptr, 0},
     {"page.processing_steps_entry", "page", "Page declares processing steps", "bool", Domain::kPage, "is", nullptr, 0},
     {"page.resources_missing", "page", "Resources missing", "bool", Domain::kPage, "is", nullptr, 0},
     {"page.rotation", "page", "Page rotation", "angle", Domain::kPage, "<|<=|==|!=|>=|>|multiple_of", nullptr, 0},
@@ -1366,6 +1374,7 @@ static const FixDef kFixes[] = {
     {"ink.min_line_width", "ink", "Thicken hairlines", kParams_f_ink_min_line_width, 2},
     {"ink.overprint_black", "ink", "Overprint solid black", kParams_f_ink_overprint_black, 2},
     {"ink.white_plate", "ink", "Create a white plate", kParams_f_ink_white_plate, 4},
+    {"layer.add_view", "layer", "Add a layer view", kParams_f_layer_add_view, 4},
     {"layer.flatten", "layer", "Flatten layers", kParams_f_layer_flatten, 1},
     {"layer.move_objects", "layer", "Move objects to a layer", kParams_f_layer_move_objects, 3},
     {"layer.set", "layer", "Change layer properties", kParams_f_layer_set, 11},
@@ -1400,6 +1409,7 @@ static const FixDef kFixes[] = {
     {"structure.resolve_role_map", "structure", "Resolve role map", nullptr, 0},
     {"text.add_invisible_copy", "text", "Add searchable text layer", kParams_f_text_add_invisible_copy, 1},
     {"text.set_render_mode", "text", "Set text render mode", kParams_f_text_set_render_mode, 2},
+    {"ink.flatten_overprint", "ink", "Flatten overprint", nullptr, 0},
     {"transparency.flatten", "transparency", "Flatten transparency", kParams_f_transparency_flatten, 1},
     {"transparency.remove_unneeded_groups", "transparency", "Remove unneeded transparency groups", kParams_f_transparency_remove_unneeded_groups, 1},
     {"transparency.set_blend_space", "transparency", "Set page blending space", kParams_f_transparency_set_blend_space, 2},

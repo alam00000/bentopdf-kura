@@ -1,0 +1,501 @@
+{
+  "kura-profile": 1,
+  "name": "GWG 2022 packaging, offset label: check and fix",
+  "description": "The same Ghent Workgroup 2022 packaging checks, with the safe repairs applied, converted to PDF/X-4.",
+  "convert": {
+    "level": "pdfx-4"
+  },
+  "checks": [
+    {
+      "name": "Not PDF/X-4",
+      "severity": "error",
+      "all": [
+        {
+          "check": "conformance.meets",
+          "op": "is",
+          "value": false,
+          "standard": "pdfx-4"
+        }
+      ]
+    },
+    {
+      "name": "Total ink above 320%",
+      "severity": "error",
+      "all": [
+        {
+          "check": "print.ink_coverage",
+          "op": ">",
+          "value": 320
+        }
+      ]
+    },
+    {
+      "name": "Image below 240 ppi",
+      "severity": "error",
+      "all": [
+        {
+          "check": "image.resolution",
+          "op": "<",
+          "value": 240,
+          "kind": "colour_or_grey"
+        }
+      ]
+    },
+    {
+      "name": "Image between 240 and 300 ppi",
+      "severity": "warning",
+      "all": [
+        {
+          "check": "image.resolution",
+          "op": "<",
+          "value": 300,
+          "kind": "colour_or_grey"
+        },
+        {
+          "check": "image.resolution",
+          "op": ">=",
+          "value": 240,
+          "kind": "colour_or_grey"
+        }
+      ]
+    },
+    {
+      "name": "Text smaller than 8 pt in more than one ink",
+      "severity": "error",
+      "all": [
+        {
+          "check": "text.size",
+          "op": "<",
+          "value": 8
+        },
+        {
+          "check": "text.size",
+          "op": ">",
+          "value": 0.01
+        },
+        {
+          "check": "color.inks_used",
+          "op": ">",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "name": "Line thinner than 0.3 pt in more than one ink",
+      "severity": "error",
+      "all": [
+        {
+          "check": "content.stroke_width",
+          "op": "<",
+          "value": 0.3
+        },
+        {
+          "check": "color.inks_used",
+          "op": ">",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "name": "White line thinner than 0.15 pt",
+      "severity": "error",
+      "all": [
+        {
+          "check": "content.stroke_width",
+          "op": "<",
+          "value": 0.15
+        },
+        {
+          "check": "color.ink_mix",
+          "op": "==",
+          "value": "none"
+        }
+      ]
+    },
+    {
+      "name": "White text smaller than 8 pt",
+      "severity": "warning",
+      "all": [
+        {
+          "check": "text.size",
+          "op": "<",
+          "value": 8
+        },
+        {
+          "check": "text.size",
+          "op": ">",
+          "value": 0.01
+        },
+        {
+          "check": "color.ink_mix",
+          "op": "==",
+          "value": "none"
+        }
+      ]
+    },
+    {
+      "name": "Black text below 12 pt not set to overprint",
+      "severity": "warning",
+      "all": [
+        {
+          "check": "content.kind",
+          "op": "==",
+          "value": "text"
+        },
+        {
+          "check": "color.ink_mix",
+          "op": "==",
+          "value": "solid_black"
+        },
+        {
+          "check": "text.size",
+          "op": "<",
+          "value": 12
+        },
+        {
+          "check": "color.overprint",
+          "op": "==",
+          "value": "off",
+          "paint": "fill"
+        }
+      ]
+    },
+    {
+      "name": "No processing steps in the file",
+      "severity": "warning",
+      "all": [
+        {
+          "check": "page.processing_steps",
+          "op": "count",
+          "value": 0,
+          "compare": "=="
+        }
+      ]
+    },
+    {
+      "name": "Cutting die line missing",
+      "severity": "error",
+      "all": [
+        {
+          "check": "page.processing_steps",
+          "op": "count",
+          "value": 0,
+          "compare": ">"
+        },
+        {
+          "check": "page.processing_steps",
+          "op": "excludes",
+          "value": [
+            "Structural/Cutting"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Processing step not allowed for this product (label)",
+      "severity": "error",
+      "any": [
+        {
+          "all": [
+            {
+              "check": "page.processing_steps",
+              "op": "includes",
+              "value": [
+                "Structural/Creasing"
+              ]
+            }
+          ]
+        },
+        {
+          "all": [
+            {
+              "check": "page.processing_steps",
+              "op": "includes",
+              "value": [
+                "Structural/ReverseCreasing"
+              ]
+            }
+          ]
+        },
+        {
+          "all": [
+            {
+              "check": "page.processing_steps",
+              "op": "includes",
+              "value": [
+                "Structural/CuttingCreasing"
+              ]
+            }
+          ]
+        },
+        {
+          "all": [
+            {
+              "check": "page.processing_steps",
+              "op": "includes",
+              "value": [
+                "Structural/ReverseCuttingCreasing"
+              ]
+            }
+          ]
+        },
+        {
+          "all": [
+            {
+              "check": "page.processing_steps",
+              "op": "includes",
+              "value": [
+                "Structural/PartialCuttingCreasing"
+              ]
+            }
+          ]
+        },
+        {
+          "all": [
+            {
+              "check": "page.processing_steps",
+              "op": "includes",
+              "value": [
+                "Structural/ReversePartialCuttingCreasing"
+              ]
+            }
+          ]
+        },
+        {
+          "all": [
+            {
+              "check": "page.processing_steps",
+              "op": "includes",
+              "value": [
+                "Structural/Drilling"
+              ]
+            }
+          ]
+        },
+        {
+          "all": [
+            {
+              "check": "page.processing_steps",
+              "op": "includes",
+              "value": [
+                "Structural/Stapling"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Processing step layer without a type",
+      "severity": "error",
+      "all": [
+        {
+          "check": "layer.processing_step_problem",
+          "op": "includes",
+          "value": [
+            "missing_type"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "A step's spot colour is also used for print content",
+      "severity": "error",
+      "all": [
+        {
+          "check": "layer.processing_step_problem",
+          "op": "includes",
+          "value": [
+            "spot_used_by_print_content"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "RGB or calibrated alternate colour for a spot colour",
+      "severity": "error",
+      "all": [
+        {
+          "check": "color.space",
+          "op": "in",
+          "value": [
+            "Separation",
+            "DeviceN"
+          ]
+        },
+        {
+          "check": "color.space",
+          "op": "in",
+          "value": [
+            "DeviceRGB",
+            "CalRGB",
+            "CalGray",
+            "ICCBased",
+            "Lab"
+          ],
+          "level": "alternate"
+        }
+      ]
+    },
+    {
+      "name": "Font not embedded",
+      "severity": "error",
+      "all": [
+        {
+          "check": "font.embedding",
+          "op": "==",
+          "value": "not_embedded"
+        }
+      ]
+    },
+    {
+      "name": "Type 3 font in use",
+      "severity": "warning",
+      "all": [
+        {
+          "check": "font.type",
+          "op": "==",
+          "value": "type3"
+        }
+      ]
+    },
+    {
+      "name": "Glyph falls back to .notdef",
+      "severity": "error",
+      "all": [
+        {
+          "check": "text.glyph",
+          "op": "==",
+          "value": "notdef"
+        }
+      ]
+    },
+    {
+      "name": "Font program is not valid",
+      "severity": "error",
+      "all": [
+        {
+          "check": "font.problem",
+          "op": "includes",
+          "value": "invalid_program"
+        }
+      ]
+    },
+    {
+      "name": "Pages differ in size or orientation",
+      "severity": "warning",
+      "all": [
+        {
+          "check": "document.pages_uniform",
+          "op": "is",
+          "value": false
+        }
+      ]
+    },
+    {
+      "name": "Empty page",
+      "severity": "warning",
+      "all": [
+        {
+          "check": "page.empty",
+          "op": "is",
+          "value": true
+        }
+      ]
+    },
+    {
+      "name": "Page scaling in use",
+      "severity": "error",
+      "all": [
+        {
+          "check": "page.user_unit",
+          "op": "!=",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "name": "Object within 3 mm of the trim edge",
+      "severity": "info",
+      "all": [
+        {
+          "check": "content.distance_to_box",
+          "op": "<",
+          "value": 3,
+          "box": "trim",
+          "side": "inside",
+          "unit": "mm"
+        }
+      ],
+      "scope": "trim"
+    },
+    {
+      "name": "Annotation that prints",
+      "severity": "warning",
+      "all": [
+        {
+          "check": "annotation.flags",
+          "op": "includes",
+          "value": "print"
+        }
+      ]
+    },
+    {
+      "name": "Content on a layer",
+      "severity": "info",
+      "all": [
+        {
+          "check": "layer.membership",
+          "op": "count",
+          "value": 0,
+          "compare": ">"
+        }
+      ]
+    }
+  ],
+  "fixes": [
+    {
+      "fix": "page.set_box",
+      "box": "trim",
+      "from": "crop",
+      "when": "missing"
+    },
+    {
+      "fix": "bleed.generate",
+      "amount": "3mm"
+    },
+    {
+      "fix": "page.remove_user_unit"
+    },
+    {
+      "fix": "ink.min_line_width",
+      "width": "0.25pt"
+    },
+    {
+      "fix": "ink.overprint_black",
+      "objects": "text"
+    },
+    {
+      "fix": "ink.knockout_white"
+    },
+    {
+      "fix": "document.set_info",
+      "key": "Trapped",
+      "value": "False"
+    },
+    {
+      "fix": "graphics.remove",
+      "settings": [
+        "flatness",
+        "smoothness"
+      ]
+    },
+    {
+      "fix": "transparency.remove_unneeded_groups"
+    },
+    {
+      "fix": "transparency.set_blend_space",
+      "space": "CMYK"
+    }
+  ]
+}

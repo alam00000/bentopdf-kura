@@ -1348,7 +1348,8 @@ int evProcessingStepProblem(const PfAtom& a, const Subject&, const Events& ev, b
   static const std::set<std::string> known = {"/Type", "/GTS_ProcStepsGroup", "/GTS_ProcStepsType"};
   for (const auto& [og, g] : u.steps) {
     QPDFObjectHandle m = stepMeta(g);
-    if (!m.hasKey("/GTS_ProcStepsType")) v.insert("missing_type");
+    std::string grp = ocStr(m.getKey("/GTS_ProcStepsGroup"));
+    if (!m.hasKey("/GTS_ProcStepsType") && (grp == "Structural" || grp == "Positions")) v.insert("missing_type");
     if (secondClass(ocStr(m.getKey("/GTS_ProcStepsGroup"))) || secondClass(ocStr(m.getKey("/GTS_ProcStepsType")))) {
       v.insert("custom_value");
     }
@@ -2421,6 +2422,7 @@ void registerColorChecks(CheckTable& t) {
   t.add("image.resolution", evResolution);
   t.add("image.rotation", evImageRotation);
   t.add("layer.processing_step", evProcessingStep);
+  t.add("page.processing_steps", evProcessingStep);
   t.add("layer.processing_step_problem", evProcessingStepProblem);
   t.add("layer.visible", evLayerVisible);
   t.add("output_intent.count", evOutputIntentCount);

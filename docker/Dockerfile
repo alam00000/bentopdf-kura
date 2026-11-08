@@ -22,6 +22,10 @@ RUN useradd --system --uid 10001 --no-create-home kura && mkdir -p /work /data &
 WORKDIR /kura
 COPY --from=native /kura/pdfa-engine/build/cli/kura /usr/local/bin/kura
 COPY --from=server /src/target/release/kura-server /usr/local/bin/kura-server
+COPY pdfa-engine/core/fonts-world /usr/local/share/kura/fonts-world
+COPY pdfa-engine/core/fonts-cjk /usr/local/share/kura/fonts-cjk
+COPY pdfa-engine/core/icc /usr/local/share/kura/icc
+COPY pdfa-engine/third_party/cmap-resources/LICENSE.md /usr/local/share/kura/licenses/CMAP-RESOURCES-LICENSE.md
 COPY site/index.html site/preflight.html site/app.js site/preflight.js site/ui.js site/pdf.js \
      site/profiles.js site/engine-http.js site/app.css site/logo.svg site/
 COPY site/icons site/icons

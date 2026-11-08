@@ -1,0 +1,10 @@
+{
+  "kura-profile": 1,
+  "name": "Convert to PDF/X-6 for Japan Color 2001 Coated",
+  "description": "Converts to PDF/X-6 with the Japan Color 2001 Coated profile as output intent (Japanese coated paper, Japan Color 2001). The profile is taken from Kura's bundled profiles or the computer's colour folders.",
+  "convert": {
+    "level": "pdfx-6",
+    "profile": "Japan Color 2001 Coated"
+  },
+  "checks": []
+}

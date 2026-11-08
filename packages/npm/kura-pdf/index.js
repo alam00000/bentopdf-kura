@@ -7,7 +7,7 @@ import { fileURLToPath } from 'node:url';
 
 export const LEVELS = [
   '1b', '1a', '2b', '2u', '2a', '3b', '3u', '3a', '4', '4f', '4e',
-  'x1a', 'x3', 'x4', 'x6', 'e1', 'vt1', 'vt3',
+  'x1a', 'x3', 'x4', 'x6', 'e1', 'vt1', 'vt3', 'none',
 ];
 
 export const CHECK_ONLY_LEVELS = ['x4p', 'x5g', 'x5n', 'x5pg', 'x6n', 'x6p', 'vt2'];
@@ -70,8 +70,12 @@ const BOOL_FLAGS = {
   analyze: '--analyze',
   embedSource: '--embed-source',
   ocr: '--ocr',
+  keepSpots: '--keep-spots',
+  noBpc: '--no-bpc',
+  grayToK: '--gray-to-k',
 };
 const TEXT_FLAGS = {
+  pdfVersion: '--pdf-version',
   lang: '--lang',
   password: '--password',
   rasterDpi: '--raster-dpi',
@@ -85,6 +89,10 @@ const TEXT_FLAGS = {
   vtRecords: '--vt-records',
   ocrEngine: '--ocr-engine',
   fontFolder: '--font-folder',
+  intent: '--intent',
+  convertObjects: '--convert-objects',
+  inkLimit: '--ink-limit',
+  rgbGrayToK: '--rgb-gray-to-k',
 };
 const FILE_FLAGS = {
   attachXml: ['--attach-xml', 'attachment.xml'],
@@ -93,6 +101,7 @@ const FILE_FLAGS = {
   defaultCmyk: ['--default-cmyk', 'cmyk.icc'],
   defaultGray: ['--default-gray', 'gray.icc'],
   profile: ['--profile', 'profile.txt'],
+  deviceLink: ['--device-link', 'link.icc'],
 };
 
 function toBytes(input, what) {
@@ -115,7 +124,16 @@ function buildArgs(options, dir) {
   }
   for (const [key, flag] of Object.entries(TEXT_FLAGS)) {
     if (o[key] === undefined || o[key] === null || o[key] === '') continue;
-    args.push(flag, String(o[key]));
+    args.push(flag, Array.isArray(o[key]) ? o[key].join(',') : String(o[key]));
+  }
+  if (o.convertColors !== undefined && o.convertColors !== null) {
+    if (typeof o.convertColors === 'string') {
+      args.push('--convert-colors', o.convertColors);
+    } else {
+      const p = path.join(dir, 'target.icc');
+      fs.writeFileSync(p, toBytes(o.convertColors, 'options.convertColors'));
+      args.push('--convert-colors', p);
+    }
   }
   for (const [key, [flag, name]] of Object.entries(FILE_FLAGS)) {
     if (o[key] === undefined || o[key] === null) continue;

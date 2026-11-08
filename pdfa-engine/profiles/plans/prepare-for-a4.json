@@ -1,0 +1,13 @@
+{
+  "kura-profile": 1,
+  "name": "Prepare for A4",
+  "description": "Scales every page to A4.",
+  "checks": [],
+  "fixes": [
+    {
+      "fix": "page.scale",
+      "width": "210mm",
+      "height": "297mm"
+    }
+  ]
+}

@@ -69,6 +69,15 @@ interface KuraOptions {
   defaultRgb?: Uint8Array;      // replace the bundled default profiles
   defaultCmyk?: Uint8Array;
   defaultGray?: Uint8Array;
+  convertColors?: 'cmyk' | 'gray' | 'rgb' | Uint8Array; // convert colour through ICC profiles
+  intent?: 'perceptual' | 'relative' | 'saturation' | 'absolute';
+  convertObjects?: string[];    // any of text, vector, shading, images, lossy, lossless
+  keepSpots?: boolean;          // keep spot colours, convert only their alternate
+  noBpc?: boolean;              // turn off black point compensation
+  grayToK?: boolean;            // gray on the black plate only
+  rgbGrayToK?: number;          // neutral RGB within this percentage on the black plate only
+  inkLimit?: number;            // total ink coverage limit, 100 to 400
+  deviceLink?: Uint8Array;      // convert through a device link profile
   vtRecords?: string;           // PDF/VT record ranges, "1-3,4-6"
   profile?: string;             // a preflight profile, as JSON text
   analyze?: boolean;            // add the document census to `analysis`

@@ -124,8 +124,22 @@ uint32_t be32(const unsigned char* p) {
   return (static_cast<uint32_t>(p[0]) << 24) | (p[1] << 16) | (p[2] << 8) | p[3];
 }
 
-bool scanJp2Boxes(const unsigned char* d, size_t n, int& colrCount, bool& colrOk,
-                  int& nc, int& bpcVal, bool& bpcVaries, bool& bpccEqual, int depth) {
+struct Jp2Colr {
+  int meth;
+  int approx;
+  long long enumCs;
+};
+
+struct Jp2Header {
+  std::vector<Jp2Colr> colr;
+  int nc = 0;
+  int bpc = -1;
+  bool bpcc = false;
+  bool bpccEqual = true;
+  int bpccVal = -1;
+};
+
+bool scanJp2Boxes(const unsigned char* d, size_t n, Jp2Header& h, int depth) {
   if (depth > kMaxJp2BoxNest) return false;
   size_t i = 0;
   bool sawIhdr = false;
@@ -144,37 +158,20 @@ bool scanJp2Boxes(const unsigned char* d, size_t n, int& colrCount, bool& colrOk
     const unsigned char* p = d + i + hdr;
     size_t plen = static_cast<size_t>(len - hdr);
     if (type == "jp2h") {
-      if (!scanJp2Boxes(p, plen, colrCount, colrOk, nc, bpcVal, bpcVaries, bpccEqual,
-                        depth + 1)) {
-        return false;
-      }
+      if (!scanJp2Boxes(p, plen, h, depth + 1)) return false;
       sawIhdr = true;
     } else if (type == "ihdr" && plen >= 10) {
-      nc = (p[8] << 8) | p[9];
-      bpcVal = plen >= 11 ? p[10] : 0;
-      bpcVaries = bpcVal == 0xFF;
+      h.nc = (p[8] << 8) | p[9];
+      h.bpc = plen >= 11 ? p[10] : 0;
       sawIhdr = true;
     } else if (type == "bpcc") {
-      bpccEqual = true;
+      h.bpcc = true;
       for (size_t j = 1; j < plen; ++j) {
-        if (p[j] != p[0]) bpccEqual = false;
+        if (p[j] != p[0]) h.bpccEqual = false;
       }
-      if (plen > 0) bpcVal = p[0];
+      if (plen > 0) h.bpccVal = p[0];
     } else if (type == "colr" && plen >= 3) {
-      ++colrCount;
-      int meth = p[0];
-      bool ok = true;
-      if (meth == 1) {
-        if (plen < 7) {
-          ok = false;
-        } else {
-          uint32_t enumCs = be32(p + 3);
-          ok = enumCs >= 12 && enumCs <= 43 && enumCs != 19;
-        }
-      } else if (meth != 2) {
-        ok = false;
-      }
-      colrOk = colrOk && ok;
+      h.colr.push_back({p[0], p[2], p[0] == 1 && plen >= 7 ? static_cast<long long>(be32(p + 3)) : -1});
     }
     i += static_cast<size_t>(len);
   }
@@ -182,25 +179,37 @@ bool scanJp2Boxes(const unsigned char* d, size_t n, int& colrCount, bool& colrOk
 }
 }
 
-bool jpxPdfaConformant(const std::string& data) {
+bool jpxPdfaConformant(const std::string& data, bool hasColorSpace, bool archive) {
   const unsigned char* d = reinterpret_cast<const unsigned char*>(data.data());
   size_t n = data.size();
   if (n < 12) return false;
   if (d[0] == 0xFF && d[1] == 0x4F) return false;
-  int colrCount = 0, nc = 0, bpcVal = -1;
-  bool colrOk = true, bpcVaries = false, bpccEqual = true;
-  if (!scanJp2Boxes(d, n, colrCount, colrOk, nc, bpcVal, bpcVaries, bpccEqual, 0)) {
-    return false;
+  Jp2Header h;
+  if (!scanJp2Boxes(d, n, h, 0)) return false;
+  if (h.nc != 1 && h.nc != 3 && h.nc != 4) return false;
+  if (archive) {
+    if (h.bpcc || h.bpc < 0 || h.bpc >= 0x80 || h.bpc + 1 > 38) return false;
+    if (hasColorSpace) return true;
+    const Jp2Colr* used = nullptr;
+    int approx = 0;
+    for (const Jp2Colr& c : h.colr) {
+      if (c.approx != 1) continue;
+      if (!used) used = &c;
+      ++approx;
+    }
+    if (h.colr.size() != 1 && approx != 1) return false;
+    if (!used && h.colr.size() == 1) used = &h.colr.front();
+    if (!used || used->meth < 1 || used->meth > 3) return false;
+    return used->enumCs != 19;
   }
-  if (nc != 1 && nc != 3 && nc != 4) return false;
-  if (bpcVaries) {
-    if (!bpccEqual) return false;
-    if (bpcVal < 0) return false;
-  }
+  if (h.bpc == 0xFF && (!h.bpccEqual || h.bpccVal < 0)) return false;
+  int bpcVal = h.bpccVal >= 0 ? h.bpccVal : h.bpc;
   int depthBits = (bpcVal & 0x7F) + 1;
   if (depthBits < 1 || depthBits > 38) return false;
-  if (colrCount != 1 || !colrOk) return false;
-  return true;
+  if (h.colr.size() != 1) return false;
+  const Jp2Colr& c = h.colr.front();
+  if (c.meth == 1) return c.enumCs >= 12 && c.enumCs <= 43 && c.enumCs != 19;
+  return c.meth == 2;
 }
 
 namespace {

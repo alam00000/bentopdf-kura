@@ -8,6 +8,7 @@
 #include <qpdf/QPDFTokenizer.hh>
 
 #include <algorithm>
+#include <cctype>
 #include <cmath>
 #include <cstdlib>
 #include <cstring>
@@ -54,11 +55,10 @@ cmsHPROFILE synthGray(double dotGain, double gamma) {
   cmsToneCurve* curve = nullptr;
   if (dotGain > 0) {
     float pts[256];
+    double g = std::log(0.5 - std::min(dotGain, 0.49)) / std::log(0.5);
     for (int i = 0; i < 256; ++i) {
       double v = i / 255.0;
-      double cov = 1 - v;
-      double printed = std::min(1.0, cov + 4 * dotGain * cov * (1 - cov));
-      pts[i] = static_cast<float>(1 - printed);
+      pts[i] = static_cast<float>(std::max(std::pow(v, g), v / 16));
     }
     curve = cmsBuildTabulatedToneCurveFloat(nullptr, 256, pts);
   } else {
@@ -326,6 +326,11 @@ class Engine {
         }
       }
       return convertValues(*s.base, tmp, out, action, intent);
+    }
+    if (action == ColorRule::kInkLimit) {
+      if (s.n != 4 || destN != 4 || s.fam == Space::kLab) return false;
+      for (int c = 0; c < 4; ++c) out[c] = std::min(std::max(in[c], 0.0), 1.0);
+      return finish(out);
     }
     cmsHPROFILE src = s.prof;
     if (action == ColorRule::kDecalibrateConvert) {
@@ -971,8 +976,8 @@ class Converter {
         if (p.isStream()) {
           if (!visited.enter(p)) continue;
           QPDFObjectHandle pr = p.getDict().getKey("/Resources");
-          if (!pr.isDictionary()) pr = res;
-          resources(pr, depth + 1);
+          if (pr.isDictionary()) resources(pr, depth + 1);
+          else pr = res;
           rewrite(p, pr, 0, false);
         } else if (p.isDictionary() && !remap) {
           shading(p.getKey("/Shading"), res);
@@ -1016,8 +1021,8 @@ class Converter {
         QPDFObjectHandle cp = f.getKey("/CharProcs");
         if (!cp.isDictionary() || !visited.enter(cp)) continue;
         QPDFObjectHandle fr = f.getKey("/Resources");
-        if (!fr.isDictionary()) fr = res;
-        resources(fr, depth + 1);
+        if (fr.isDictionary()) resources(fr, depth + 1);
+        else fr = res;
         for (const std::string& g : cp.getKeys()) {
           QPDFObjectHandle glyph = cp.getKey(g);
           if (glyph.isStream() && visited.enter(glyph)) rewrite(glyph, fr, ColorRule::kText, false);
@@ -1050,8 +1055,8 @@ class Converter {
   void form(QPDFObjectHandle f, QPDFObjectHandle parentRes, int depth) {
     if (!f.isStream() || depth > kMaxResourceNest || !visited.enter(f)) return;
     QPDFObjectHandle r = f.getDict().getKey("/Resources");
-    if (!r.isDictionary()) r = parentRes;
-    resources(r, depth + 1);
+    if (r.isDictionary()) resources(r, depth + 1);
+    else r = parentRes;
     if (!remap) group(f);
     rewrite(f, r, 0, false);
   }
@@ -1552,7 +1557,7 @@ class Converter {
         if (sd.pattern.empty() || !sp.base) return original(sd, fill);
         ColorRule::Action a;
         int intent;
-        if (!c.e.decide(cls, *sp.base, a, intent) || a != ColorRule::kConvert) return original(sd, fill);
+        if (!c.e.decide(cls, *sp.base, a, intent) || (a != ColorRule::kConvert && a != ColorRule::kInkLimit)) return original(sd, fill);
         double out[4];
         if (static_cast<int>(sd.vals.size()) < sp.base->n ||
             !c.e.convertValues(*sp.base, sd.vals.data(), out, a, intent < 0 ? cur.intent : intent)) {
@@ -1792,6 +1797,53 @@ std::string iccDescription(const std::string& bytes) {
   return buf;
 }
 
+bool configureColorConversion(Options& opt, const std::string& target, const std::string& targetIcc,
+                              int intent, bool keepSpots, unsigned objects) {
+  using R = ColorRule;
+  ColorJob& j = opt.colorJob;
+  j.enabled = true;
+  std::string t;
+  for (char c : target) t += static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+  if (!targetIcc.empty()) {
+    j.destProfile = targetIcc;
+  } else if (t == "device-link") {
+    j.embed = ColorJob::kEmbedNone;
+  } else if (t == "cmyk") {
+    j.destProfile = opt.destProfile;
+  } else if (t == "gray" || t == "grey") {
+    j.destName = "Dot Gain 15%";
+    j.embed = ColorJob::kEmbedNone;
+  } else if (t == "rgb" || t == "srgb") {
+    j.destName = "sRGB IEC61966-2.1";
+  } else if (!target.empty()) {
+    j.destName = target;
+  } else {
+    return false;
+  }
+  const std::string sig = j.destProfile.size() >= 20 ? j.destProfile.substr(16, 4) : std::string();
+  if (sig == "CMYK") opt.destProfile = j.destProfile;
+  bool gray = (targetIcc.empty() && (t == "gray" || t == "grey")) || sig == "GRAY";
+  bool rgb = (targetIcc.empty() && (t == "rgb" || t == "srgb")) || sig == "RGB ";
+  auto add = [&](unsigned sources, R::Action a) {
+    R r;
+    r.objects = objects;
+    r.sources = sources;
+    r.action = a;
+    r.intent = intent;
+    j.rules.push_back(r);
+  };
+  if (gray || rgb) {
+    add(R::kAnySource & ~(R::kSpot | R::kRegistration), R::kConvert);
+  } else {
+    add(R::kUncCmyk, R::kNone);
+    add(R::kCalCmyk, R::kDecalibrate);
+    add(R::kUncGray, j.grayToBlackOnly ? R::kConvert : R::kNone);
+    add(R::kUncRgb | R::kCalRgb | R::kCalGray | R::kLab, R::kConvert);
+  }
+  add(R::kSpot | R::kRegistration, keepSpots ? R::kConvertAlternate : R::kConvert);
+  return true;
+}
+
 bool loadIccFromFolders(const std::vector<std::string>& folders, const std::string& name,
                         std::string& bytes) {
   const std::string want = lowerNoSpace(name);
@@ -2016,8 +2068,8 @@ void prepareColorJob(Options& opt, std::vector<Issue>& notes) {
       !resolveIccByName(opt, j.destName, j.destProfile)) {
     notes.push_back({"ICC_PROFILE_MISSING",
                      "colour profile \"" + j.destName +
-                         "\" was not found; converting with the built-in CMYK profile "
-                         "(Coated GRACoL 2006) instead",
+                         "\" was not found in the profile folders; check the name, or pass the profile file "
+                         "or its folder with --icc-folder",
                      false});
     j.destName.clear();
   }
@@ -2037,6 +2089,14 @@ void prepareColorJob(Options& opt, std::vector<Issue>& notes) {
     }
   }
   std::string model = j.destProfile.size() >= 20 ? j.destProfile.substr(16, 4) : std::string();
+  if ((j.inkLimit > 0 || !j.toneCurves.empty()) && model == "CMYK") {
+    for (ColorRule& r : j.rules) {
+      if ((r.sources & (ColorRule::kUncCmyk | ColorRule::kCalCmyk)) &&
+          (r.action == ColorRule::kNone || r.action == ColorRule::kDecalibrate)) {
+        r.action = ColorRule::kInkLimit;
+      }
+    }
+  }
   bool intentFits = model == "CMYK" ||
                     (model == "RGB " && levelFamily(opt.level) != Family::PDFX &&
                      levelFamily(opt.level) != Family::PDFVT);
@@ -2131,5 +2191,12 @@ void passColorConvert(Ctx& ctx) {
               std::to_string(s.failures) + " object(s) kept their original colour (" + why + ")",
               false);
   }
+}
+
+std::string builtinIccProfile(int components) {
+  if (components == 4) return std::string(reinterpret_cast<const char*>(kCmykIcc), kCmykIccLen);
+  if (components == 3) return std::string(reinterpret_cast<const char*>(kSrgbIcc), kSrgbIccLen);
+  if (components == 1) return builtinByName("Dot Gain 15%");
+  return std::string();
 }
 }

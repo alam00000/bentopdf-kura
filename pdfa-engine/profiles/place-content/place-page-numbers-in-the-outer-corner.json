@@ -1,0 +1,26 @@
+{
+  "kura-profile": 1,
+  "name": "Place page numbers in the outer corner",
+  "description": "Numbers the pages in the outer lower corner: right on odd pages, left on even pages.",
+  "checks": [],
+  "fixes": [
+    {
+      "fix": "place.text",
+      "text": "{page}",
+      "size": "9pt",
+      "anchor": "lower_right",
+      "x": "-12mm",
+      "y": "8mm",
+      "pages": "odd"
+    },
+    {
+      "fix": "place.text",
+      "text": "{page}",
+      "size": "9pt",
+      "anchor": "lower_left",
+      "x": "12mm",
+      "y": "8mm",
+      "pages": "even"
+    }
+  ]
+}

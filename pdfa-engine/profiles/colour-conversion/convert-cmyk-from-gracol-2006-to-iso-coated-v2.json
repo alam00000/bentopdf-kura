@@ -1,0 +1,13 @@
+{
+  "kura-profile": 1,
+  "name": "Convert CMYK from GRACoL 2006 to ISO Coated v2",
+  "description": "Re-separates CMYK made for Coated GRACoL 2006 (ISO 12647-2:2004) so it prints the same on ISO Coated v2 (ECI), through both profiles; spot colours stay spot colours and the new profile becomes the output intent.",
+  "convert": {
+    "colors": {
+      "from": "Coated GRACoL 2006 (ISO 12647-2:2004)",
+      "to": "ISO Coated v2 (ECI)",
+      "keep_spots": true
+    }
+  },
+  "checks": []
+}

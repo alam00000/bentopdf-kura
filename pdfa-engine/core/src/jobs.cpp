@@ -128,9 +128,86 @@ void applyConvert(const Json& root, Options& opt, std::vector<Issue>& pre) {
     Level l;
     if (levelFromString(levelName(lv->text()), l)) {
       opt.level = l;
+      opt.noStandard = false;
       what = "profile converts to " + levelToString(l);
     } else {
       pre.push_back({"PROFILE_INVALID", "convert.level: \"" + lv->text() + "\" is not a known standard", false, 3});
+    }
+  }
+  if (const Json* cc = cv->get("colors"); cc && cc->type == Json::kObj) {
+    const Json* to = cc->get("to");
+    std::string target = to && to->type == Json::kStr ? to->text() : std::string();
+    std::string lower = target;
+    std::transform(lower.begin(), lower.end(), lower.begin(), [](unsigned char c) { return std::tolower(c); });
+    std::string icc;
+    bool ok = !target.empty();
+    std::string missing = target;
+    if (const Json* dl = cc->get("device_link"); dl && dl->type == Json::kStr) {
+      ok = opt.loadIcc && opt.loadIcc(dl->text(), opt.colorJob.deviceLink) && opt.colorJob.deviceLink.size() >= 132;
+      missing = dl->text();
+      if (target.empty()) target = "device-link";
+    } else if (ok && lower != "cmyk" && lower != "gray" && lower != "grey" && lower != "rgb" && lower != "srgb") {
+      ok = opt.loadIcc && opt.loadIcc(target, icc) && icc.size() >= 132;
+    }
+    int intent = -1;
+    if (const Json* in = cc->get("intent"); in && in->type == Json::kStr) {
+      std::string v = in->text();
+      intent = v == "perceptual" ? 0 : v == "relative" ? 1 : v == "saturation" ? 2 : v == "absolute" ? 3 : -1;
+      if (intent < 0)
+        pre.push_back({"PROFILE_INVALID", "convert.colors: intent \"" + v +
+                       "\" is not perceptual, relative, saturation or absolute", false, 3});
+    }
+    bool keepSpots = false;
+    if (const Json* ks = cc->get("keep_spots"); ks && ks->type == Json::kBool) keepSpots = ks->b;
+    if (const Json* gk = cc->get("gray_to_black"); gk && gk->type == Json::kBool) opt.colorJob.grayToBlackOnly = gk->b;
+    if (const Json* il = cc->get("ink_limit"); il && il->type == Json::kNum) opt.colorJob.inkLimit = il->num;
+    if (const Json* rg = cc->get("rgb_gray_to_black"); rg && rg->type == Json::kNum) {
+      opt.colorJob.rgbGrayToBlackOnly = true;
+      for (double& t : opt.colorJob.rgbGrayTolerance) t = rg->num / 100.0;
+    }
+    if (const Json* tc = cc->get("tone_curve"); tc && tc->type == Json::kArr && tc->arr.size() >= 4 && tc->arr.size() % 2 == 0) {
+      std::vector<double> pts;
+      for (const Json& v : tc->arr) pts.push_back(v.type == Json::kNum ? v.num : 0);
+      opt.colorJob.toneCurves.push_back({15u, pts});
+    }
+    std::string from;
+    if (const Json* fr = cc->get("from"); fr && fr->type == Json::kStr) {
+      std::string probe;
+      from = fr->text();
+      if (ok && !(opt.loadIcc && opt.loadIcc(from, probe) && probe.size() >= 20 && probe.substr(16, 4) == "CMYK")) {
+        ok = false;
+        missing = from;
+      }
+    }
+    if (ok && configureColorConversion(opt, target, icc, intent, keepSpots, ColorRule::kAllObjects)) {
+      if (!from.empty()) {
+        opt.colorJob.cmykName = from;
+        for (ColorRule& r : opt.colorJob.rules)
+          if (r.sources == ColorRule::kUncCmyk || r.sources == ColorRule::kCalCmyk) r.action = ColorRule::kConvert;
+      }
+      what += (what.empty() ? "" : ", ") + std::string("colours to \"") + target + "\"";
+    } else {
+      pre.push_back({"PROFILE_ICC_MISSING", "convert.colors: colour profile \"" + missing +
+                     "\" was not found; install it or pass --icc-folder", false, 2});
+    }
+  }
+  if (const Json* pv = cv->get("pdf_version")) {
+    static const std::set<std::string> kVersions = {"1.3", "1.4", "1.5", "1.6", "1.7", "2.0"};
+    if (pv->type == Json::kStr && kVersions.count(pv->text())) {
+      opt.pdfVersion = pv->text();
+      what += (what.empty() ? "" : ", ") + std::string("PDF ") + pv->text();
+    } else {
+      pre.push_back({"PROFILE_INVALID", "convert.pdf_version: expected 1.3, 1.4, 1.5, 1.6, 1.7 or 2.0", false, 3});
+    }
+  }
+  if (const Json* pf = cv->get("profile")) {
+    std::string bytes;
+    if (pf->type == Json::kStr && opt.loadIcc && opt.loadIcc(pf->text(), bytes) && bytes.size() >= 132) {
+      opt.destProfile = bytes;
+      what += (what.empty() ? "" : ", ") + std::string("press profile \"") + pf->text() + "\"";
+    } else {
+      pre.push_back({"PROFILE_ICC_MISSING", "convert.profile: colour profile \"" + pf->text() +
+                     "\" was not found; install it or pass --icc-folder", false, 2});
     }
   }
   const Json* also = cv->get("also");

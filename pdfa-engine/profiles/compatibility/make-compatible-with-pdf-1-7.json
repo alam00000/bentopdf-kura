@@ -1,0 +1,21 @@
+{
+  "kura-profile": 1,
+  "name": "Make compatible with PDF 1.7",
+  "description": "Removes what PDF 1.7 does not support and writes the file as PDF 1.7: writes the file as PDF 1.7. No standard is applied.",
+  "convert": {
+    "pdf_version": "1.7"
+  },
+  "checks": [
+    {
+      "name": "Newer than PDF 1.7",
+      "severity": "info",
+      "all": [
+        {
+          "check": "document.pdf_version",
+          "op": ">",
+          "value": "1.7"
+        }
+      ]
+    }
+  ]
+}

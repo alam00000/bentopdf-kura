@@ -1,0 +1,10 @@
+{
+  "kura-profile": 1,
+  "name": "Convert to PDF/X-1a for Uncoated FOGRA29 (ISO 12647-2:2004)",
+  "description": "Converts to PDF/X-1a with the Uncoated FOGRA29 (ISO 12647-2:2004) profile as output intent (uncoated paper, FOGRA29). The profile is taken from Kura's bundled profiles or the computer's colour folders.",
+  "convert": {
+    "level": "pdfx-1a",
+    "profile": "Uncoated FOGRA29 (ISO 12647-2:2004)"
+  },
+  "checks": []
+}

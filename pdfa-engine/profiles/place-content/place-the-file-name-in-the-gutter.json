@@ -1,0 +1,17 @@
+{
+  "kura-profile": 1,
+  "name": "Place the file name in the gutter",
+  "description": "Places the document's file name along the left edge of every page.",
+  "checks": [],
+  "fixes": [
+    {
+      "fix": "place.text",
+      "text": "{file}",
+      "size": "7pt",
+      "anchor": "left",
+      "x": "4mm",
+      "y": "0mm",
+      "rotation": "90"
+    }
+  ]
+}

@@ -1,0 +1,13 @@
+{
+  "kura-profile": 1,
+  "name": "Convert CMYK from PSO Coated v3 to FOGRA28",
+  "description": "Re-separates CMYK made for PSO Coated v3 so it prints the same on Web Coated FOGRA28 (ISO 12647-2:2004), through both profiles; spot colours stay spot colours and the new profile becomes the output intent.",
+  "convert": {
+    "colors": {
+      "from": "PSO Coated v3",
+      "to": "Web Coated FOGRA28 (ISO 12647-2:2004)",
+      "keep_spots": true
+    }
+  },
+  "checks": []
+}

@@ -1,8 +1,15 @@
 #include <algorithm>
+#if defined(__APPLE__)
+#include <mach-o/dyld.h>
+#endif
 #include <filesystem>
 #include <cctype>
 #include <system_error>
 #ifdef _WIN32
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <windows.h>
 #include <process.h>
 #define kura_getpid _getpid
 #else
@@ -52,7 +59,7 @@ std::mutex gTraceMu;
 std::vector<std::string> gTraceLines;
 std::ofstream gTraceFile;
 bool gOnlyPdfa = false;
-bool gPureUa = false;
+int gPureUa = 0;
 bool gCertify = false;
 
 long long nowMs() {
@@ -314,30 +321,6 @@ int listProfiles(const char* dir) {
   return 0;
 }
 
-std::string mergePdfs(const std::vector<std::string>& inputs, const std::string& password, std::string& err) {
-  try {
-    QPDF out;
-    out.emptyPDF();
-    QPDFPageDocumentHelper od(out);
-    std::vector<std::unique_ptr<QPDF>> keep;
-    for (const std::string& path : inputs) {
-      auto in = std::make_unique<QPDF>();
-      in->setSuppressWarnings(true);
-      in->processFile(path.c_str(), password.c_str());
-      for (auto& ph : QPDFPageDocumentHelper(*in).getAllPages()) od.addPage(ph, false);
-      keep.push_back(std::move(in));
-    }
-    std::filesystem::path tmp = std::filesystem::temp_directory_path() /
-                                ("kura-merge-" + std::to_string(kura_getpid()) + ".pdf");
-    QPDFWriter w(out, tmp.string().c_str());
-    w.write();
-    return tmp.string();
-  } catch (const std::exception& e) {
-    err = std::string("merge failed: ") + e.what();
-    return std::string();
-  }
-}
-
 struct BatchOptions {
   int jobs = 1;
   bool watch = false;
@@ -375,13 +358,14 @@ int runOne(pdfa::Options opt, bool embedSource, const std::string& input,
 
   if (gPureUa) {
     pdfa::Result ua;
-    ua.level = "ua1";
+    ua.level = gPureUa == 2 ? "ua2" : "ua1";
     if (!opt.verifyOnly) {
       ua.errorCode = "LEVEL_VERIFY_ONLY";
-      ua.error = "ua1 is a check-only level; convert with --level 2u --ua";
+      ua.error = gPureUa == 2 ? "ua2 is a check-only level; convert with --level 4 --ua"
+                              : "ua1 is a check-only level; convert with --level 2u --ua";
     } else {
       try {
-        for (const pdfa::UaFinding& f : pdfa::uaCheck(data.data(), data.size(), opt.password)) {
+        for (const pdfa::UaFinding& f : pdfa::uaCheck(data.data(), data.size(), opt.password, gPureUa)) {
           ua.issues.push_back({"UA_" + f.checkpoint, f.detail, true, 3, std::vector<int>(f.pages.begin(), f.pages.end())});
         }
         ua.ok = true;
@@ -397,6 +381,7 @@ int runOne(pdfa::Options opt, bool embedSource, const std::string& input,
 
 #ifdef KURA_WITH_PDFIUM
   opt.rasterizePage = kura::makeRasterizer(data.data(), data.size(), opt.password);
+  opt.renderPdf = kura::renderFirstPage;
 #endif
 
   pdfa::Result res = pdfa::convert(data.data(), data.size(), opt);
@@ -524,10 +509,14 @@ std::vector<std::string> systemIccFolders() {
 #ifdef _WIN32
   const char* windir = std::getenv("WINDIR");
   dirs.push_back(std::string(windir ? windir : "C:\\Windows") + "\\System32\\spool\\drivers\\color");
+  for (const char* env : {"CommonProgramFiles(x86)", "CommonProgramFiles"})
+    if (const char* c = std::getenv(env)) dirs.push_back(std::string(c) + "\\Adobe\\Color\\Profiles");
 #elif defined(__APPLE__)
   if (home) dirs.push_back(std::string(home) + "/Library/ColorSync/Profiles");
   dirs.push_back("/Library/ColorSync/Profiles");
   dirs.push_back("/System/Library/ColorSync/Profiles");
+  if (home) dirs.push_back(std::string(home) + "/Library/Application Support/Adobe/Color/Profiles");
+  dirs.push_back("/Library/Application Support/Adobe/Color/Profiles");
 #else
   if (home) dirs.push_back(std::string(home) + "/.color/icc");
   if (home) dirs.push_back(std::string(home) + "/.local/share/color/icc");
@@ -539,56 +528,18 @@ std::vector<std::string> systemIccFolders() {
 
 bool configureColorJob(pdfa::Options& opt, const std::string& target, int intent, bool keepSpots,
                        unsigned objects) {
-  using R = pdfa::ColorRule;
-  pdfa::ColorJob& j = opt.colorJob;
-  j.enabled = true;
-  std::string t = lowerOf(target);
-  if (t == "device-link") {
-    j.embed = pdfa::ColorJob::kEmbedNone;
-  } else if (t == "cmyk") {
-    j.destProfile = opt.destProfile;
-  } else if (t == "gray" || t == "grey") {
-    j.destName = "Dot Gain 15%";
-    j.embed = pdfa::ColorJob::kEmbedNone;
-  } else if (t == "rgb" || t == "srgb") {
-    j.destName = "sRGB IEC61966-2.1";
-  } else {
-    std::error_code ec;
-    if (std::filesystem::is_regular_file(target, ec)) {
-      if (!readFile(target.c_str(), j.destProfile)) return false;
-    } else {
-      j.destName = target;
-    }
-  }
-  if (!j.destProfile.empty() && j.destProfile.size() >= 20 && j.destProfile.substr(16, 4) == "CMYK") {
-    opt.destProfile = j.destProfile;
-  }
-  bool gray = t == "gray" || t == "grey" || (j.destProfile.size() >= 20 && j.destProfile.substr(16, 4) == "GRAY");
-  bool rgb = t == "rgb" || t == "srgb" || (j.destProfile.size() >= 20 && j.destProfile.substr(16, 4) == "RGB ");
-  auto add = [&](unsigned sources, R::Action a) {
-    R r;
-    r.objects = objects;
-    r.sources = sources;
-    r.action = a;
-    r.intent = intent;
-    j.rules.push_back(r);
-  };
-  if (gray || rgb) {
-    add(R::kAnySource & ~(R::kSpot | R::kRegistration), R::kConvert);
-  } else {
-    add(R::kUncCmyk, R::kNone);
-    add(R::kCalCmyk, R::kDecalibrate);
-    add(R::kUncGray, j.grayToBlackOnly ? R::kConvert : R::kNone);
-    add(R::kUncRgb | R::kCalRgb | R::kCalGray | R::kLab, R::kConvert);
-  }
-  add(R::kSpot | R::kRegistration, keepSpots ? R::kConvertAlternate : R::kConvert);
-  return true;
+  std::string icc;
+  std::error_code ec;
+  if (lowerOf(target) != "device-link" && std::filesystem::is_regular_file(target, ec) &&
+      !readFile(target.c_str(), icc))
+    return false;
+  return pdfa::configureColorConversion(opt, target, icc, intent, keepSpots, objects);
 }
 
 void printUsage(std::ostream& out) {
   out << "usage: kura --level "
-               "{1b,1a,2b,2u,2a,3b,3u,3a,4,4f,4e,x1a,x3,x4,x6,e1,vt1,vt3} [--ua] [--lang <tag>] "
-               "(check only: x4p,x5g,x5n,x5pg,x6n,x6p,vt2,ua1) "
+               "{1b,1a,2b,2u,2a,3b,3u,3a,4,4f,4e,x1a,x3,x4,x6,e1,vt1,vt3,none} [--pdf-version 1.3..2.0] [--ua] [--lang <tag>] "
+               "(check only: x4p,x5g,x5n,x5pg,x6n,x6p,vt2,ua1,ua2) "
                "[--output-condition <name>] [--output-condition-info <text>] "
                "[--registry <url>] [--vt-records <ranges>] [--allow-visual-risk] "
                "[--password <pw>] <input.pdf> [output.pdf]\n"
@@ -599,7 +550,7 @@ void printUsage(std::ostream& out) {
                "[--icc-folder <dir>] [--dual (with 2b: also PDF/X-4, with 4: also PDF/X-6)]\n"
                "       kura --check --level <level> [options] <input.pdf>\n"
                "       profiles: [--profile <profile.json>] (level comes from the profile's convert section when --level is left out) "
-               "[--var name=value] [--var-file <json>] [--pages 1-3,5|odd|even] [--merge-inputs a.pdf b.pdf ... out.pdf]\n"
+               "[--var name=value] [--var-file <json>] [--pages 1-3,5|odd|even]\n"
                "       fallbacks: [--reconvert] [--fallback-raster <dpi>] [--fallback-pages <dpi>] [--fallback-no-text] "
                "[--only-pdfa] [--certify] [--quick] [--bookmarks <json|headings>]\n"
                "       jobs: [--job-id <id>] [--trace <log>] [--report <file.html|xml|pdf|txt|json>] "
@@ -729,6 +680,25 @@ int runCompare(const std::string& fileA, const std::string& fileB) {
 }
 #endif
 
+std::filesystem::path selfExecutable(const char* argv0) {
+#if defined(__APPLE__)
+  char buf[4096];
+  uint32_t size = sizeof(buf);
+  if (_NSGetExecutablePath(buf, &size) == 0) return std::filesystem::weakly_canonical(buf);
+#elif defined(_WIN32)
+  char buf[4096];
+  DWORD n = GetModuleFileNameA(nullptr, buf, sizeof(buf));
+  if (n > 0 && n < sizeof(buf)) return std::filesystem::path(std::string(buf, n));
+#else
+  std::error_code ec;
+  auto p = std::filesystem::read_symlink("/proc/self/exe", ec);
+  if (!ec) return p;
+#endif
+  std::error_code ec2;
+  auto p2 = std::filesystem::weakly_canonical(argv0 ? argv0 : "", ec2);
+  return ec2 ? std::filesystem::path(argv0 ? argv0 : "") : p2;
+}
+
 int main(int argc, char** argv) {
   if (argc >= 2 && std::string(argv[1]) == "tool") {
     return kuratools::runTool(argc - 2, argv + 2);
@@ -758,13 +728,20 @@ int main(int argc, char** argv) {
   std::string ocrExe = "tesseract";
   BatchOptions batch;
   std::string colorTarget;
+  std::string cjkFolder;
   int colorIntent = -1;
   bool keepSpots = false;
   unsigned colorObjects = pdfa::ColorRule::kAllObjects;
   std::vector<std::string> iccFolders = systemIccFolders();
+  {
+    std::filesystem::path self = selfExecutable(argv[0]).parent_path();
+    for (const auto& d : {self / "icc", self / ".." / "share" / "kura" / "icc", self / ".." / ".." / "core" / "icc",
+                          self / ".." / ".." / "third_party" / "icc"}) {
+      std::error_code ec;
+      if (std::filesystem::is_directory(d, ec)) iccFolders.push_back(d.string());
+    }
+  }
   std::vector<std::string> positional;
-  bool mergeInputs = false;
-  std::string mergedTemp;
   for (int i = 1; i < argc; ++i) {
     std::string arg = argv[i];
     if (arg == "--version" || arg == "-v") {
@@ -773,10 +750,15 @@ int main(int argc, char** argv) {
     } else if (arg == "--help" || arg == "-h") {
       printUsage(std::cout);
       return kExitOk;
+    } else if (arg == "--pdf-version" && i + 1 < argc) {
+      opt.pdfVersion = argv[++i];
+      static const std::set<std::string> kVersions = {"1.3", "1.4", "1.5", "1.6", "1.7", "2.0"};
+      if (!kVersions.count(opt.pdfVersion)) return usage();
     } else if (arg == "--level" && i + 1 < argc) {
       std::string lv = argv[++i];
-      gPureUa = lv == "ua1";
-      if (gPureUa) opt.level = pdfa::Level::A2U;
+      gPureUa = lv == "ua1" ? 1 : lv == "ua2" ? 2 : 0;
+      if (gPureUa) opt.level = gPureUa == 2 ? pdfa::Level::A4 : pdfa::Level::A2U;
+      else if (lv == "none") opt.noStandard = true;
       else if (!pdfa::levelFromString(lv, opt.level)) return usage();
       haveLevel = true;
     } else if (arg == "--check") {
@@ -839,6 +821,8 @@ int main(int argc, char** argv) {
       opt.rasterizeAllPages = true;
     } else if (arg == "--font-folder" && i + 1 < argc) {
       opt.fontFolder = argv[++i];
+    } else if (arg == "--cjk-font-folder" && i + 1 < argc) {
+      cjkFolder = argv[++i];
     } else if (arg == "--substitute" && i + 1 < argc) {
       std::string spec = argv[++i];
       size_t eq = spec.find('=');
@@ -963,8 +947,6 @@ int main(int argc, char** argv) {
       if (!parseVarFile(txt, opt.profileVars)) return kExitUsage;
     } else if (arg == "--pages" && i + 1 < argc) {
       opt.pageRange = argv[++i];
-    } else if (arg == "--merge-inputs") {
-      mergeInputs = true;
     } else if (arg == "--reconvert") {
       opt.reconvert = true;
     } else if ((arg == "--fallback-raster" || arg == "--fallback-pages") && i + 1 < argc) {
@@ -1010,17 +992,7 @@ int main(int argc, char** argv) {
       positional.push_back(arg);
     }
   }
-  if (mergeInputs && positional.size() >= 2) {
-    output = positional.back();
-    positional.pop_back();
-    std::string err;
-    input = mergePdfs(positional, opt.password, err);
-    if (input.empty()) {
-      std::cerr << err << std::endl;
-      return 2;
-    }
-    mergedTemp = input;
-  } else if (positional.size() > 2) {
+  if (positional.size() > 2) {
     return usage();
   } else {
     if (!positional.empty()) input = positional[0];
@@ -1077,6 +1049,7 @@ int main(int argc, char** argv) {
   };
   if (!haveLevel && !opt.preflightProfile.empty()) {
     opt.levelFromProfile = true;
+    opt.noStandard = true;
     haveLevel = true;
   }
   if (gTraceFile.is_open() || gWatchdogSeconds) {
@@ -1162,6 +1135,41 @@ int main(int argc, char** argv) {
       std::cerr << "--convert-colors takes cmyk, gray, rgb, an ICC file or a profile name"
                 << std::endl;
       return kExitUsage;
+    }
+  }
+
+  {
+    std::vector<std::filesystem::path> dirs;
+    if (!cjkFolder.empty()) dirs.push_back(cjkFolder);
+    if (const char* env = std::getenv("KURA_FONT_DIR")) dirs.push_back(env);
+    std::filesystem::path self = selfExecutable(argv[0]).parent_path();
+    dirs.push_back(self / "fonts-cjk");
+    dirs.push_back(self / ".." / "share" / "kura" / "fonts-cjk");
+    dirs.push_back(self / ".." / ".." / "core" / "fonts-cjk");
+    std::vector<std::filesystem::path> worldDirs;
+    if (const char* env = std::getenv("KURA_FONT_DIR")) worldDirs.push_back(env);
+    worldDirs.push_back(self / "fonts-world");
+    worldDirs.push_back(self / ".." / "share" / "kura" / "fonts-world");
+    worldDirs.push_back(self / ".." / ".." / "core" / "fonts-world");
+    for (const auto& d : worldDirs) {
+      std::error_code ec;
+      if (std::filesystem::exists(d / "NotoSans-Regular.ttf", ec)) {
+        std::string folder = d.string();
+        opt.loadWorldFont = [folder](const std::string& name, std::string& bytes) {
+          return pdfa::loadWorldFontFromFolder(folder, name, bytes);
+        };
+        break;
+      }
+    }
+    for (const auto& d : dirs) {
+      std::error_code ec;
+      if (std::filesystem::exists(d / "NotoSansSC-Regular.ttf", ec)) {
+        std::string folder = d.string();
+        opt.loadCjkFont = [folder](const std::string& script, bool bold, std::string& bytes) {
+          return pdfa::loadCjkFontFromFolder(folder, script, bold, bytes);
+        };
+        break;
+      }
     }
   }
 
@@ -1311,6 +1319,5 @@ int main(int argc, char** argv) {
   }
 
   int rc = runOne(opt, embedSource, input, output);
-  if (!mergedTemp.empty()) std::filesystem::remove(mergedTemp);
   return rc;
 }

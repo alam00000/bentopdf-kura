@@ -1,0 +1,12 @@
+{
+  "kura-profile": 1,
+  "name": "Turn every page into an image (300 ppi), keeping the text",
+  "description": "Renders each page as a 300 ppi image; the original text stays as invisible, searchable text.",
+  "checks": [],
+  "fixes": [
+    {
+      "fix": "page.rasterize",
+      "resolution": "300 ppi"
+    }
+  ]
+}

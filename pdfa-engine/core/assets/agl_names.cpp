@@ -4533,4 +4533,13 @@ uint32_t aglNameToUnicode(const std::string& name) {
   if (it != end && n == it->name) return it->uni;
   return parseUniStyle(n);
 }
+
+std::string unicodeToAglName(uint32_t uni) {
+  const char* best = nullptr;
+  for (unsigned int i = 0; i < kAglCount; ++i) {
+    if (kAgl[i].uni != uni) continue;
+    if (!best || std::strlen(kAgl[i].name) < std::strlen(best)) best = kAgl[i].name;
+  }
+  return best ? best : std::string();
+}
 }

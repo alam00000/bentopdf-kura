@@ -1,9 +1,12 @@
 #include <lcms2.h>
 #include <qpdf/Pl_Buffer.hh>
 #include <qpdf/QPDF.hh>
+#include <qpdf/QPDFCryptoProvider.hh>
 #include <qpdf/QPDFPageDocumentHelper.hh>
 #include <qpdf/QPDFPageObjectHelper.hh>
 
+#include <algorithm>
+#include <cctype>
 #include <cstring>
 #include <functional>
 #include <map>
@@ -18,6 +21,7 @@
 #include "colorx.hh"
 #include "ctx.hh"
 #include "fonts_ft.hh"
+#include "images.hh"
 #include "passes.hh"
 #include "limits.hh"
 #include "util.hh"
@@ -33,7 +37,9 @@ struct ColorUsage {
   std::vector<QPDFObjectHandle> rgbScopes;
   std::set<QPDFObjGen> rgbScopeSeen;
   std::vector<QPDFObjectHandle> cmykAlternates;
+  std::vector<QPDFObjectHandle> rgbPatternBases;
   std::vector<QPDFObjectHandle> processCmyk;
+  bool pageConflict = false;
 };
 
 void noteScope(std::vector<QPDFObjectHandle>& list, std::set<QPDFObjGen>& seen,
@@ -50,6 +56,7 @@ void classifySpace(Ctx& ctx, QPDFObjectHandle cs, QPDFObjectHandle res, ColorUsa
 
 thread_local int tBlendFamily = 0;
 thread_local bool tPageIntent = false;
+thread_local int tPageFamily = 0;
 
 int independentFamily(QPDFObjectHandle cs) {
   if (cs.isArray() && cs.getArrayNItems() >= 2) {
@@ -69,9 +76,13 @@ bool defaultCovers(Ctx& ctx, QPDFObjectHandle res, const char* key) {
     std::string k = key;
     if ((k == "/DefaultRGB" && tBlendFamily == 3) || (k == "/DefaultCMYK" && tBlendFamily == 4)) return true;
   }
+  if (ctx.opt.verifyOnly && ctx.part >= 4 && tPageFamily) {
+    std::string k = key;
+    if ((k == "/DefaultRGB" && tPageFamily == 3) || (k == "/DefaultCMYK" && tPageFamily == 4)) return true;
+  }
   if (!ctx.opt.verifyOnly || !res.isDictionary()) return false;
   QPDFObjectHandle csd = res.getKey("/ColorSpace");
-  return csd.isDictionary() && !csd.getKey(key).isNull();
+  return csd.isDictionary() && independentFamily(csd.getKey(key)) > 0;
 }
 
 void classifyByName(Ctx& ctx, const std::string& name, QPDFObjectHandle res, ColorUsage& usage,
@@ -82,12 +93,14 @@ void classifyByName(Ctx& ctx, const std::string& name, QPDFObjectHandle res, Col
   if (name == "/DeviceRGB" || name == "/RGB" || name == "/CalRGB") {
     if (name != "/CalRGB") {
       usage.rgb = true;
+      usage.pageConflict = usage.pageConflict || tPageIntent;
       noteScope(usage.rgbScopes, usage.rgbScopeSeen, res);
     }
     return;
   }
   if (name == "/DeviceCMYK" || name == "/CMYK") {
     usage.cmyk = true;
+    usage.pageConflict = usage.pageConflict || tPageIntent;
     noteScope(usage.cmykScopes, usage.cmykScopeSeen, res);
     return;
   }
@@ -118,6 +131,8 @@ void classifySpace(Ctx& ctx, QPDFObjectHandle cs, QPDFObjectHandle res, ColorUsa
     return;
   }
   if (family == "/Indexed" || family == "/I") {
+    QPDFObjectHandle base = cs.getArrayNItems() >= 2 ? cs.getArrayItem(1) : QPDFObjectHandle::newNull();
+    if (ctx.opt.verifyOnly && (nameIs(base, "/RGB") || nameIs(base, "/CMYK") || nameIs(base, "/G"))) return;
     if (cs.getArrayNItems() >= 2) classifySpace(ctx, cs.getArrayItem(1), res, usage, depth + 1);
     return;
   }
@@ -153,6 +168,8 @@ void classifySpace(Ctx& ctx, QPDFObjectHandle cs, QPDFObjectHandle res, ColorUsa
     return;
   }
   if (family == "/Pattern" && cs.getArrayNItems() >= 2) {
+    if (ctx.opt.verifyOnly) return;
+    if (nameIs(cs.getArrayItem(1), "/DeviceRGB")) usage.rgbPatternBases.push_back(cs);
     classifySpace(ctx, cs.getArrayItem(1), res, usage, depth + 1);
     return;
   }
@@ -192,6 +209,11 @@ class OpScanner : public QPDFObjectHandle::ParserCallbacks {
         usage.gray = true;
       }
     }
+    if (obj.isOperator() && obj.getOperatorValue() == "d1") uncolored = true;
+    if (obj.isOperator() && uncolored) {
+      operands.clear();
+      return;
+    }
     if (obj.isOperator()) {
       std::string op = obj.getOperatorValue();
       if ((op == "rg" || op == "RG") && defaultCovers(ctx, res, "/DefaultRGB")) {
@@ -199,9 +221,11 @@ class OpScanner : public QPDFObjectHandle::ParserCallbacks {
       } else if ((op == "g" || op == "G") && defaultCovers(ctx, res, "/DefaultGray")) {
       } else if (op == "rg" || op == "RG") {
         usage.rgb = true;
+        usage.pageConflict = usage.pageConflict || tPageIntent;
         noteScope(usage.rgbScopes, usage.rgbScopeSeen, res);
       } else if (op == "k" || op == "K") {
         usage.cmyk = true;
+        usage.pageConflict = usage.pageConflict || tPageIntent;
         noteScope(usage.cmykScopes, usage.cmykScopeSeen, res);
       } else if (op == "g" || op == "G") {
         usage.gray = true;
@@ -252,6 +276,7 @@ class OpScanner : public QPDFObjectHandle::ParserCallbacks {
   std::vector<QPDFObjectHandle> operands;
   bool inImage = false;
   bool pendingCs = false;
+  bool uncolored = false;
 };
 
 void scanContent(Ctx& ctx, QPDFObjectHandle contentHolder, QPDFObjectHandle res,
@@ -268,10 +293,21 @@ void scanContent(Ctx& ctx, QPDFObjectHandle contentHolder, QPDFObjectHandle res,
   }
 }
 
-thread_local const std::set<QPDFObjGen>* tColorReached = nullptr;
+thread_local const GraphicsUse* tColorReached = nullptr;
 
 bool unreached(QPDFObjectHandle o) {
-  return tColorReached && o.isIndirect() && !tColorReached->count(o.getObjGen());
+  return tColorReached && !tColorReached->has(o);
+}
+
+QPDFObjectHandle withoutDefaults(QPDFObjectHandle res) {
+  QPDFObjectHandle out = res.isDictionary() ? res.shallowCopy() : QPDFObjectHandle::newDictionary();
+  QPDFObjectHandle csd = out.getKey("/ColorSpace");
+  if (csd.isDictionary()) {
+    csd = csd.shallowCopy();
+    for (const char* k : {"/DefaultRGB", "/DefaultCMYK", "/DefaultGray"}) csd.removeKey(k);
+    out.replaceKey("/ColorSpace", csd);
+  }
+  return out;
 }
 
 void scanResources(Ctx& ctx, QPDFObjectHandle res, Visited& visited, ColorUsage& usage,
@@ -282,14 +318,18 @@ void scanResources(Ctx& ctx, QPDFObjectHandle res, Visited& visited, ColorUsage&
   if (xod.isDictionary()) {
     for (const std::string& k : xod.getKeys()) {
       QPDFObjectHandle xo = xod.getKey(k);
-      if (!xo.isStream() || unreached(xo) || !visited.enter(xo)) continue;
+      if (!xo.isStream() || unreached(xo)) continue;
       QPDFObjectHandle d = xo.getDict();
       std::string subtype = nameOf(d.getKey("/Subtype"));
       if (subtype == "/Image") {
         classifySpace(ctx, d.getKey("/ColorSpace"), res, usage, 0);
-      } else if (subtype == "/Form") {
-        QPDFObjectHandle inner =
-            d.getKey("/Resources").isDictionary() ? d.getKey("/Resources") : res;
+        continue;
+      }
+      if (!visited.enter(xo) && d.getKey("/Resources").isDictionary()) continue;
+      if (subtype == "/Form") {
+        QPDFObjectHandle inner = d.getKey("/Resources").isDictionary() ? d.getKey("/Resources")
+                                 : tColorReached                       ? withoutDefaults(res)
+                                                                       : res;
         QPDFObjectHandle group = d.getKey("/Group");
         if (group.isDictionary()) classifySpace(ctx, group.getKey("/CS"), inner, usage, 0);
         int savedFamily = tBlendFamily;
@@ -315,7 +355,7 @@ void scanResources(Ctx& ctx, QPDFObjectHandle res, Visited& visited, ColorUsage&
   if (pat.isDictionary()) {
     for (const std::string& k : pat.getKeys()) {
       QPDFObjectHandle p = pat.getKey(k);
-      if (p.isStream() && unreached(p)) continue;
+      if (unreached(p)) continue;
       QPDFObjectHandle pd = p.isStream() ? p.getDict() : p;
       if (pd.isDictionary() && pd.getKey("/Shading").isInitialized()) {
         QPDFObjectHandle sh = pd.getKey("/Shading");
@@ -354,7 +394,7 @@ void scanResources(Ctx& ctx, QPDFObjectHandle res, Visited& visited, ColorUsage&
   if (fonts.isDictionary()) {
     for (const std::string& k : fonts.getKeys()) {
       QPDFObjectHandle fnt = fonts.getKey(k);
-      if (!fnt.isDictionary()) continue;
+      if (!fnt.isDictionary() || unreached(fnt)) continue;
       QPDFObjectHandle cp = fnt.getKey("/CharProcs");
       if (cp.isDictionary() && visited.enter(cp)) {
         QPDFObjectHandle inner =
@@ -389,7 +429,7 @@ bool resTransparent(QPDFObjectHandle res, Visited& v, int depth) {
     if (!xo.isStream()) continue;
     QPDFObjectHandle d = xo.getDict();
     if (nameIs(d.getKey("/Subtype"), "/Image")) {
-      if (d.getKey("/SMask").isStream() || (d.getKey("/SMaskInData").isInteger() && d.getKey("/SMaskInData").getIntValue() > 0)) return true;
+      if (d.getKey("/SMask").isStream()) return true;
     } else if (nameIs(d.getKey("/Subtype"), "/Form")) {
       if (d.getKey("/Group").isDictionary() && nameIs(d.getKey("/Group").getKey("/S"), "/Transparency")) return true;
       if (resTransparent(d.getKey("/Resources"), v, depth + 1)) return true;
@@ -410,8 +450,13 @@ bool resTransparent(QPDFObjectHandle res, Visited& v, int depth) {
 
 int pagesNeedingBlendSpace(Ctx& ctx) {
   int n = 0;
+  GraphicsUse use;
+  if (ctx.opt.verifyOnly) use = collectGraphicsUse(ctx.pdf);
+  size_t index = 0;
   for (auto& ph : QPDFPageDocumentHelper(ctx.pdf).getAllPages()) {
     QPDFObjectHandle page = ph.getObjectHandle();
+    bool paintsTransparency = index < use.pageTransparent.size() && use.pageTransparent[index];
+    ++index;
     QPDFObjectHandle group = page.getKey("/Group");
     if (group.isDictionary() && !group.getKey("/CS").isNull()) continue;
     QPDFObjectHandle pois = page.getKey("/OutputIntents");
@@ -420,6 +465,10 @@ int pagesNeedingBlendSpace(Ctx& ctx) {
       pageIntent = pageIntent || nameIs(pois.getArrayItem(i).getKey("/S"), "/GTS_PDFA1");
     }
     if (pageIntent) continue;
+    if (ctx.opt.verifyOnly) {
+      if (paintsTransparency) ++n;
+      continue;
+    }
     Visited v;
     bool transparent = group.isDictionary() && nameIs(group.getKey("/S"), "/Transparency");
     QPDFObjectHandle annots = page.getKey("/Annots");
@@ -441,11 +490,50 @@ int pagesNeedingBlendSpace(Ctx& ctx) {
   return n;
 }
 
+std::string registeredCondition(const std::string& desc) {
+  static const std::pair<const char*, const char*> kConditions[] = {
+      {"Coated FOGRA27", "FOGRA27"}, {"Europe ISO Coated FOGRA27", "FOGRA27"}, {"Web Coated FOGRA28", "FOGRA28"},
+      {"Uncoated FOGRA29", "FOGRA29"}, {"Coated FOGRA39", "FOGRA39"}, {"ISO Coated v2 (ECI)", "FOGRA39"},
+      {"ISO Coated v2 300% (ECI)", "FOGRA39"}, {"FOGRA39", "FOGRA39"}, {"PSO Coated v3", "FOGRA51"},
+      {"PSO Uncoated v3 (FOGRA52)", "FOGRA52"}, {"Coated GRACoL 2006", "CGATS TR 006"},
+      {"U.S. Web Coated (SWOP) v2", "CGATS TR 001"}, {"Web Coated SWOP 2006 Grade 3 Paper", "CGATS TR 003"},
+      {"SWOP2006_Coated3v2.icc", "CGATS TR 003"}, {"Web Coated SWOP 2006 Grade 5 Paper", "CGATS TR 005"},
+      {"Japan Color 2001 Coated", "JC200103"}, {"Japan Color 2001 Uncoated", "JC200104"},
+      {"Japan Color 2002 Newspaper", "JCN2002"}, {"Japan Color 2003 Web Coated", "JCW2003"},
+      {"sRGB IEC61966-2.1", "sRGB IEC61966-2.1"}};
+  for (const auto& c : kConditions)
+    if (desc.rfind(c.first, 0) == 0) return c.second;
+  return std::string();
+}
+
+bool registeredIdentifier(QPDFObjectHandle oi) {
+  QPDFObjectHandle id = oi.getKey("/OutputConditionIdentifier");
+  QPDFObjectHandle reg = oi.getKey("/RegistryName");
+  if (!id.isString() || !reg.isString() || reg.getUTF8Value().find("color.org") == std::string::npos) return false;
+  std::string v = id.getUTF8Value();
+  for (const char* p : {"FOGRA", "CGATS", "JC2", "JCN", "JCW", "IFRA", "SNAP", "GRACoL", "SWOP", "GRACOL"}) {
+    if (v.rfind(p, 0) == 0) return true;
+  }
+  return false;
+}
+
+bool usesIndependentColor(Ctx& ctx) {
+  for (QPDFObjectHandle obj : ctx.pdf.getAllObjects()) {
+    std::string text = obj.isStream() ? obj.getDict().unparseResolved() : obj.unparseResolved();
+    for (const char* f : {"/ICCBased", "/Lab", "/CalRGB", "/CalGray"}) {
+      size_t at = text.find(f);
+      if (at != std::string::npos && (at + std::strlen(f) >= text.size() || !std::isalnum(static_cast<unsigned char>(text[at + std::strlen(f)]))))
+        return true;
+    }
+  }
+  return false;
+}
+
 ColorUsage scanUsage(Ctx& ctx) {
   ColorUsage usage;
-  std::set<QPDFObjGen> reached;
+  GraphicsUse reached;
   if (ctx.opt.verifyOnly) {
-    collectFontUse(ctx.pdf, &reached);
+    reached = collectGraphicsUse(ctx.pdf);
     tColorReached = &reached;
   }
   struct Reset {
@@ -453,6 +541,7 @@ ColorUsage scanUsage(Ctx& ctx) {
       tColorReached = nullptr;
       tBlendFamily = 0;
       tPageIntent = false;
+      tPageFamily = 0;
     }
   } reset;
   Visited visited;
@@ -465,15 +554,16 @@ ColorUsage scanUsage(Ctx& ctx) {
     QPDFObjectHandle group = page.getKey("/Group");
     tBlendFamily = group.isDictionary() ? independentFamily(group.getKey("/CS")) : 0;
     tPageIntent = false;
+    tPageFamily = 0;
     QPDFObjectHandle pois = page.getKey("/OutputIntents");
     for (int i = 0; ctx.part >= 4 && pois.isArray() && i < pois.getArrayNItems(); ++i) {
       QPDFObjectHandle prof = pois.getArrayItem(i).getKey("/DestOutputProfile");
       if (nameIs(pois.getArrayItem(i).getKey("/S"), "/GTS_PDFA1") && prof.isStream()) {
-        tBlendFamily = prof.getDict().getKey("/N").isInteger() ? static_cast<int>(prof.getDict().getKey("/N").getIntValue()) : 3;
-        tPageIntent = true;
+        tPageFamily = prof.getDict().getKey("/N").isInteger() ? static_cast<int>(prof.getDict().getKey("/N").getIntValue()) : 3;
+        tPageIntent = ctx.opt.verifyOnly;
       }
     }
-    if (group.isDictionary()) classifySpace(ctx, group.getKey("/CS"), res, usage, 0);
+    if (group.isDictionary() && !(ctx.isE() && ctx.opt.verifyOnly)) classifySpace(ctx, group.getKey("/CS"), res, usage, 0);
     scanContent(ctx, page.getKey("/Contents"), res, usage, true);
     scanResources(ctx, res, visited, usage);
     QPDFObjectHandle annots = page.getKey("/Annots");
@@ -488,7 +578,7 @@ ColorUsage scanUsage(Ctx& ctx) {
         for (QPDFObjectHandle s : streams) {
           if (!visited.enter(s)) continue;
           QPDFObjectHandle inner = s.getDict().getKey("/Resources");
-          scanContent(ctx, s, inner.isDictionary() ? inner : res, usage, true);
+          scanContent(ctx, s, inner.isDictionary() ? inner : ctx.opt.verifyOnly ? withoutDefaults(res) : res, usage, true);
           scanResources(ctx, inner, visited, usage);
         }
       }
@@ -540,15 +630,30 @@ bool validExistingProfile(Ctx& ctx, QPDFObjectHandle profile, std::string& csOut
     auto buf = profile.getStreamData(qpdf_dl_all);
     if (buf->getSize() < 132) return false;
     header.assign(reinterpret_cast<const char*>(buf->getBuffer()), 132);
+    if (!ctx.isA()) {
+      const unsigned char* b = buf->getBuffer();
+      unsigned long declared = (static_cast<unsigned long>(b[0]) << 24) | (static_cast<unsigned long>(b[1]) << 16) |
+                               (static_cast<unsigned long>(b[2]) << 8) | b[3];
+      if (declared < 132 || declared > buf->getSize()) return false;
+      cmsHPROFILE h = cmsOpenProfileFromMem(b, static_cast<cmsUInt32Number>(declared));
+      if (!h) return false;
+      bool readable = cmsIsTag(h, cmsSigMediaWhitePointTag) || cmsIsTag(h, cmsSigAToB0Tag) ||
+                      cmsIsTag(h, cmsSigGrayTRCTag) || cmsIsTag(h, cmsSigRedTRCTag);
+      if (readable && cmsIsTag(h, cmsSigAToB0Tag)) readable = cmsReadTag(h, cmsSigAToB0Tag) != nullptr;
+      cmsCloseProfile(h);
+      if (!readable) return false;
+    }
   } catch (...) {
     return false;
   }
   int major = static_cast<unsigned char>(header[8]);
   double version = major + ((static_cast<unsigned char>(header[9]) >> 4) / 10.0);
-  double bound = ctx.part == 1 ? 3.0 : 5.0;
-  if (version >= bound) return false;
+  double bound = ctx.pdf14Target() ? 3.0 : 5.0;
+  if (version >= bound || version < 2.0) return false;
+  if (!ctx.isA() && major != 2 && major != 4) return false;
   std::string devClass = header.substr(12, 4);
   if (devClass != "prtr" && devClass != "mntr") return false;
+  if (ctx.isX() && devClass != "prtr") return false;
   std::string cs = header.substr(16, 4);
   if (cs != "RGB " && cs != "CMYK" && cs != "GRAY") return false;
   csOut = cs;
@@ -580,27 +685,28 @@ int altComponents(QPDFObjectHandle alt) {
 
 void collectSpecialSpaces(QPDFObjectHandle o, Visited& visited,
                           std::vector<QPDFObjectHandle>& seps,
-                          std::vector<QPDFObjectHandle>& dns, int depth = 0) {
+                          std::vector<QPDFObjectHandle>& dns, const GraphicsUse* use, int depth = 0) {
   if (depth > kMaxResourceNest) return;
   if (o.isIndirect() && !visited.enter(o)) return;
   if (o.isStream()) {
-    collectSpecialSpaces(o.getDict(), visited, seps, dns, depth + 1);
+    collectSpecialSpaces(o.getDict(), visited, seps, dns, use, depth + 1);
     return;
   }
   if (o.isArray()) {
     std::string fam = o.getArrayNItems() >= 1 ? nameOf(o.getArrayItem(0)) : "";
-    if (fam == "/Separation" && o.getArrayNItems() >= 3) seps.push_back(o);
-    if (fam == "/DeviceN" && o.getArrayNItems() >= 3) dns.push_back(o);
+    bool wanted = !use || use->has(o);
+    if (wanted && fam == "/Separation" && o.getArrayNItems() >= 3) seps.push_back(o);
+    if (wanted && fam == "/DeviceN" && o.getArrayNItems() >= 3) dns.push_back(o);
     for (int i = 0; i < o.getArrayNItems(); ++i) {
       QPDFObjectHandle v = o.getArrayItem(i);
-      if (!v.isIndirect()) collectSpecialSpaces(v, visited, seps, dns, depth + 1);
+      if (!v.isIndirect()) collectSpecialSpaces(v, visited, seps, dns, use, depth + 1);
     }
     return;
   }
   if (o.isDictionary()) {
     for (const std::string& k : o.getKeys()) {
       QPDFObjectHandle v = o.getKey(k);
-      if (!v.isIndirect()) collectSpecialSpaces(v, visited, seps, dns, depth + 1);
+      if (!v.isIndirect()) collectSpecialSpaces(v, visited, seps, dns, use, depth + 1);
     }
   }
 }
@@ -813,10 +919,13 @@ bool sameColorRef(QPDFObjectHandle a, QPDFObjectHandle b) {
 void fixSpecialColorSpaces(Ctx& ctx) {
   std::vector<QPDFObjectHandle> seps, dns;
   Visited visited;
+  GraphicsUse use;
+  bool gate = ctx.opt.verifyOnly && ctx.isA();
+  if (gate) use = collectGraphicsUse(ctx.pdf);
   for (QPDFObjectHandle obj : ctx.pdf.getAllObjects()) {
-    collectSpecialSpaces(obj, visited, seps, dns);
+    collectSpecialSpaces(obj, visited, seps, dns, gate ? &use : nullptr);
   }
-  int renamed = 0, deduped = 0, colorants = 0;
+  int renamed = 0, deduped = 0, colorants = 0, requiredColorants = 0;
   auto generatedName = [](const std::string& bare) {
     char buf[24];
     std::snprintf(buf, sizeof(buf), "/C%08X", fnv1a32(bare));
@@ -835,7 +944,7 @@ void fixSpecialColorSpaces(Ctx& ctx) {
     fixName(sep, 1);
     if (sep.getArrayNItems() < 4) continue;
     std::string name = nameOf(sep.getArrayItem(1));
-    if (name.empty() || name == "/All" || name == "/None") continue;
+    if (name.empty() || name == "/None") continue;
     auto it = canon.find(name);
     if (it == canon.end()) {
       QPDFObjectHandle alt = sep.getArrayItem(2);
@@ -878,7 +987,7 @@ void fixSpecialColorSpaces(Ctx& ctx) {
         }
       }
     }
-    if (!ctx.isA() || ctx.part < 2) continue;
+    if (!((ctx.isA() && ctx.part >= 2) || (ctx.isX() && !ctx.pdf14Target()))) continue;
     if (!names.isArray()) continue;
     if (dn.getArrayNItems() < 4) {
       ++malformedDn;
@@ -926,11 +1035,17 @@ void fixSpecialColorSpaces(Ctx& ctx) {
     QPDFObjectHandle alt = dn.getArrayItem(2);
     int comps = altComponents(alt);
     bool added = false;
+    std::set<std::string> processNames = {"/Cyan", "/Magenta", "/Yellow", "/Black"};
+    QPDFObjectHandle procComps = attrs.getKey("/Process").isDictionary() ? attrs.getKey("/Process").getKey("/Components")
+                                                                           : QPDFObjectHandle::newNull();
+    for (int i = 0; procComps.isArray() && i < procComps.getArrayNItems(); ++i) processNames.insert(nameOf(procComps.getArrayItem(i)));
     for (int i = 0; i < names.getArrayNItems(); ++i) {
       QPDFObjectHandle nm = names.getArrayItem(i);
       if (!nm.isName()) continue;
       std::string name = nm.getName();
       if (name == "/None" || colDict.hasKey(name)) continue;
+      if (processNames.count(name)) continue;
+      ++requiredColorants;
       auto known = canon.find(name);
       if (known != canon.end()) {
         QPDFObjectHandle sep = QPDFObjectHandle::newArray();
@@ -988,7 +1103,7 @@ void fixSpecialColorSpaces(Ctx& ctx) {
     ctx.issue("COLORANTS_COMPLETED",
               "added " + std::to_string(colorants) +
                   " missing DeviceN /Colorants entr(y/ies)",
-              true);
+              !gate || requiredColorants > 0);
   }
 }
 
@@ -1095,7 +1210,7 @@ void fixIccIdenticalToIntent(Ctx& ctx, QPDFObjectHandle keepIntent) {
       ++opm;
     }
   }
-  if ((replaced || opm) && !ctx.opt.verifyOnly) {
+  if (ctx.opt.verifyOnly ? ctx.isX() && replaced > 0 : replaced || opm) {
     ctx.issue("ICC_INTENT_DEDUPED",
               "replaced " + std::to_string(replaced) +
                   " ICCBased space(s) identical to the output intent with DeviceCMYK and "
@@ -1219,7 +1334,7 @@ bool injectDefaultSpace(Ctx&, std::vector<QPDFObjectHandle>& scopes, const char*
       csd = QPDFObjectHandle::newDictionary();
       res.replaceKey("/ColorSpace", csd);
     }
-    if (!csd.hasKey(key)) {
+    if (independentFamily(csd.getKey(key)) == 0) {
       csd.replaceKey(key, defRef);
       changed = true;
     }
@@ -1235,7 +1350,9 @@ void passColorPrint(Ctx& ctx, ColorUsage& usage) {
   QPDFObjectHandle keepIntent;
   QPDFObjectHandle existing = root.getKey("/OutputIntents");
   bool wantColorants = ctx.opt.level == Level::X5N || ctx.opt.level == Level::X6N;
-  bool wantChecksum = ctx.opt.level == Level::X6N || ctx.opt.level == Level::X6P;
+  bool wantChecksum = ctx.opt.level == Level::X4P || ctx.opt.level == Level::X5N || ctx.opt.level == Level::X5PG ||
+                      ctx.opt.level == Level::X6N || ctx.opt.level == Level::X6P;
+  bool wantProcessCs = ctx.opt.level == Level::X4P || ctx.opt.level == Level::X5PG;
   auto wellFormedProfileRef = [&](QPDFObjectHandle oi, std::string& why) {
     QPDFObjectHandle ref = oi.getKey("/DestOutputProfileRef");
     if (!ref.isDictionary()) {
@@ -1248,6 +1365,24 @@ void passColorPrint(Ctx& ctx, ColorUsage& usage) {
     if (!hasUrl && !hasFile) {
       why = "the press-profile reference names no address to fetch the profile from";
       return false;
+    }
+    for (int i = 0; urls.isArray() && i < urls.getArrayNItems(); ++i) {
+      QPDFObjectHandle u = urls.getArrayItem(i);
+      if (!u.isDictionary() && !u.isString()) {
+        why = "each address in the press-profile reference must be a file specification";
+        return false;
+      }
+    }
+    if (!ref.getKey("/ProfileName").isString()) {
+      why = "the press-profile reference must name the profile it points to";
+      return false;
+    }
+    if (wantProcessCs) {
+      std::string pcs = ref.getKey("/ProfileCS").isString() ? ref.getKey("/ProfileCS").getStringValue() : "";
+      if (pcs != "GRAY" && pcs != "RGB " && pcs != "CMYK") {
+        why = "the press-profile reference must record a gray, RGB or CMYK profile colour space";
+        return false;
+      }
     }
     QPDFObjectHandle ver = ref.getKey("/ICCVersion");
     if (!ver.isString() || ver.getStringValue().size() != 4) {
@@ -1279,10 +1414,10 @@ void passColorPrint(Ctx& ctx, ColorUsage& usage) {
       why = "a colorant table is only allowed in the multi-colorant flavours";
       return false;
     }
-    if (wantChecksum) {
+    if (wantChecksum && (ref.hasKey("/CheckSum") || ctx.pdf20Print())) {
       QPDFObjectHandle ck = ref.getKey("/CheckSum");
       if (!ck.isString() || ck.getStringValue().size() != 16) {
-        why = "PDF 2.0 print flavours need a 16-byte checksum of the referenced profile";
+        why = "the press-profile reference needs a 16-byte checksum of the profile it points to";
         return false;
       }
     }
@@ -1293,12 +1428,12 @@ void passColorPrint(Ctx& ctx, ColorUsage& usage) {
       QPDFObjectHandle oi = existing.getArrayItem(i);
       if (oi.isDictionary() && nameIs(oi.getKey("/S"), wantSubtype)) {
         std::string cs;
-        bool embeddedOk = validExistingProfile(ctx, oi.getKey("/DestOutputProfile"), cs) &&
-                          oi.getKey("/OutputConditionIdentifier").isString();
+        bool idOk = oi.getKey("/OutputConditionIdentifier").isString() &&
+                    !oi.getKey("/OutputConditionIdentifier").getStringValue().empty();
+        bool embeddedOk = validExistingProfile(ctx, oi.getKey("/DestOutputProfile"), cs) && idOk;
         if (ctx.externalIntent()) {
           std::string why;
-          bool refOk = wellFormedProfileRef(oi, why) &&
-                       oi.getKey("/OutputConditionIdentifier").isString();
+          bool refOk = wellFormedProfileRef(oi, why) && idOk;
           if (refOk) {
             anchor = "CMYK";
             keepIntent = oi;
@@ -1343,8 +1478,19 @@ void passColorPrint(Ctx& ctx, ColorUsage& usage) {
             break;
           }
         }
+        if (!embeddedOk && ctx.opt.verifyOnly && !oi.getKey("/DestOutputProfile").isStream() && ctx.pdf14Target() &&
+            registeredIdentifier(oi) && !usesIndependentColor(ctx)) {
+          anchor = "CMYK";
+          keepIntent = oi;
+          break;
+        }
         if (embeddedOk) {
-          if (ctx.isE() || cs == "CMYK" || (cs == "RGB " && !ctx.cmykIntentOnly())) {
+          bool fits = ctx.isE() || cs == "CMYK" || ((cs == "RGB " || cs == "GRAY") && !ctx.cmykIntentOnly());
+          if (fits && !ctx.isE() && !ctx.opt.verifyOnly) {
+            if (cs == "RGB " && (usage.cmyk || usage.gray)) fits = false;
+            if (cs == "GRAY" && (usage.cmyk || usage.rgb)) fits = false;
+          }
+          if (fits) {
             anchor = cs;
             keepIntent = oi;
             break;
@@ -1391,7 +1537,16 @@ void passColorPrint(Ctx& ctx, ColorUsage& usage) {
       }
     }
     ref.replaceKey("/ColorantTable", table);
-    if (!desc.empty()) ref.replaceKey("/ProfileName", QPDFObjectHandle::newUnicodeString(desc));
+    ref.replaceKey("/ProfileName", QPDFObjectHandle::newUnicodeString(desc.empty() ? "Custom" : desc));
+    {
+      auto c = QPDFCryptoProvider::getImpl();
+      c->MD5_init();
+      c->MD5_update(reinterpret_cast<const unsigned char*>(p.data()), p.size());
+      c->MD5_finalize();
+      QPDFCryptoImpl::MD5_Digest dg;
+      c->MD5_digest(dg);
+      ref.replaceKey("/CheckSum", QPDFObjectHandle::newString(std::string(reinterpret_cast<const char*>(dg), sizeof(dg))));
+    }
     QPDFObjectHandle oi = QPDFObjectHandle::newDictionary();
     oi.replaceKey("/Type", QPDFObjectHandle::newName("/OutputIntent"));
     oi.replaceKey("/S", QPDFObjectHandle::newName("/GTS_PDFX"));
@@ -1416,8 +1571,24 @@ void passColorPrint(Ctx& ctx, ColorUsage& usage) {
               true);
   }
 
+  auto colouredAnnots = [&](bool strip) {
+    int n = 0;
+    for (auto& ph : QPDFPageDocumentHelper(ctx.pdf).getAllPages()) {
+      QPDFObjectHandle annots = ph.getObjectHandle().getKey("/Annots");
+      for (int i = 0; annots.isArray() && i < annots.getArrayNItems(); ++i) {
+        QPDFObjectHandle a = annots.getArrayItem(i);
+        if (!a.isDictionary()) continue;
+        for (const char* key : {"/C", "/IC"}) {
+          if (!a.hasKey(key)) continue;
+          ++n;
+          if (strip) a.removeKey(key);
+        }
+      }
+    }
+    return n;
+  };
   if (!keepIntent.isInitialized()) {
-    bool wantCmyk = ctx.isX() || (usage.cmyk && !usage.rgb);
+    bool wantCmyk = ctx.isX() || (usage.cmyk && !usage.rgb && !(ctx.isE() && colouredAnnots(false)));
     const unsigned char* data = wantCmyk ? kCmykIcc : kSrgbIcc;
     unsigned int len = wantCmyk ? kCmykIccLen : kSrgbIccLen;
     if (ctx.opt.destProfile.size() >= 132) {
@@ -1439,13 +1610,16 @@ void passColorPrint(Ctx& ctx, ColorUsage& usage) {
     QPDFObjectHandle oi = QPDFObjectHandle::newDictionary();
     oi.replaceKey("/Type", QPDFObjectHandle::newName("/OutputIntent"));
     oi.replaceKey("/S", QPDFObjectHandle::newName(wantSubtype));
-    std::string ident = ctx.opt.outputConditionIdentifier.empty()
-                            ? std::string("Custom")
-                            : ctx.opt.outputConditionIdentifier;
-    std::string info = ctx.opt.outputConditionInfo.empty()
-                           ? (wantCmyk ? "Coated GRACoL 2006"
-                                       : "sRGB IEC61966-2.1")
-                           : ctx.opt.outputConditionInfo;
+    std::string usedDesc = iccDescription(std::string(reinterpret_cast<const char*>(data), len));
+    std::string registered = registeredCondition(usedDesc);
+    std::string ident = !ctx.opt.outputConditionIdentifier.empty() ? ctx.opt.outputConditionIdentifier
+                        : !registered.empty()                     ? registered
+                                                                  : std::string("Custom");
+    std::string info = !ctx.opt.outputConditionInfo.empty() ? ctx.opt.outputConditionInfo
+                       : !usedDesc.empty()                  ? usedDesc
+                                                            : std::string(wantCmyk ? "Coated GRACoL 2006" : "sRGB IEC61966-2.1");
+    if (!registered.empty() && ctx.opt.outputConditionRegistry.empty())
+      oi.replaceKey("/RegistryName", QPDFObjectHandle::newString("http://www.color.org"));
     oi.replaceKey("/OutputConditionIdentifier", QPDFObjectHandle::newString(ident));
     oi.replaceKey("/OutputCondition", QPDFObjectHandle::newString(info));
     oi.replaceKey("/Info", QPDFObjectHandle::newString(info));
@@ -1478,6 +1652,13 @@ void passColorPrint(Ctx& ctx, ColorUsage& usage) {
     }
   }
   bool dropped = existing.isArray() && existing.getArrayNItems() > kept;
+  if (ctx.opt.verifyOnly) {
+    int same = 0;
+    for (int i = 0; existing.isArray() && i < existing.getArrayNItems(); ++i) {
+      if (nameIs(existing.getArrayItem(i).getKey("/S"), wantSubtype)) ++same;
+    }
+    dropped = same > 1;
+  }
   root.replaceKey("/OutputIntents", arr);
   if (dropped) {
     ctx.issue("OUTPUT_INTENTS_PRUNED", "reduced output intents to the single print intent",
@@ -1492,6 +1673,17 @@ void passColorPrint(Ctx& ctx, ColorUsage& usage) {
     for (auto& ph : pages) {
       PageScope kuraScope3(ctx, ++kuraPage3);
       QPDFObjectHandle page = ph.getObjectHandle();
+      QPDFObjectHandle pois = page.getKey("/OutputIntents");
+      for (int i = 0; ctx.opt.verifyOnly && ctx.pdf20Print() && pois.isArray() && i < pois.getArrayNItems(); ++i) {
+        QPDFObjectHandle poi = pois.getArrayItem(i);
+        if (!poi.isDictionary() || !nameIs(poi.getKey("/S"), wantSubtype)) continue;
+        std::string pcs;
+        bool refOnly = ctx.externalIntent() && poi.getKey("/DestOutputProfileRef").isDictionary();
+        if (!refOnly && !validExistingProfile(ctx, poi.getKey("/DestOutputProfile"), pcs)) {
+          ctx.issue("PAGE_OUTPUT_INTENT_INVALID",
+                    "a page-level print output intent lacks a usable embedded printer profile", true);
+        }
+      }
       if (page.hasKey("/OutputIntents")) page.removeKey("/OutputIntents");
       if (sel.empty() || !ctx.pdf20Print()) continue;
       bool want = pageWanted(sel, kuraPage3, count);
@@ -1508,9 +1700,148 @@ void passColorPrint(Ctx& ctx, ColorUsage& usage) {
     }
   }
 
+  {
+    auto badText = [](QPDFObjectHandle v) {
+      return !v.isString() || v.getUTF8Value().find("<?xml") != std::string::npos;
+    };
+    int fixedText = 0;
+    QPDFObjectHandle ident = keepIntent.getKey("/OutputConditionIdentifier");
+    if (ident.isString() && badText(ident)) {
+      keepIntent.replaceKey("/OutputConditionIdentifier", QPDFObjectHandle::newString("Custom"));
+      ++fixedText;
+    }
+    QPDFObjectHandle cond = keepIntent.getKey("/OutputCondition");
+    if (!cond.isNull() && badText(cond)) {
+      keepIntent.removeKey("/OutputCondition");
+      ++fixedText;
+    }
+    QPDFObjectHandle info = keepIntent.getKey("/Info");
+    if (!info.isNull() && badText(info)) {
+      QPDFObjectHandle c = keepIntent.getKey("/OutputCondition");
+      keepIntent.replaceKey("/Info", c.isString() ? c : keepIntent.getKey("/OutputConditionIdentifier"));
+      ++fixedText;
+    }
+    QPDFObjectHandle reg = keepIntent.getKey("/RegistryName");
+    if (!reg.isNull() && !reg.isString()) {
+      keepIntent.removeKey("/RegistryName");
+      ++fixedText;
+    }
+    if (fixedText) {
+      ctx.issue("OUTPUT_INTENT_TEXT_FIXED",
+                "repaired " + std::to_string(fixedText) +
+                    " descriptive output intent entr(y/ies) that were not plain text strings",
+                true);
+    }
+  }
+
+  if (wantColorants && keepIntent.getKey("/DestOutputProfileRef").isDictionary()) {
+    std::set<std::string> table;
+    QPDFObjectHandle ct = keepIntent.getKey("/DestOutputProfileRef").getKey("/ColorantTable");
+    for (int i = 0; ct.isArray() && i < ct.getArrayNItems(); ++i) {
+      if (ct.getArrayItem(i).isName()) table.insert(ct.getArrayItem(i).getName());
+    }
+    std::vector<std::string> missing;
+    auto need = [&](const char* n) {
+      if (!table.count(n) && std::find(missing.begin(), missing.end(), n) == missing.end()) missing.push_back(n);
+    };
+    if (usage.gray || usage.cmyk) need("/Black");
+    if (usage.cmyk) {
+      need("/Cyan");
+      need("/Magenta");
+      need("/Yellow");
+    }
+    if (!missing.empty()) {
+      std::string list;
+      for (const std::string& m : missing) list += (list.empty() ? "" : ", ") + m.substr(1);
+      ctx.issue("PROCESS_COLORANT_MISSING",
+                "device colour is used but the referenced press profile has no " + list + " channel", true);
+    }
+    bool rgbAlternate = false;
+    for (QPDFObjectHandle obj : ctx.pdf.getAllObjects()) {
+      if (!obj.isArray() || obj.getArrayNItems() < 3) continue;
+      std::string fam = nameOf(obj.getArrayItem(0));
+      if ((fam == "/Separation" || fam == "/DeviceN") && nameIs(obj.getArrayItem(2), "/DeviceRGB")) rgbAlternate = true;
+    }
+    if (usage.rgb || rgbAlternate) {
+      ctx.issue("RGB_NOT_PERMITTED",
+                "RGB colour is used, which a multi-colorant press condition cannot reproduce", true);
+    }
+  }
+
+  if (ctx.opt.verifyOnly && !ctx.isE() &&
+      ((anchor == "RGB " && (usage.cmyk || usage.gray || !usage.cmykAlternates.empty())) ||
+       (anchor == "GRAY" && (usage.cmyk || !usage.cmykAlternates.empty())))) {
+    ctx.issue("DEVICE_COLOR_OUTSIDE_INTENT",
+              std::string(usage.cmyk || !usage.cmykAlternates.empty() ? "DeviceCMYK" : "DeviceGray") +
+                  " colour is used but the output intent describes " +
+                  (anchor == "GRAY" ? "a gray" : "an RGB") + " printing condition",
+              true);
+  }
+  if ((ctx.opt.level == Level::X5N || ctx.opt.level == Level::X6N) && ctx.opt.verifyOnly) {
+    GraphicsUse use = collectGraphicsUse(ctx.pdf);
+    size_t index = 0;
+    for (auto& ph : QPDFPageDocumentHelper(ctx.pdf).getAllPages()) {
+      PageScope scope(ctx, static_cast<int>(index) + 1);
+      bool transparent = index < use.pageTransparent.size() && use.pageTransparent[index];
+      ++index;
+      QPDFObjectHandle pg = ph.getObjectHandle().getKey("/Group");
+      if (transparent && (!pg.isDictionary() || pg.getKey("/CS").isNull())) {
+        ctx.issueMerged("PAGE_GROUP_MISSING",
+                        "page uses transparency but defines no page transparency group with a blending colour space", true);
+      }
+    }
+  }
   if (ctx.x1a()) {
     convertColorsX1a(ctx);
     return;
+  }
+
+  {
+    std::map<std::string, QPDFObjectHandle> calibrated;
+    auto calibratedSpace = [&](int n) {
+      std::string key = std::to_string(n);
+      if (!calibrated.count(key)) {
+        std::string bytes = builtinIccProfile(n);
+        QPDFObjectHandle arr = QPDFObjectHandle::newArray();
+        arr.appendItem(QPDFObjectHandle::newName("/ICCBased"));
+        arr.appendItem(buildIccStream(ctx, reinterpret_cast<const unsigned char*>(bytes.data()),
+                                      static_cast<unsigned int>(bytes.size()), n));
+        calibrated[key] = ctx.pdf.makeIndirectObject(arr);
+      }
+      return calibrated[key];
+    };
+    int groups = 0;
+    for (QPDFObjectHandle obj : ctx.pdf.getAllObjects()) {
+      QPDFObjectHandle d = obj.isStream() ? obj.getDict() : obj;
+      if (!d.isDictionary() || (ctx.isE() && ctx.opt.verifyOnly)) continue;
+      QPDFObjectHandle g = d.getKey("/Group");
+      if (!g.isDictionary() || !nameIs(g.getKey("/S"), "/Transparency")) continue;
+      std::string cs = nameOf(g.getKey("/CS"));
+      int n = 0;
+      if ((cs == "/DeviceRGB" || cs == "/RGB") && anchor != "RGB ") n = 3;
+      if ((cs == "/DeviceCMYK" || cs == "/CMYK") && anchor != "CMYK") n = 4;
+      if ((cs == "/DeviceGray" || cs == "/G") && anchor == "RGB ") n = 1;
+      if (!n) continue;
+      g.replaceKey("/CS", calibratedSpace(n));
+      ++groups;
+    }
+    if (groups) {
+      ctx.issue("GROUP_SPACE_CALIBRATED",
+                "gave " + std::to_string(groups) +
+                    " transparency group(s) a calibrated blending space, as their device space differs "
+                    "from the output intent",
+                true);
+    }
+  }
+
+  if (anchor == "CMYK") {
+    int spots = convertSpotRgbAlternates(ctx);
+    if (spots) {
+      ctx.issue("SEPARATION_ALTERNATE_FIXED",
+                "converted the RGB alternate of " + std::to_string(spots) +
+                    " spot colour space(s) to CMYK to match the output intent",
+                true);
+    }
   }
 
   if (!usage.rgbScopes.empty() && anchor != "RGB ") {
@@ -1518,11 +1849,12 @@ void passColorPrint(Ctx& ctx, ColorUsage& usage) {
     QPDFObjectHandle defRgb = QPDFObjectHandle::newArray();
     defRgb.appendItem(QPDFObjectHandle::newName("/ICCBased"));
     defRgb.appendItem(srgb);
-    if (injectDefaultSpace(ctx, usage.rgbScopes, "/DefaultRGB",
-                           ctx.pdf.makeIndirectObject(defRgb))) {
+    QPDFObjectHandle defRgbRef = ctx.pdf.makeIndirectObject(defRgb);
+    if (injectDefaultSpace(ctx, usage.rgbScopes, "/DefaultRGB", defRgbRef)) {
       ctx.issue("DEFAULT_RGB_INJECTED",
                 "mapped DeviceRGB usage to sRGB via /DefaultRGB (colour-managed print)", true);
     }
+    for (QPDFObjectHandle cs : usage.rgbPatternBases) cs.setArrayItem(1, defRgbRef);
   }
   if (ctx.isX() || ctx.isVT()) {
     fixIccIdenticalToIntent(ctx, keepIntent);
@@ -1538,14 +1870,284 @@ void passColorPrint(Ctx& ctx, ColorUsage& usage) {
                 "mapped DeviceCMYK usage to a calibrated profile via /DefaultCMYK", true);
     }
   }
+  if (ctx.isE() && anchor != "CMYK" && !usage.cmykAlternates.empty()) {
+    QPDFObjectHandle iccArr = QPDFObjectHandle::newArray();
+    iccArr.appendItem(QPDFObjectHandle::newName("/ICCBased"));
+    iccArr.appendItem(buildIccStream(ctx, kCmykIcc, kCmykIccLen, 4));
+    QPDFObjectHandle iccRef = ctx.pdf.makeIndirectObject(iccArr);
+    std::set<QPDFObjGen> done;
+    int fixed = 0;
+    for (QPDFObjectHandle cs : usage.cmykAlternates) {
+      if (cs.isIndirect() && !done.insert(cs.getObjGen()).second) continue;
+      cs.setArrayItem(2, iccRef);
+      ++fixed;
+    }
+    if (fixed) {
+      ctx.issue("SEPARATION_ALTERNATE_FIXED",
+                "replaced DeviceCMYK alternate space with calibrated CMYK in " +
+                    std::to_string(fixed) + " Separation/DeviceN spaces",
+                true);
+    }
+  }
+  if (ctx.isE() && anchor != "RGB " && !ctx.opt.verifyOnly) {
+    if (int stripped = colouredAnnots(true)) {
+      ctx.issue("ANNOT_COLOR_REMOVED",
+                "removed " + std::to_string(stripped) +
+                    " annotation colour array(s) (an RGB output intent is required for annotation /C and /IC)",
+                true);
+    }
+  }
 }
 }
 
+namespace {
+bool iccInputHeaderOk(const std::string& bytes) {
+  if (bytes.size() < 20) return false;
+  std::string cls = bytes.substr(12, 4), cs = bytes.substr(16, 4);
+  return (cls == "prtr" || cls == "mntr" || cls == "scnr" || cls == "spac") &&
+         (cs == "RGB " || cs == "CMYK" || cs == "GRAY" || cs == "Lab ");
+}
+
+void verifyIccProfiles(Ctx& ctx) {
+  GraphicsUse use = collectGraphicsUse(ctx.pdf);
+  std::vector<std::pair<QPDFObjectHandle, bool>> todo;
+  for (QPDFObjectHandle p : use.iccProfiles) todo.push_back({p, true});
+  QPDFObjectHandle ois = ctx.pdf.getRoot().getKey("/OutputIntents");
+  for (int i = 0; ois.isArray() && i < ois.getArrayNItems(); ++i) {
+    QPDFObjectHandle p = ois.getArrayItem(i).isDictionary() ? ois.getArrayItem(i).getKey("/DestOutputProfile") : QPDFObjectHandle::newNull();
+    if (p.isStream()) todo.push_back({p, false});
+  }
+  int badVersion = 0, bad = 0;
+  std::set<const void*> seen;
+  for (auto& item : todo) {
+    QPDFObjectHandle obj = item.first;
+    if (!seen.insert(obj.getObj().get()).second) continue;
+    if (obj.isIndirect() && !ctx.iccChecked.insert(obj.getObjGen()).second) continue;
+    std::string bytes;
+    try {
+      auto buf = obj.getStreamData(qpdf_dl_all);
+      bytes.assign(reinterpret_cast<const char*>(buf->getBuffer()), buf->getSize());
+    } catch (...) {
+    }
+    bool nOk = true;
+    if (ctx.part == 1) {
+      QPDFObjectHandle n = obj.getDict().getKey("/N");
+      std::string cs = bytes.size() >= 20 ? bytes.substr(16, 4) : std::string();
+      long long nv = n.isInteger() ? n.getIntValue() : -1;
+      nOk = (nv == 1 && cs == "GRAY") || (nv == 3 && (cs == "RGB " || cs == "Lab ")) || (nv == 4 && cs == "CMYK");
+    }
+    if (!item.second) {
+      if (!nOk) ++bad;
+      continue;
+    }
+    if (!nOk || !iccInputHeaderOk(bytes)) {
+      ++bad;
+      continue;
+    }
+    double version = static_cast<unsigned char>(bytes[8]) + (static_cast<unsigned char>(bytes[9]) >> 4) / 10.0;
+    if (version >= (ctx.part == 1 ? 3.0 : 5.0)) ++badVersion;
+  }
+  if (badVersion) {
+    ctx.issue("ICC_PROFILE_DOWNGRADED",
+              std::to_string(badVersion) + " ICC profile(s) in a profile version the target level does not accept", true);
+  }
+  if (bad) {
+    ctx.issue("ICC_PROFILE_REPLACED",
+              std::to_string(bad) + " ICC profile(s) with a device class, colour space or component count the target level does not accept",
+              true);
+  }
+}
+}
+
+void passDowngradeIcc(Ctx& ctx) {
+  if (ctx.opt.verifyOnly && ctx.isA()) {
+    verifyIccProfiles(ctx);
+    return;
+  }
+  static const std::set<std::string> kIccKeys = {"/N", "/Alternate", "/Range", "/Metadata", "/Filter",
+                                                 "/DecodeParms", "/Length", "/Type"};
+  if (ctx.isA()) {
+    std::vector<QPDFObjectHandle> profiles;
+    std::function<void(QPDFObjectHandle, int)> hunt = [&](QPDFObjectHandle o, int depth) {
+      if (depth > kMaxObjectWalk) return;
+      if (o.isArray()) {
+        if (o.getArrayNItems() >= 2 && nameIs(o.getArrayItem(0), "/ICCBased")) profiles.push_back(o.getArrayItem(1));
+        for (int i = 0; i < o.getArrayNItems(); ++i) {
+          if (!o.getArrayItem(i).isIndirect()) hunt(o.getArrayItem(i), depth + 1);
+        }
+      } else if (o.isDictionary() || o.isStream()) {
+        QPDFObjectHandle d = o.isStream() ? o.getDict() : o;
+        for (const std::string& k : d.getKeys()) {
+          if (k == "/DestOutputProfile") profiles.push_back(d.getKey(k));
+          if (!d.getKey(k).isIndirect()) hunt(d.getKey(k), depth + 1);
+        }
+      }
+    };
+    for (QPDFObjectHandle obj : ctx.pdf.getAllObjects()) hunt(obj, 0);
+    for (QPDFObjectHandle prof : profiles) {
+      if (!prof.isStream() || prof.getDict().getKey("/N").isInteger()) continue;
+      std::string head;
+      try {
+        auto buf = prof.getStreamData(qpdf_dl_all);
+        head.assign(reinterpret_cast<const char*>(buf->getBuffer()), std::min<size_t>(buf->getSize(), 20));
+      } catch (...) {
+      }
+      std::string cs = head.size() >= 20 ? head.substr(16, 4) : std::string();
+      int n = cs == "GRAY" ? 1 : cs == "CMYK" ? 4 : 3;
+      prof.getDict().replaceKey("/N", QPDFObjectHandle::newInteger(n));
+    }
+  }
+  const double maxVersion = ctx.pdf14Target() ? 4.0 : 5.0;
+  int rewritten = 0, replaced = 0;
+  for (QPDFObjectHandle obj : ctx.pdf.getAllObjects()) {
+    if (!obj.isStream() || !obj.getDict().getKey("/N").isInteger()) continue;
+    if (!ctx.iccChecked.insert(obj.getObjGen()).second) continue;
+    bool iccLike = true;
+    for (const std::string& k : obj.getDict().getKeys()) {
+      if (!kIccKeys.count(k)) iccLike = false;
+    }
+    if (!iccLike) continue;
+    int n = static_cast<int>(obj.getDict().getKey("/N").getIntValue());
+    std::string bytes;
+    try {
+      auto buf = obj.getStreamData(qpdf_dl_all);
+      bytes.assign(reinterpret_cast<const char*>(buf->getBuffer()), buf->getSize());
+    } catch (...) {
+    }
+    cmsHPROFILE h = bytes.size() >= 132 && bytes.compare(36, 4, "acsp") == 0
+                        ? cmsOpenProfileFromMem(bytes.data(), static_cast<cmsUInt32Number>(bytes.size()))
+                        : nullptr;
+    int channels = h ? static_cast<int>(cmsChannelsOf(cmsGetColorSpace(h))) : 0;
+    if (!h || channels != n || (ctx.isA() && !iccInputHeaderOk(bytes))) {
+      if (h) cmsCloseProfile(h);
+      std::string builtin = builtinIccProfile(n);
+      if (builtin.empty()) continue;
+      obj.replaceStreamData(builtin, QPDFObjectHandle::newNull(), QPDFObjectHandle::newNull());
+      ++replaced;
+      continue;
+    }
+    double version = static_cast<unsigned char>(bytes[8]) + (static_cast<unsigned char>(bytes[9]) >> 4) / 10.0;
+    if (ctx.isE() && bytes.compare(12, 4, "spac") == 0) {
+      bytes.replace(12, 4, n == 4 ? "prtr" : "mntr");
+      std::fill(bytes.begin() + 84, bytes.begin() + 100, '\0');
+      cmsSetDeviceClass(h, n == 4 ? cmsSigOutputClass : cmsSigDisplayClass);
+      obj.replaceStreamData(bytes, QPDFObjectHandle::newNull(), QPDFObjectHandle::newNull());
+      ++rewritten;
+    }
+    if (version >= 2.0 && version < maxVersion) {
+      cmsCloseProfile(h);
+      continue;
+    }
+    double target = version >= 2.0 && maxVersion > 4.0 ? 4.3 : 2.4;
+    std::string out;
+    cmsSetProfileVersion(h, target);
+    cmsUInt32Number len = 0;
+    if (cmsSaveProfileToMem(h, nullptr, &len) && len >= 132) {
+      out.resize(len);
+      if (!cmsSaveProfileToMem(h, out.data(), &len)) out.clear();
+    }
+    cmsCloseProfile(h);
+    cmsHPROFILE check = out.empty() ? nullptr
+                                    : cmsOpenProfileFromMem(out.data(), static_cast<cmsUInt32Number>(out.size()));
+    if (check) cmsCloseProfile(check);
+    if (!check || static_cast<unsigned char>(out[8]) != static_cast<int>(target)) {
+      std::string builtin = builtinIccProfile(n);
+      if (builtin.empty()) continue;
+      obj.replaceStreamData(builtin, QPDFObjectHandle::newNull(), QPDFObjectHandle::newNull());
+      ++replaced;
+      continue;
+    }
+    obj.replaceStreamData(out, QPDFObjectHandle::newNull(), QPDFObjectHandle::newNull());
+    ++rewritten;
+  }
+  if (rewritten) {
+    ctx.issue("ICC_PROFILE_DOWNGRADED",
+              "rewrote " + std::to_string(rewritten) + " ICC profile(s) in a profile version the target level accepts",
+              true);
+  }
+  if (replaced) {
+    ctx.issue("ICC_PROFILE_REPLACED",
+              "replaced " + std::to_string(replaced) +
+                  " unreadable or unusable ICC profile(s) with a built-in profile of the same colour space "
+                  "(visual difference possible)",
+              true);
+  }
+}
+
 void passColor(Ctx& ctx) {
-  if (ctx.isA() && ctx.part <= 3) {
+  if (ctx.opt.level == Level::X1A || ctx.opt.level == Level::X3) {
+    int dropped = 0;
+    for (QPDFObjectHandle obj : ctx.pdf.getAllObjects()) {
+      std::vector<QPDFObjectHandle> stack{obj.isStream() ? obj.getDict() : obj};
+      Visited walk;
+      while (!stack.empty()) {
+        QPDFObjectHandle o = stack.back();
+        stack.pop_back();
+        if (o.isIndirect() && o.getObjGen() != obj.getObjGen()) continue;
+        if (!walk.enter(o) || stack.size() > 10000) continue;
+        if (o.isDictionary()) {
+          if (o.hasKey("/TR2")) {
+            o.removeKey("/TR2");
+            ++dropped;
+          }
+          for (const std::string& k : o.getKeys()) stack.push_back(o.getKey(k));
+        } else if (o.isArray()) {
+          for (int i = 0; i < o.getArrayNItems(); ++i) stack.push_back(o.getArrayItem(i));
+        }
+      }
+    }
+    if (dropped) {
+      ctx.issue("TRANSFER_FUNCTION_REMOVED",
+                "removed " + std::to_string(dropped) + " /TR2 entr" + (dropped == 1 ? "y" : "ies") +
+                    " from graphics states, which PDF/X-1a and PDF/X-3 do not allow",
+                true);
+    }
+  }
+  if (ctx.isE() || ctx.opt.level == Level::X5N || ctx.opt.level == Level::X6N) {
+    int attrsFixed = 0;
+    for (QPDFObjectHandle obj : ctx.pdf.getAllObjects()) {
+      std::vector<QPDFObjectHandle> stack{obj};
+      Visited walk;
+      while (!stack.empty()) {
+        QPDFObjectHandle o = stack.back();
+        stack.pop_back();
+        if (o.isIndirect() && o.getObjGen() != obj.getObjGen()) continue;
+        if (!walk.enter(o) || stack.size() > 10000) continue;
+        if (o.isArray()) {
+          if (o.getArrayNItems() >= 5 && nameIs(o.getArrayItem(0), "/DeviceN") && o.getArrayItem(4).isDictionary()) {
+            QPDFObjectHandle a = o.getArrayItem(4);
+            std::string sub = nameOf(a.getKey("/Subtype"));
+            bool nch = ctx.opt.level == Level::X6N && sub == "/NChannel";
+            if (!sub.empty() && sub != "/DeviceN" && !nch) {
+              a.removeKey("/Subtype");
+              ++attrsFixed;
+            }
+            if (!ctx.isE() && a.hasKey("/Process")) {
+              a.removeKey("/Process");
+              ++attrsFixed;
+            }
+          }
+          for (int i = 0; i < o.getArrayNItems(); ++i) stack.push_back(o.getArrayItem(i));
+        } else if (o.isDictionary() || o.isStream()) {
+          QPDFObjectHandle d = o.isStream() ? o.getDict() : o;
+          for (const std::string& k : d.getKeys()) stack.push_back(d.getKey(k));
+        }
+      }
+    }
+    if (attrsFixed) {
+      ctx.issue("DEVICEN_ATTRIBUTES_FIXED",
+                "removed " + std::to_string(attrsFixed) +
+                    " DeviceN attribute entr(y/ies) this level does not permit (process space or channel kind)",
+                true);
+    }
+  }
+  if ((ctx.isA() && ctx.part <= 3) || ctx.isX() || ctx.isE()) {
+    const size_t limit = ctx.pdf14Target() ? 8 : 32;
     int reduced = 0;
     std::vector<QPDFObjectHandle> wide;
     Visited hunt;
+    GraphicsUse used;
+    if (ctx.opt.verifyOnly && ctx.isA()) used = collectGraphicsUse(ctx.pdf);
     std::function<void(QPDFObjectHandle, int)> collect = [&](QPDFObjectHandle o, int depth) {
       if (depth > kMaxObjectWalk) return;
       if (o.isIndirect() && !hunt.enter(o)) return;
@@ -1556,7 +2158,8 @@ void passColor(Ctx& ctx) {
       if (o.isArray()) {
         if (o.getArrayNItems() >= 3 && nameIs(o.getArrayItem(0), "/DeviceN")) {
           QPDFObjectHandle names = o.getArrayItem(1);
-          if (names.isArray() && names.getArrayNItems() > 8) {
+          if (names.isArray() && static_cast<size_t>(names.getArrayNItems()) > limit &&
+              !(ctx.opt.verifyOnly && ctx.isA() && !used.has(o))) {
             wide.push_back(o);
             return;
           }
@@ -1581,10 +2184,14 @@ void passColor(Ctx& ctx) {
       iccSpace.appendItem(QPDFObjectHandle::newName("/ICCBased"));
       iccSpace.appendItem(icc);
       remapContentColors(ctx, [&](const ColorValue& in, unsigned, ColorValue& out) {
-        if (in.family != "/DeviceN" || in.colorants.size() <= 8) return false;
+        if (in.family != "/DeviceN" || in.colorants.size() <= limit) return false;
         out.family = "/ICCBased";
         out.space = iccSpace;
-        return colorValueToProcess(in, 4, out.values);
+        if (colorValueToProcess(in, 4, out.values)) return true;
+        double sum = 0;
+        for (double v : in.values) sum += v;
+        out.values = {0, 0, 0, in.values.empty() ? 0 : std::min(1.0, sum / in.values.size())};
+        return true;
       });
     }
     for (QPDFObjectHandle obj : wide) {
@@ -1596,12 +2203,12 @@ void passColor(Ctx& ctx) {
     if (reduced) {
       ctx.issue("DEVICEN_REDUCED",
                 "replaced " + std::to_string(reduced) +
-                    " DeviceN space(s) exceeding the limit of 8 colorants with a "
+                    " DeviceN space(s) exceeding the limit of " + std::to_string(limit) + " colorants with a "
                     "calibrated CMYK space (visual difference possible)",
                 true);
     }
   }
-  if (ctx.isA() && ctx.part >= 2) fixSpecialColorSpaces(ctx);
+  if ((ctx.isA() && ctx.part >= 2) || (ctx.isX() && !ctx.pdf14Target())) fixSpecialColorSpaces(ctx);
   ColorUsage usage = scanUsage(ctx);
   if (ctx.isA() && ctx.part == 1 && usage.rgb && usage.cmyk) {
     convertColorsX1a(ctx);
@@ -1640,6 +2247,27 @@ void passColor(Ctx& ctx) {
       }
     }
   }
+  if (existing.isArray() && !keepIntent.isInitialized() && !ctx.opt.verifyOnly) {
+    for (int i = 0; i < existing.getArrayNItems(); ++i) {
+      QPDFObjectHandle oi = existing.getArrayItem(i);
+      if (!oi.isDictionary()) continue;
+      std::string cs;
+      if (!validExistingProfile(ctx, oi.getKey("/DestOutputProfile"), cs)) continue;
+      bool covers = (cs == "RGB " && !usage.cmyk) || (cs == "CMYK" && !usage.rgb) ||
+                    (cs == "GRAY" && !usage.rgb && !usage.cmyk);
+      if (ctx.part == 1 && !covers) continue;
+      if (ctx.part >= 2 && cs == "GRAY" && (usage.rgb || usage.cmyk)) continue;
+      QPDFObjectHandle a = oi.shallowCopy();
+      a.replaceKey("/S", QPDFObjectHandle::newName("/GTS_PDFA1"));
+      keepIntent = ctx.pdf.makeIndirectObject(a);
+      anchor = cs;
+      ctx.issue("OUTPUT_INTENT_ADOPTED",
+                "used the document's existing " + nameOf(oi.getKey("/S")).substr(1) +
+                    " output intent profile as the PDF/A output intent",
+                true);
+      break;
+    }
+  }
   if (existing.isArray() && existing.getArrayNItems() > 0 && !keepIntent.isInitialized()) {
     ctx.issue("OUTPUT_INTENT_REPLACED",
               "existing output intent does not cover the document's device colour usage; "
@@ -1647,7 +2275,9 @@ void passColor(Ctx& ctx) {
               true);
   }
 
+  bool synthesized = false;
   if (!keepIntent.isInitialized() || anchor.empty()) {
+    synthesized = true;
     bool wantCmyk = usage.cmyk && !usage.rgb;
     const unsigned char* data = wantCmyk ? kCmykIcc : kSrgbIcc;
     unsigned int len = wantCmyk ? kCmykIccLen : kSrgbIccLen;
@@ -1700,6 +2330,13 @@ void passColor(Ctx& ctx) {
               "removed additional output intents (PDF/A requires a single shared profile)", true);
   }
 
+  for (int i = 0; ctx.opt.verifyOnly && ctx.part >= 2 && ctx.part <= 3 && existing.isArray() && i < existing.getArrayNItems(); ++i) {
+    QPDFObjectHandle oi = existing.getArrayItem(i);
+    if (oi.isDictionary() && nameIs(oi.getKey("/S"), "/GTS_PDFX") && oi.hasKey("/DestOutputProfileRef")) {
+      ctx.issue("OUTPUT_INTENT_PROFILE_REF_REMOVED", "a PDF/X output intent refers to an external profile", true);
+      break;
+    }
+  }
   if (ctx.part >= 4) {
     if (keepIntent.isDictionary() && keepIntent.hasKey("/DestOutputProfileRef")) {
       keepIntent.removeKey("/DestOutputProfileRef");
@@ -1707,11 +2344,28 @@ void passColor(Ctx& ctx) {
                 "removed external /DestOutputProfileRef from output intent", true);
     }
     QPDFPageDocumentHelper dh(ctx.pdf);
-    int pageIntents = 0;
+    int pageIntents = 0, badIntents = usage.pageConflict ? 1 : 0;
     int kuraPage4 = 0;
+    for (int i = 0; ctx.opt.verifyOnly && existing.isArray() && i < existing.getArrayNItems(); ++i) {
+      QPDFObjectHandle oi = existing.getArrayItem(i);
+      if (oi.isDictionary() && oi.hasKey("/DestOutputProfileRef") && !oi.isSameObjectAs(keepIntent)) ++badIntents;
+    }
     for (auto& ph : dh.getAllPages()) {
       PageScope kuraScope4(ctx, ++kuraPage4);
       QPDFObjectHandle page = ph.getObjectHandle();
+      QPDFObjectHandle pois = page.getKey("/OutputIntents");
+      QPDFObjectHandle firstProf;
+      for (int i = 0; ctx.opt.verifyOnly && pois.isArray() && i < pois.getArrayNItems(); ++i) {
+        QPDFObjectHandle oi = pois.getArrayItem(i);
+        if (!oi.isDictionary()) continue;
+        if (oi.hasKey("/DestOutputProfileRef")) ++badIntents;
+        QPDFObjectHandle prof = oi.getKey("/DestOutputProfile");
+        if (prof.isNull()) continue;
+        std::string cs;
+        if (!validExistingProfile(ctx, prof, cs)) ++badIntents;
+        if (!firstProf.isInitialized()) firstProf = prof;
+        else if (!prof.isSameObjectAs(firstProf)) ++badIntents;
+      }
       if (page.hasKey("/OutputIntents")) {
         if (!ctx.opt.verifyOnly) page.removeKey("/OutputIntents");
         ++pageIntents;
@@ -1721,7 +2375,9 @@ void passColor(Ctx& ctx) {
       ctx.issue("PAGE_OUTPUT_INTENTS_REMOVED",
                 "removed page-level output intents from " + std::to_string(pageIntents) +
                     " page(s) in favor of the document output intent",
-                !ctx.opt.verifyOnly);
+                !ctx.opt.verifyOnly || badIntents > 0);
+    } else if (badIntents) {
+      ctx.issue("OUTPUT_INTENT_PROFILE_REF_REMOVED", "an output intent refers to an external profile", true);
     }
   }
 
@@ -1740,7 +2396,7 @@ void passColor(Ctx& ctx) {
     fixIccIdenticalToGroups(ctx);
   }
 
-  if (ctx.part == 1 && anchor != "RGB ") {
+  if (ctx.part == 1 && (anchor != "RGB " || (ctx.opt.verifyOnly && synthesized))) {
     QPDFPageDocumentHelper dh(ctx.pdf);
     int stripped = 0;
     int kuraPage5 = 0;
@@ -1753,8 +2409,8 @@ void passColor(Ctx& ctx) {
         if (!a.isDictionary()) continue;
         for (const char* key : {"/C", "/IC"}) {
           if (a.hasKey(key)) {
+            if (!ctx.opt.verifyOnly || a.getKey(key).isArray()) ++stripped;
             a.removeKey(key);
-            ++stripped;
           }
         }
       }
@@ -1762,7 +2418,7 @@ void passColor(Ctx& ctx) {
     if (stripped) {
       ctx.issue("ANNOT_COLOR_REMOVED",
                 "removed " + std::to_string(stripped) +
-                    " annotation colour array(s) (PDF/A-1 requires an RGB output intent "
+                    " annotation colour array(s) (an RGB output intent is required "
                     "for annotation /C and /IC)",
                 true);
     }
@@ -1778,10 +2434,27 @@ void passColor(Ctx& ctx) {
       QPDFObjectHandle defCmyk = QPDFObjectHandle::newArray();
       defCmyk.appendItem(QPDFObjectHandle::newName("/ICCBased"));
       defCmyk.appendItem(cmykIccShared);
-      if (injectDefaultSpace(ctx, usage.cmykScopes, "/DefaultCMYK",
-                             ctx.pdf.makeIndirectObject(defCmyk))) {
+      QPDFObjectHandle defCmykObj = ctx.pdf.makeIndirectObject(defCmyk);
+      if (injectDefaultSpace(ctx, usage.cmykScopes, "/DefaultCMYK", defCmykObj)) {
         ctx.issue("DEFAULT_CMYK_INJECTED",
                   "mapped DeviceCMYK usage to a calibrated CMYK profile via /DefaultCMYK", true);
+      }
+      int tagged = 0;
+      for (QPDFObjectHandle o : ctx.pdf.getAllObjects()) {
+        QPDFObjectHandle d = o.isStream() ? o.getDict() : o;
+        if (d.isDictionary() && d.getKey("/Shading").isDictionary() && !d.getKey("/Shading").isIndirect()) {
+          d = d.getKey("/Shading");
+        }
+        if (!d.isDictionary() || !d.getKey("/ShadingType").isInteger()) continue;
+        QPDFObjectHandle cs = d.getKey("/ColorSpace");
+        if (nameIs(cs, "/DeviceCMYK") || nameIs(cs, "/CMYK")) {
+          d.replaceKey("/ColorSpace", defCmykObj);
+          ++tagged;
+        }
+      }
+      if (tagged) {
+        ctx.issue("SHADING_CMYK_TAGGED",
+                  "tagged " + std::to_string(tagged) + " DeviceCMYK shading(s) with the calibrated CMYK profile", true);
       }
     }
     if (anchor != "RGB " && !usage.rgbScopes.empty()) {

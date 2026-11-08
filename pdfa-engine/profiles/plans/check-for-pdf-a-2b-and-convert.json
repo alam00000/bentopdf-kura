@@ -1,0 +1,22 @@
+{
+  "kura-profile": 1,
+  "name": "Check for PDF/A-2b and convert",
+  "description": "Reports what keeps the file from PDF/A-2b, then converts it.",
+  "convert": {
+    "level": "pdfa-2b"
+  },
+  "checks": [
+    {
+      "name": "Not PDF/A-2b",
+      "severity": "error",
+      "all": [
+        {
+          "check": "conformance.meets",
+          "op": "is",
+          "value": false,
+          "standard": "pdfa-2b"
+        }
+      ]
+    }
+  ]
+}

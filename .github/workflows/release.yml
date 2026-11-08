@@ -76,7 +76,10 @@ jobs:
             mkdir -p "stage/$name/lib" "stage/$name/include/kura"
             find "$dir" -type f \( -name 'kura' -o -name 'kura.exe' \) -exec cp {} "stage/$name/" \;
             find "$dir" -type f \( -name '*.a' -o -name '*.lib' \) -exec cp {} "stage/$name/lib/" \;
-            cp LICENSE NOTICE.md "stage/$name/"
+            cp LICENSE NOTICE.md pdfa-engine/third_party/icc/LICENSES/ICC-PROFILE-TERMS.md "stage/$name/"
+            cp pdfa-engine/third_party/cmap-resources/LICENSE.md "stage/$name/CMAP-RESOURCES-LICENSE.md"
+            cp -R pdfa-engine/core/fonts-world pdfa-engine/core/fonts-cjk "stage/$name/"
+            cp -R pdfa-engine/core/icc "stage/$name/icc"
             cp pdfa-engine/core/include/kura/kura.h "stage/$name/include/kura/"
             if [ "$name" = windows-x64 ]; then
               (cd "stage/$name" && zip -q -r "../../out/kura-$TAG-$name.zip" .)
@@ -89,7 +92,8 @@ jobs:
           pack windows-x64 artifacts/kura-windows-x64
           pack macos-arm64 artifacts/kura-macos-arm64
           mkdir -p stage/wasm
-          cp artifacts/kura-wasm/kura.js artifacts/kura-wasm/kura.wasm LICENSE NOTICE.md stage/wasm/
+          cp artifacts/kura-wasm/kura.js artifacts/kura-wasm/kura.wasm LICENSE NOTICE.md pdfa-engine/third_party/icc/LICENSES/ICC-PROFILE-TERMS.md stage/wasm/
+          cp pdfa-engine/third_party/cmap-resources/LICENSE.md stage/wasm/CMAP-RESOURCES-LICENSE.md
           tar -C stage/wasm -czf "out/kura-$TAG-wasm.tar.gz" .
           cd out
           sha256sum * > SHA256SUMS

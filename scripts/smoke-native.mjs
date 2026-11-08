@@ -50,6 +50,12 @@ assert(before.compliant === false && before.findings >= 1, `check before -> ${be
 const after = await check(r.pdf, '2b');
 assert(after.compliant === true && after.findings === 0, 'converted output checks clean');
 
+const cmyk = await convert(input, 'x4', { convertColors: 'cmyk', intent: 'relative', inkLimit: 300 });
+assert((await check(cmyk.pdf, 'x4')).compliant === true, 'x4 with convertColors cmyk checks clean');
+let badInk = null;
+try { await convert(input, 'x4', { convertColors: 'cmyk', inkLimit: 900 }); } catch (e) { badInk = e; }
+assert(badInk instanceof KuraError && badInk.code === 'BAD_OPTION', 'inkLimit out of range -> BAD_OPTION');
+
 const ua = await convert(input, '2a', { ua: true, lang: 'en-US' });
 assert(ua.issues.some((i) => /STRUCT|TAG/.test(i.code)), 'PDF/A-2a with ua builds a structure tree');
 
@@ -73,7 +79,7 @@ try { await convert('not bytes', '2b'); } catch (e) { caught = e; }
 assert(caught instanceof KuraError && caught.code === 'BAD_INPUT', 'string input -> BAD_INPUT');
 
 assert(await verifyPassword(input, '') === true, 'verifyPassword is true for a file without encryption');
-assert(LEVELS.length === 18, `LEVELS lists ${LEVELS.length} convertible targets`);
+assert(LEVELS.length === 19, `LEVELS lists ${LEVELS.length} convertible targets`);
 
 const dir = await mkdtemp(path.join(tmpdir(), 'kura-native-smoke-'));
 try {

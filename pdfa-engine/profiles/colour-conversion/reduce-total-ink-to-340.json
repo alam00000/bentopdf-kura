@@ -1,0 +1,13 @@
+{
+  "kura-profile": 1,
+  "name": "Reduce total ink to 340%",
+  "description": "Lowers total ink coverage to at most 340% (typical for gravure) by taking cyan, magenta and yellow out first and keeping black; colour below the limit is left as it is and spot colours stay spot colours. RGB and other colour is converted to CMYK on the way. No standard is applied.",
+  "convert": {
+    "colors": {
+      "to": "cmyk",
+      "keep_spots": true,
+      "ink_limit": 340
+    }
+  },
+  "checks": []
+}

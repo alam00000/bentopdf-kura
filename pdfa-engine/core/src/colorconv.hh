@@ -25,4 +25,6 @@ QPDFObjectHandle sampledColorFunction(QPDF& pdf, int inputs, const std::vector<d
 void prepareColorJob(Options& opt, std::vector<Issue>& notes);
 bool resolveIccByName(const Options& opt, const std::string& name, std::string& bytes);
 std::string iccDescription(const std::string& bytes);
+std::string builtinIccProfile(int components);
+int convertSpotRgbAlternates(Ctx& ctx);
 }

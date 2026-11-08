@@ -1,0 +1,12 @@
+{
+  "kura-profile": 1,
+  "name": "Convert all colours to Coated FOGRA27 (ISO 12647-2:2004) (CMYK only)",
+  "description": "Converts every colour, spot colours included, to CMYK for coated paper, FOGRA27. No standard is applied.",
+  "convert": {
+    "colors": {
+      "to": "Coated FOGRA27 (ISO 12647-2:2004)",
+      "keep_spots": false
+    }
+  },
+  "checks": []
+}

@@ -57,6 +57,15 @@ interface KuraOptions {
   defaultRgb?: Uint8Array;      // replace the bundled default profiles
   defaultCmyk?: Uint8Array;
   defaultGray?: Uint8Array;
+  convertColors?: 'cmyk' | 'gray' | 'rgb' | Uint8Array; // convert colour; an ICC profile as bytes also works
+  intent?: 'perceptual' | 'relative' | 'saturation' | 'absolute';
+  convertObjects?: string[];    // any of text, vector, shading, images, lossy, lossless
+  keepSpots?: boolean;          // keep spot colours, convert only their alternate
+  noBpc?: boolean;              // turn off black point compensation
+  grayToK?: boolean;            // gray on the black plate only
+  rgbGrayToK?: number;          // neutral RGB within this percentage on the black plate only
+  inkLimit?: number;            // total ink coverage limit, 100 to 400
+  deviceLink?: Uint8Array;      // convert through a device link profile
   vtRecords?: string;           // PDF/VT record ranges, "1-3,4-6"
   profile?: string;             // a preflight profile, as JSON text
   analyze?: boolean;            // add the document census to `analysis`
@@ -88,6 +97,15 @@ interface Finding { code: string; detail: string }
 ```
 
 The options are the same as the [CLI flags](/cli) with the dashes turned into camelCase. Binary values, the ICC profiles and the invoice XML, are passed as `Uint8Array`. In `kura-pdf-wasm`, `embedSource` takes the bytes of the file to attach instead of a boolean, and the four native-only options are ignored.
+
+To print-ready CMYK with your press profile as the output intent:
+
+```js
+const press = await readFile('press.icc');
+const { pdf } = await convert(input, 'x4', { convertColors: 'cmyk', destProfile: press, intent: 'relative', inkLimit: 300 });
+```
+
+[Converting colour](/cli#converting-colour) explains what each colour option does. An out-of-range value throws `KuraError` with code `BAD_OPTION`.
 
 ## check(input, level, options?)
 

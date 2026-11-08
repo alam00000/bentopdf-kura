@@ -18,7 +18,8 @@ tests
 **/*.o
 **/*.a
 **/node_modules
-pdfa-engine/third_party
+pdfa-engine/third_party/*
+!pdfa-engine/third_party/harfbuzz
 site/kura.js
 site/kura.wasm
 site/worker.js
@@ -26,3 +27,4 @@ site/engine.js
 site/serve.mjs
 *.md
 server/target
+!pdfa-engine/third_party/cmap-resources/LICENSE.md

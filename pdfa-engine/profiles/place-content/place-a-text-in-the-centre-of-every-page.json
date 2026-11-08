@@ -1,0 +1,24 @@
+{
+  "kura-profile": 1,
+  "name": "Place a text in the centre of every page",
+  "description": "Places a text of your choice in the centre of every page.",
+  "checks": [],
+  "fixes": [
+    {
+      "fix": "place.text",
+      "text": "{text}",
+      "size": "24pt",
+      "anchor": "center",
+      "x": "0mm",
+      "y": "0mm"
+    }
+  ],
+  "variables": [
+    {
+      "name": "text",
+      "label": "Text",
+      "type": "text",
+      "default": "SAMPLE"
+    }
+  ]
+}

@@ -19,21 +19,25 @@ use std::time::Duration;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::sync::{OwnedSemaphorePermit, Semaphore};
 
-pub const LEVELS: [&str; 18] = [
+pub const LEVELS: [&str; 19] = [
     "1b", "1a", "2b", "2u", "2a", "3b", "3u", "3a", "4", "4f", "4e", "x1a", "x3", "x4", "x6", "e1",
-    "vt1", "vt3",
+    "vt1", "vt3", "none",
 ];
 const CHECK_ONLY: [&str; 7] = ["x4p", "x5g", "x5n", "x5pg", "x6n", "x6p", "vt2"];
-const BOOL_FLAGS: [(&str, &str); 6] = [
+const BOOL_FLAGS: [(&str, &str); 9] = [
     ("ua", "--ua"),
     ("allowVisualRisk", "--allow-visual-risk"),
     ("rasterizePages", "--rasterize-pages"),
     ("outlineFonts", "--outline-fonts"),
     ("analyze", "--analyze"),
     ("embedSource", "--embed-source"),
+    ("keepSpots", "--keep-spots"),
+    ("noBpc", "--no-bpc"),
+    ("grayToK", "--gray-to-k"),
 ];
-const TEXT_FLAGS: [(&str, &str); 10] = [
+const TEXT_FLAGS: [(&str, &str); 16] = [
     ("lang", "--lang"),
+    ("pdfVersion", "--pdf-version"),
     ("outputCondition", "--output-condition"),
     ("outputConditionInfo", "--output-condition-info"),
     ("registry", "--registry"),
@@ -43,13 +47,19 @@ const TEXT_FLAGS: [(&str, &str); 10] = [
     ("embedSourceName", "--embed-source-name"),
     ("rasterDpi", "--raster-dpi"),
     ("imageMaxPpi", "--image-max-ppi"),
+    ("convertColors", "--convert-colors"),
+    ("intent", "--intent"),
+    ("convertObjects", "--convert-objects"),
+    ("inkLimit", "--ink-limit"),
+    ("rgbGrayToK", "--rgb-gray-to-k"),
 ];
-const FILE_FIELDS: [(&str, &str, &str); 5] = [
+const FILE_FIELDS: [(&str, &str, &str); 6] = [
     ("xml", "--attach-xml", "attachment.xml"),
     ("destProfile", "--dest-profile", "dest.icc"),
     ("defaultRgb", "--default-rgb", "rgb.icc"),
     ("defaultCmyk", "--default-cmyk", "cmyk.icc"),
     ("defaultGray", "--default-gray", "gray.icc"),
+    ("deviceLink", "--device-link", "link.icc"),
 ];
 const STATIC: [(&str, &str, &str); 13] = [
     ("/index.html", "index.html", "text/html; charset=utf-8"),
@@ -498,6 +508,16 @@ fn value_ok(flag: &str, v: &str) -> bool {
     }
     match flag {
         "--raster-dpi" | "--image-max-ppi" => number(v),
+        "--convert-colors" => matches!(v, "cmyk" | "gray" | "rgb"),
+        "--intent" => matches!(v, "perceptual" | "relative" | "saturation" | "absolute"),
+        "--convert-objects" => v.split(',').all(|w| {
+            matches!(
+                w,
+                "text" | "vector" | "shading" | "images" | "lossy" | "lossless"
+            )
+        }),
+        "--ink-limit" => number(v) && v.parse::<f64>().is_ok_and(|n| (100.0..=400.0).contains(&n)),
+        "--rgb-gray-to-k" => number(v) && v.parse::<f64>().is_ok_and(|n| n <= 100.0),
         "--vt-records" => v
             .bytes()
             .all(|b| b.is_ascii_digit() || b == b',' || b == b'-' || b == b' '),
@@ -1483,9 +1503,10 @@ mod tests {
     fn allow_list_accepts_what_the_api_builds() {
         let d = job_dir();
         let profiles = Path::new(env!("CARGO_MANIFEST_DIR")).join("../pdfa-engine/profiles");
-        let q = Query::parse("level=x4&ua=1&lang=en-US&rasterDpi=150&imageMaxPpi=72.5&vtRecords=1-3,4-6&facturxProfile=BASIC WL&outputCondition=FOGRA39&profile=press/book-text-pages-check-and-fix");
+        let q = Query::parse("level=x4&ua=1&lang=en-US&rasterDpi=150&imageMaxPpi=72.5&vtRecords=1-3,4-6&facturxProfile=BASIC WL&outputCondition=FOGRA39&profile=press/book-text-pages-check-and-fix&convertColors=cmyk&intent=relative&convertObjects=text,vector,images&inkLimit=300&rgbGrayToK=5&keepSpots=1&noBpc=1&grayToK=1");
         let mut fields = HashMap::new();
         fields.insert("destProfile".into(), Field::Text("icc".into()));
+        fields.insert("deviceLink".into(), Field::Text("icc".into()));
         let mut args = build_args(
             &q,
             Some("pw".into()),
@@ -1536,6 +1557,19 @@ mod tests {
                 ]),
             ),
             (Kind::Convert, convert(&lits(&["--profile", "/etc/passwd"]))),
+            (
+                Kind::Convert,
+                convert(&lits(&["--convert-colors", "/etc/passwd"])),
+            ),
+            (
+                Kind::Convert,
+                convert(&lits(&["--convert-colors", "dest.icc"])),
+            ),
+            (
+                Kind::Convert,
+                convert(&lits(&["--device-link", "/etc/passwd"])),
+            ),
+            (Kind::Convert, convert(&lits(&["--icc-folder", "/etc"]))),
             (
                 Kind::Convert,
                 convert(&[
@@ -1672,6 +1706,13 @@ mod tests {
             "level=2b&imageMaxPpi=1.2.3",
             "level=2b&vtRecords=1;2",
             "level=2b&facturxProfile=../../x",
+            "level=x1a&convertColors=/etc/passwd",
+            "level=x1a&convertColors=Coated FOGRA39",
+            "level=x1a&intent=fast",
+            "level=x1a&convertObjects=text,fonts",
+            "level=x1a&inkLimit=50",
+            "level=x1a&inkLimit=900",
+            "level=x1a&rgbGrayToK=101",
         ] {
             let r = build_args(
                 &Query::parse(q),

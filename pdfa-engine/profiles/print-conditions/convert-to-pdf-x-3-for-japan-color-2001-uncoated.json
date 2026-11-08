@@ -1,0 +1,10 @@
+{
+  "kura-profile": 1,
+  "name": "Convert to PDF/X-3 for Japan Color 2001 Uncoated",
+  "description": "Converts to PDF/X-3 with the Japan Color 2001 Uncoated profile as output intent (Japanese uncoated paper, Japan Color 2001). The profile is taken from Kura's bundled profiles or the computer's colour folders.",
+  "convert": {
+    "level": "pdfx-3",
+    "profile": "Japan Color 2001 Uncoated"
+  },
+  "checks": []
+}

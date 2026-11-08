@@ -6,6 +6,15 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- Colour conversion through the HTTP API and both npm packages: `convertColors`
+  (`cmyk`, `gray`, `rgb` or an ICC profile), `intent`, `convertObjects`,
+  `keepSpots`, `noBpc`, `grayToK`, `rgbGrayToK`, `inkLimit` and `deviceLink`,
+  matching the CLI flags. A PDF/X-4 can now be made fully CMYK with a press
+  profile as its output intent from any of them.
+- The colour conversion flags are documented in the CLI reference.
+
 ## [1.3.0] - 2026-11-06
 
 ### Changed

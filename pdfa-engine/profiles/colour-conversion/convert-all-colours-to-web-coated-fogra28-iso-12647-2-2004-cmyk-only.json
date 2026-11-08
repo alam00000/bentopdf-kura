@@ -1,0 +1,12 @@
+{
+  "kura-profile": 1,
+  "name": "Convert all colours to Web Coated FOGRA28 (ISO 12647-2:2004) (CMYK only)",
+  "description": "Converts every colour, spot colours included, to CMYK for web offset on coated paper, FOGRA28. No standard is applied.",
+  "convert": {
+    "colors": {
+      "to": "Web Coated FOGRA28 (ISO 12647-2:2004)",
+      "keep_spots": false
+    }
+  },
+  "checks": []
+}

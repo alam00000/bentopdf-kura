@@ -20,7 +20,8 @@
     "index.js",
     "index.d.ts",
     "bin",
-    "NOTICE.md"
+    "NOTICE.md",
+    "ICC-PROFILE-TERMS.md"
   ],
   "optionalDependencies": {
     "@bentopdf/kura-pdf-darwin-arm64": "1.3.0",

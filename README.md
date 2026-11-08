@@ -73,7 +73,7 @@ Kura validates clean against every public conformance suite there is:
 | PDF/UA Reference Suite | accessibility | 10 / 10 |
 | Cal Poly PDF/VT | variable-data print | 24 / 24 |
 
-Check mode agrees with veraPDF on 568 of 568 files at PDF/A-1b and 954 of 970 at 2b, and every disagreement is a defect the converter cannot repair rather than a false finding.
+Check mode agrees with veraPDF on every labelled file of its test corpus at every PDF/A level and at PDF/UA-1 and PDF/UA-2.
 
 For robustness, see the [benchmark](#benchmark): real-world files, every one listed, zero crashes. It is fuzzed continuously by ClusterFuzzLite in this repository's own CI through five harnesses, built and tested under AddressSanitizer and UndefinedBehaviorSanitizer on every push, and refuses pathological files with an error instead of falling over.
 

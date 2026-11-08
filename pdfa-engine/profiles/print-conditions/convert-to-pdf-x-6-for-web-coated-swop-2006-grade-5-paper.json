@@ -1,0 +1,10 @@
+{
+  "kura-profile": 1,
+  "name": "Convert to PDF/X-6 for Web Coated SWOP 2006 Grade 5 Paper",
+  "description": "Converts to PDF/X-6 with the Web Coated SWOP 2006 Grade 5 Paper profile as output intent (US web offset, SWOP 2006 grade 5). The profile is taken from Kura's bundled profiles or the computer's colour folders.",
+  "convert": {
+    "level": "pdfx-6",
+    "profile": "Web Coated SWOP 2006 Grade 5 Paper"
+  },
+  "checks": []
+}

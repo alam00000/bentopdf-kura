@@ -1,0 +1,28 @@
+{
+  "kura-profile": 1,
+  "name": "Put overprinting objects on a layer",
+  "description": "Moves every object set to overprint onto a layer named Overprint.",
+  "checks": [
+    {
+      "name": "Overprinting objects",
+      "severity": "info",
+      "all": [
+        {
+          "check": "color.overprint",
+          "op": "in",
+          "value": [
+            "on",
+            "on_nonzero_mode"
+          ]
+        }
+      ]
+    }
+  ],
+  "fixes": [
+    {
+      "fix": "layer.move_objects",
+      "layer": "Overprint",
+      "objects": "Overprinting objects"
+    }
+  ]
+}

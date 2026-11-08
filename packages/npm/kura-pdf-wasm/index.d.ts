@@ -1,14 +1,17 @@
 export type Level =
   | '1b' | '1a' | '2b' | '2u' | '2a' | '3b' | '3u' | '3a' | '4' | '4f' | '4e'
-  | 'x1a' | 'x3' | 'x4' | 'x6' | 'e1' | 'vt1' | 'vt3';
+  | 'x1a' | 'x3' | 'x4' | 'x6' | 'e1' | 'vt1' | 'vt3' | 'none';
 
 export type CheckOnlyLevel = 'x4p' | 'x5g' | 'x5n' | 'x5pg' | 'x6n' | 'x6p' | 'vt2';
 
 export type Bytes = Uint8Array | ArrayBuffer;
 
+export type ColorObject = 'text' | 'vector' | 'shading' | 'images' | 'lossy' | 'lossless';
+
 export interface KuraOptions {
   ua?: boolean;
   lang?: string;
+  pdfVersion?: '1.3' | '1.4' | '1.5' | '1.6' | '1.7' | '2.0';
   password?: string;
   allowVisualRisk?: boolean;
   rasterizePages?: boolean;
@@ -27,6 +30,15 @@ export interface KuraOptions {
   defaultRgb?: Bytes;
   defaultCmyk?: Bytes;
   defaultGray?: Bytes;
+  convertColors?: 'cmyk' | 'gray' | 'rgb' | Bytes;
+  intent?: 'perceptual' | 'relative' | 'saturation' | 'absolute';
+  convertObjects?: ColorObject[] | string;
+  keepSpots?: boolean;
+  noBpc?: boolean;
+  grayToK?: boolean;
+  rgbGrayToK?: number;
+  inkLimit?: number;
+  deviceLink?: Bytes;
   vtRecords?: string;
   profile?: string;
   analyze?: boolean;

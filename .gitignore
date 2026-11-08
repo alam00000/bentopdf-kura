@@ -12,6 +12,8 @@ corpus/
 pdfa-engine/build*/
 pdfa-engine/third_party/*
 !pdfa-engine/third_party/icc/
+!pdfa-engine/third_party/harfbuzz/
+!pdfa-engine/third_party/cmap-resources/
 
 dist/
 cert/mustang.jar
@@ -36,3 +38,5 @@ scripts/build-site.sh
 scripts/deploy-site.sh
 deploy/
 dist-site/
+conformance/corpus/
+conformance/RESULTS.csv

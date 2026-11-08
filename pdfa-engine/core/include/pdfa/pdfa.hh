@@ -26,7 +26,7 @@ struct ColorRule {
     kUncRgb = 1, kCalRgb = 2, kUncCmyk = 4, kCalCmyk = 8, kUncGray = 16, kCalGray = 32,
     kLab = 64, kSpot = 128, kRegistration = 256, kAnySource = 511
   };
-  enum Action { kConvert, kNone, kDecalibrate, kConvertAlternate, kDecalibrateConvert, kTag };
+  enum Action { kConvert, kNone, kDecalibrate, kConvertAlternate, kDecalibrateConvert, kTag, kInkLimit };
   unsigned objects = kAllObjects;
   unsigned sources = kAnySource;
   Action action = kConvert;
@@ -73,6 +73,8 @@ struct Options {
   std::string vtRecords;
   std::function<bool(int pageIndex, double dpi, int& width, int& height, std::string& rgb)>
       rasterizePage;
+  std::function<bool(const std::string& pdf, double dpi, int& width, int& height, std::string& rgb)>
+      renderPdf;
   double rasterDpi = 300.0;
   double imageMaxPpi = 0.0;
   double imageDownsampleAbovePpi = 0.0;
@@ -98,6 +100,8 @@ struct Options {
   std::vector<std::pair<std::string, std::string>> fontSubstitutions;
   std::function<bool(const std::string& wanted, std::string& psName, std::string& bytes)>
       loadFont;
+  std::function<bool(const std::string& script, bool bold, std::string& bytes)> loadCjkFont;
+  std::function<bool(const std::string& name, std::string& bytes)> loadWorldFont;
   std::string defaultRgbProfile;
   std::string defaultCmykProfile;
   std::string defaultGrayProfile;
@@ -115,6 +119,8 @@ struct Options {
   std::map<std::string, std::string> profileVars;
   std::string pageRange;
   bool levelFromProfile = false;
+  bool noStandard = false;
+  std::string pdfVersion;
   bool reconvert = false;
   double fallbackDpi = 0.0;
   bool fallbackProblemPagesOnly = false;
@@ -173,9 +179,15 @@ int issueSeverity(const std::string& code);
 // case, spaces, dashes and underscores; fills the PostScript-style name and bytes.
 bool loadFontFromFolder(const std::string& folder, const std::string& wanted,
                         std::string& psName, std::string& bytes);
+bool loadWorldFontFromFolder(const std::string& folder, const std::string& name, std::string& bytes);
+bool loadCjkFontFromFolder(const std::string& folder, const std::string& script, bool bold,
+                           std::string& bytes);
 
 bool loadIccFromFolders(const std::vector<std::string>& folders, const std::string& name,
                         std::string& bytes);
+
+bool configureColorConversion(Options& opt, const std::string& target, const std::string& targetIcc,
+                              int intent, bool keepSpots, unsigned objects);
 
 bool levelFromString(const std::string& s, Level& out);
 std::string levelToString(Level level);

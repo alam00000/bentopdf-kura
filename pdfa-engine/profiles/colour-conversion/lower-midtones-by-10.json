@@ -1,0 +1,20 @@
+{
+  "kura-profile": 1,
+  "name": "Lower midtones by 10%",
+  "description": "Applies a tone curve to CMYK colour that prints 50% tones as 40%, leaving paper white and solids unchanged. No standard is applied.",
+  "convert": {
+    "colors": {
+      "to": "cmyk",
+      "keep_spots": true,
+      "tone_curve": [
+        0,
+        0,
+        50,
+        40,
+        100,
+        100
+      ]
+    }
+  },
+  "checks": []
+}

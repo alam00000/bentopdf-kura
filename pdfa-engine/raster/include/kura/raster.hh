@@ -9,4 +9,5 @@ using Rasterizer = std::function<bool(int pageIndex, double dpi, int& width, int
                                       std::string& rgb)>;
 
 Rasterizer makeRasterizer(const void* data, std::size_t size, const std::string& password);
+bool renderFirstPage(const std::string& pdf, double dpi, int& width, int& height, std::string& rgb);
 }

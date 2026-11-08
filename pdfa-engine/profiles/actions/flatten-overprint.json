@@ -1,0 +1,11 @@
+{
+  "kura-profile": 1,
+  "name": "Flatten overprint",
+  "description": "Paints what overprinting objects leave of the inks underneath, then switches overprint off, so the page looks the same on devices that ignore overprint.",
+  "checks": [],
+  "fixes": [
+    {
+      "fix": "ink.flatten_overprint"
+    }
+  ]
+}

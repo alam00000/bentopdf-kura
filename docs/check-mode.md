@@ -21,12 +21,18 @@ A finding is a repair the converter would apply, minus the three normalizations 
 
 Findings marked `(visual risk)` are repairs that need `--allow-visual-risk` on a real conversion.
 
-## What it cannot see
+## How accurate it is
 
-Check mode sees exactly what the converter can repair. That has a consequence worth stating plainly:
+Besides the repairs the converter would make, check mode runs the standards' own syntax, content, font, colour and metadata rules, so it also reports defects the converter would remove rather than repair. Measured on the labelled pass and fail files of the veraPDF test corpus, it agrees with veraPDF on every file at every level it covers:
 
-- It never reports a false finding. Measured against veraPDF over 568 PDF/A-1b files it agrees on every one, and over 970 PDF/A-2b files it agrees on 954.
-- It is blind to any defect the converter itself does not know how to fix. Every one of the 16 disagreements above is a file veraPDF rejects that Kura does not know how to repair.
+| Level | Files | Agreement |
+|---|---:|---:|
+| PDF/A-1b | 568 | 100% |
+| PDF/A-2b | 985 | 100% |
+| PDF/A-4 | 486 | 100% |
+| PDF/A-1a, 2a, 2u, 3b, 4e, 4f | 125 | 100% |
+| PDF/UA-1 | 296 | 100% |
+| PDF/UA-2 | 133 | 100% |
 
 If a pass could not finish, because a content stream or metadata packet could not be read, the report carries a `SCAN_INCOMPLETE` finding rather than staying silent. Treat it as "unknown", not "clean".
 

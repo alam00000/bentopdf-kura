@@ -1,0 +1,13 @@
+{
+  "kura-profile": 1,
+  "name": "Convert CMYK from ISO Coated v2 to FOGRA39",
+  "description": "Re-separates CMYK made for ISO Coated v2 (ECI) so it prints the same on Coated FOGRA39 (ISO 12647-2:2004), through both profiles; spot colours stay spot colours and the new profile becomes the output intent.",
+  "convert": {
+    "colors": {
+      "from": "ISO Coated v2 (ECI)",
+      "to": "Coated FOGRA39 (ISO 12647-2:2004)",
+      "keep_spots": true
+    }
+  },
+  "checks": []
+}

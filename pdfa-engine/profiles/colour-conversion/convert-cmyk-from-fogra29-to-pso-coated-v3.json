@@ -1,0 +1,13 @@
+{
+  "kura-profile": 1,
+  "name": "Convert CMYK from FOGRA29 to PSO Coated v3",
+  "description": "Re-separates CMYK made for Uncoated FOGRA29 (ISO 12647-2:2004) so it prints the same on PSO Coated v3, through both profiles; spot colours stay spot colours and the new profile becomes the output intent.",
+  "convert": {
+    "colors": {
+      "from": "Uncoated FOGRA29 (ISO 12647-2:2004)",
+      "to": "PSO Coated v3",
+      "keep_spots": true
+    }
+  },
+  "checks": []
+}

@@ -30,9 +30,11 @@
 #include "assets/agl_names.hh"
 #include "assets/fonts_data.hh"
 #include "assets/srgb_icc.hh"
+#include "colorx.hh"
 #include "ctx.hh"
 #include "encodings.hh"
 #include "fonts_ft.hh"
+#include "fontworld.hh"
 #include "passes.hh"
 #include "util.hh"
 
@@ -110,7 +112,7 @@ double glyphAdvance(FT_Face face, FT_UInt gid, double upem) {
 
 class CffWidths {
  public:
-  explicit CffWidths(const std::string& file) {
+  explicit CffWidths(const std::string& file, bool applyMatrix = false) {
     const unsigned char* d = reinterpret_cast<const unsigned char*>(file.data());
     size_t n = file.size();
     size_t base = 0;
@@ -137,6 +139,7 @@ class CffWidths {
     if (!skipIndex()) return;
     std::map<int, std::vector<double>> topDict;
     parseDict(top[0].first, top[0].second, topDict);
+    topM = applyMatrix ? matrixA(topDict) : 0;
     size_t fileLen = static_cast<size_t>(end - data);
     auto getOff = [&](int op) -> size_t {
       auto it = topDict.find(op);
@@ -159,10 +162,12 @@ class CffWidths {
         std::map<int, std::vector<double>> fdd;
         parseDict(fd.first, fd.second, fdd);
         fdPriv.push_back(readPrivate(fdd, base));
+        fdScale.push_back(applyMatrix ? (topM > 0 ? topM : 1.0) * (matrixA(fdd) > 0 ? matrixA(fdd) : 0.001) * 1000.0 : 1.0);
       }
       parseFdSelect(fdsOff);
     } else {
       fdPriv.push_back(readPrivate(topDict, base));
+      fdScale.push_back((topM > 0 ? topM : 0.001) * 1000.0);
       fdSelectAll0 = true;
     }
     ok = !charstrings.empty() && !fdPriv.empty();
@@ -177,7 +182,8 @@ class CffWidths {
       fd = gid < fdSel.size() ? fdSel[gid] : 0;
       if (fd < 0 || static_cast<size_t>(fd) >= fdPriv.size()) fd = 0;
     }
-    double defaultW = fdPriv[fd].first, nominalW = fdPriv[fd].second;
+    double scale = static_cast<size_t>(fd) < fdScale.size() ? fdScale[fd] : 1.0;
+    double defaultW = fdPriv[fd].first * scale, nominalW = fdPriv[fd].second * scale;
     const unsigned char* p = data + charstrings[gid].first;
     const unsigned char* e = p + charstrings[gid].second;
     int stack = 0;
@@ -203,18 +209,26 @@ class CffWidths {
         case 21: expected = 2; break;
         case 4: case 22: expected = 1; break;
         case 14: expected = 0; break;
+        case 10: case 29: return -1;
         default: return defaultW;
       }
       bool hasWidth;
       if (expected == -2) hasWidth = (stack % 2) == 1;
       else if (b == 14) hasWidth = stack == 1 || stack == 5;
       else hasWidth = stack == expected + 1;
-      return hasWidth ? nominalW + first : defaultW;
+      return hasWidth ? nominalW + first * scale : defaultW;
     }
     return defaultW;
   }
 
  private:
+  double topM = 0;
+  std::vector<double> fdScale;
+  static double matrixA(const std::map<int, std::vector<double>>& dict) {
+    auto it = dict.find(0x0c07);
+    if (it == dict.end() || it->second.size() < 6 || it->second[0] <= 0) return 0;
+    return it->second[0];
+  }
   static uint16_t rd16(const unsigned char* p) { return (p[0] << 8) | p[1]; }
   static uint32_t rd32(const unsigned char* p) {
     return (static_cast<uint32_t>(p[0]) << 24) | (p[1] << 16) | (p[2] << 8) | p[3];
@@ -348,7 +362,8 @@ void syncSimpleFontWidths(Ctx& ctx, FtLib& lib, QPDFObjectHandle font, const Fon
   QPDFObjectHandle first = font.getKey("/FirstChar");
   QPDFObjectHandle last = font.getKey("/LastChar");
   QPDFObjectHandle widths = font.getKey("/Widths");
-  if (!first.isInteger() || !last.isInteger() || !widths.isArray()) return;
+  bool keysOk = first.isNumber() && last.isNumber() && widths.isArray();
+  if (!keysOk && !use) widths = QPDFObjectHandle::newArray();
   FtFace face;
   if (!loadFace(lib, program, face)) {
     ctx.issue("FONT_PROGRAM_UNREADABLE",
@@ -357,23 +372,25 @@ void syncSimpleFontWidths(Ctx& ctx, FtLib& lib, QPDFObjectHandle font, const Fon
   }
   double upem = face.face->units_per_EM ? face.face->units_per_EM : 1000.0;
   HmtxTable hmtx = parseHmtx(face.data);
-  CffWidths cff(face.data);
+  CffWidths cff(face.data, !ctx.isA());
   long long flags = fd.getKey("/Flags").isInteger() ? fd.getKey("/Flags").getIntValue() : 0;
-  bool symbolic = (flags & 4) != 0 && (flags & 32) == 0;
+  bool symbolic = (flags & 4) != 0;
   SimpleEncoding enc = readEncoding(font, symbolic);
-  int firstChar = static_cast<int>(first.getIntValue());
-  int lastChar = static_cast<int>(last.getIntValue());
-  int n = widths.getArrayNItems();
+  int firstChar = keysOk ? static_cast<int>(first.getNumericValue()) : 0;
+  int lastChar = keysOk ? static_cast<int>(last.getNumericValue()) : -1;
+  int n = widths.isArray() ? widths.getArrayNItems() : 0;
+  bool tt = nameIs(font.getKey("/Subtype"), "/TrueType");
   if (use) {
     double missing = fd.getKey("/MissingWidth").isNumber() ? fd.getKey("/MissingWidth").getNumericValue() : 0.0;
     int bad = 0;
     for (uint32_t code : use->visibleCodes) {
       if (code > 255) continue;
       int c = static_cast<int>(code);
-      bool inRange = c >= firstChar && c <= lastChar && c - firstChar < n;
-      QPDFObjectHandle w = inRange ? widths.getArrayItem(c - firstChar) : QPDFObjectHandle::newNull();
-      double dictW = w.isNumber() ? w.getNumericValue() : missing;
-      FT_UInt gid = resolveSimpleGid(face, c, enc, symbolic);
+      bool inRange = keysOk && n > 0 && c >= firstChar && c <= lastChar;
+      QPDFObjectHandle w = inRange && c - firstChar < n ? widths.getArrayItem(c - firstChar) : QPDFObjectHandle::newNull();
+      double dictW = inRange ? (w.isNumber() ? w.getNumericValue() : 0.0) : missing;
+      bool present = false;
+      FT_UInt gid = tt ? strictTrueTypeGid(face.face, c, font, symbolic, present) : resolveSimpleGid(face, c, enc, symbolic);
       double progW = programAdvance(face, hmtx, gid, upem);
       if (progW < 0 && cff.ok) {
         double cffW = cff.widthForGid(gid);
@@ -397,7 +414,8 @@ void syncSimpleFontWidths(Ctx& ctx, FtLib& lib, QPDFObjectHandle font, const Fon
     QPDFObjectHandle w =
         inRange ? widths.getArrayItem(code - firstChar) : QPDFObjectHandle::newNull();
     double dictW = w.isNumber() ? w.getNumericValue() : 0.0;
-    FT_UInt gid = resolveSimpleGid(face, code, enc, symbolic);
+    bool present = false;
+    FT_UInt gid = tt ? strictTrueTypeGid(face.face, code, font, symbolic, present) : resolveSimpleGid(face, code, enc, symbolic);
     double progW = programAdvance(face, hmtx, gid, upem);
     if (progW < 0 && cff.ok) {
       double cffW = cff.widthForGid(gid);
@@ -416,7 +434,7 @@ void syncSimpleFontWidths(Ctx& ctx, FtLib& lib, QPDFObjectHandle font, const Fon
       ++changed;
     }
   }
-  if (changed || extended) {
+  if (changed || extended || !keysOk) {
     QPDFObjectHandle arr = QPDFObjectHandle::newArray();
     for (int code = 0; code < 256; ++code) arr.appendItem(full[code]);
     font.replaceKey("/FirstChar", QPDFObjectHandle::newInteger(0));
@@ -453,7 +471,7 @@ void syncCidFontWidths(Ctx& ctx, FtLib& lib, QPDFObjectHandle type0, const FontU
   }
   double upem = face.face->units_per_EM ? face.face->units_per_EM : 1000.0;
   HmtxTable hmtx = parseHmtx(face.data);
-  CffWidths cff(face.data);
+  CffWidths cff(face.data, !ctx.isA());
 
   QPDFObjectHandle c2g = cidFont.getKey("/CIDToGIDMap");
   std::string mapData;
@@ -912,7 +930,7 @@ void fixNonsymbolicTtfEncoding(Ctx& ctx, QPDFObjectHandle font) {
   long long flags = fd.isDictionary() && fd.getKey("/Flags").isInteger()
                         ? fd.getKey("/Flags").getIntValue()
                         : 0;
-  if (!(flags & 32) || (flags & 4)) return;
+  if (flags & 4) return;
   QPDFObjectHandle enc = font.getKey("/Encoding");
   if (enc.isName() &&
       (enc.getName() == "/WinAnsiEncoding" || enc.getName() == "/MacRomanEncoding")) {
@@ -942,9 +960,18 @@ void fixNonsymbolicTtfEncoding(Ctx& ctx, QPDFObjectHandle font) {
         }
         if (!item.isName()) continue;
         std::string bare = item.getName().substr(1);
-        uint32_t uni = aglNameToUnicode(bare);
         uint32_t parsed = 0;
-        bool ok = uni != 0 || parseUniName(bare, parsed) || bare == ".notdef";
+        if (parseUniName(bare, parsed)) {
+          std::string named = unicodeToAglName(parsed);
+          if (!named.empty()) {
+            bare = named;
+            item = QPDFObjectHandle::newName("/" + named);
+            removedAny = true;
+          }
+        }
+        uint32_t uni = aglNameToUnicode(bare);
+        bool emptySlot = bare == ".notdef" && pendingCode >= 0 && pendingCode < 256 && !winAnsiToUnicode(pendingCode);
+        bool ok = !emptySlot && (uni != 0 || parseUniName(bare, parsed) || bare == ".notdef");
         if (ok) {
           if (!codeWritten) {
             nd.appendItem(QPDFObjectHandle::newInteger(pendingCode));
@@ -965,7 +992,7 @@ void fixNonsymbolicTtfEncoding(Ctx& ctx, QPDFObjectHandle font) {
           enc.replaceKey("/Differences", nd);
         }
         ctx.issue("ENCODING_DIFFS_CLEANED",
-                  "removed non-AGL glyph names from /Differences of " +
+                  "replaced or removed non-standard glyph names in /Differences of " +
                       nameOf(font.getKey("/BaseFont")),
                   true);
       }
@@ -1043,6 +1070,8 @@ void fixEmbeddedCMap(Ctx& ctx, QPDFObjectHandle type0) {
       rosSupp = ros.getKey("/Supplement").getIntValue();
     }
   }
+  QPDFObjectHandle encName = enc.getDict().getKey("/CMapName");
+  bool identityName = nameIs(encName, "/Identity-H") || nameIs(encName, "/Identity-V");
   if (!reg.empty() && !ord.empty()) {
     QPDFObjectHandle cd = enc.getDict().getKey("/CIDSystemInfo");
     std::string creg = cd.isDictionary() && cd.getKey("/Registry").isString()
@@ -1063,7 +1092,7 @@ void fixEmbeddedCMap(Ctx& ctx, QPDFObjectHandle type0) {
       enc.getDict().replaceKey("/CIDSystemInfo", nr);
       ctx.issue("CMAP_ROS_SYNCED",
                 "aligned embedded CMap /CIDSystemInfo dictionary with the CIDFont",
-                !ctx.opt.verifyOnly || creg != reg || cord != ord || (ctx.part >= 2 && csupp < rosSupp));
+                !ctx.opt.verifyOnly || (!identityName && (creg != reg || cord != ord || (ctx.part >= 2 && csupp < rosSupp))));
     }
   }
   std::string text;
@@ -1091,8 +1120,19 @@ void fixEmbeddedCMap(Ctx& ctx, QPDFObjectHandle type0) {
       p = text.find("/" + key, p + 1);
     }
   };
-  if (!reg.empty()) patchLiteral("Registry", reg);
-  if (!ord.empty()) patchLiteral("Ordering", ord);
+  if (!reg.empty() && !ctx.opt.verifyOnly) patchLiteral("Registry", reg);
+  if (!ord.empty() && !ctx.opt.verifyOnly) patchLiteral("Ordering", ord);
+  static const std::set<std::string> kPredefinedCMaps = {
+      "/GB-EUC-H", "/GB-EUC-V", "/GBpc-EUC-H", "/GBpc-EUC-V", "/GBK-EUC-H", "/GBK-EUC-V", "/GBKp-EUC-H",
+      "/GBKp-EUC-V", "/GBK2K-H", "/GBK2K-V", "/UniGB-UCS2-H", "/UniGB-UCS2-V", "/UniGB-UTF16-H",
+      "/UniGB-UTF16-V", "/B5pc-H", "/B5pc-V", "/HKscs-B5-H", "/HKscs-B5-V", "/ETen-B5-H", "/ETen-B5-V",
+      "/ETenms-B5-H", "/ETenms-B5-V", "/CNS-EUC-H", "/CNS-EUC-V", "/UniCNS-UCS2-H", "/UniCNS-UCS2-V",
+      "/UniCNS-UTF16-H", "/UniCNS-UTF16-V", "/83pv-RKSJ-H", "/90ms-RKSJ-H", "/90ms-RKSJ-V",
+      "/90msp-RKSJ-H", "/90msp-RKSJ-V", "/90pv-RKSJ-H", "/Add-RKSJ-H", "/Add-RKSJ-V", "/EUC-H", "/EUC-V",
+      "/Ext-RKSJ-H", "/Ext-RKSJ-V", "/H", "/V", "/UniJIS-UCS2-H", "/UniJIS-UCS2-V", "/UniJIS-UCS2-HW-H",
+      "/UniJIS-UCS2-HW-V", "/UniJIS-UTF16-H", "/UniJIS-UTF16-V", "/KSC-EUC-H", "/KSC-EUC-V",
+      "/KSCms-UHC-H", "/KSCms-UHC-V", "/KSCms-UHC-HW-H", "/KSCms-UHC-HW-V", "/KSCpc-EUC-H",
+      "/UniKS-UCS2-H", "/UniKS-UCS2-V", "/UniKS-UTF16-H", "/UniKS-UTF16-V"};
   {
     size_t uc = text.find("usecmap");
     if (uc != std::string::npos) {
@@ -1103,6 +1143,8 @@ void fixEmbeddedCMap(Ctx& ctx, QPDFObjectHandle type0) {
       if (nameStart != std::string::npos && nameStart >= lineStart) {
         std::string refName = text.substr(nameStart, uc - nameStart);
         if (refName.find("Identity") != std::string::npos) standardRef = true;
+        while (!refName.empty() && std::isspace(static_cast<unsigned char>(refName.back()))) refName.pop_back();
+        if (ctx.part >= 2 && kPredefinedCMaps.count(refName)) standardRef = true;
       }
       if (!standardRef) {
         text.erase(lineStart, uc + 7 - lineStart);
@@ -1116,28 +1158,18 @@ void fixEmbeddedCMap(Ctx& ctx, QPDFObjectHandle type0) {
         refName = ref.getDict().getKey("/CMapName").getName();
       }
       if (refName.find("Identity") == std::string::npos) {
-        static const std::set<std::string> kPredefinedCMaps = {
-            "/GB-EUC-H", "/GB-EUC-V", "/GBpc-EUC-H", "/GBpc-EUC-V", "/GBK-EUC-H", "/GBK-EUC-V", "/GBKp-EUC-H",
-            "/GBKp-EUC-V", "/GBK2K-H", "/GBK2K-V", "/UniGB-UCS2-H", "/UniGB-UCS2-V", "/UniGB-UTF16-H",
-            "/UniGB-UTF16-V", "/B5pc-H", "/B5pc-V", "/HKscs-B5-H", "/HKscs-B5-V", "/ETen-B5-H", "/ETen-B5-V",
-            "/ETenms-B5-H", "/ETenms-B5-V", "/CNS-EUC-H", "/CNS-EUC-V", "/UniCNS-UCS2-H", "/UniCNS-UCS2-V",
-            "/UniCNS-UTF16-H", "/UniCNS-UTF16-V", "/83pv-RKSJ-H", "/90ms-RKSJ-H", "/90ms-RKSJ-V",
-            "/90msp-RKSJ-H", "/90msp-RKSJ-V", "/90pv-RKSJ-H", "/Add-RKSJ-H", "/Add-RKSJ-V", "/EUC-H", "/EUC-V",
-            "/Ext-RKSJ-H", "/Ext-RKSJ-V", "/H", "/V", "/UniJIS-UCS2-H", "/UniJIS-UCS2-V", "/UniJIS-UCS2-HW-H",
-            "/UniJIS-UCS2-HW-V", "/UniJIS-UTF16-H", "/UniJIS-UTF16-V", "/KSC-EUC-H", "/KSC-EUC-V",
-            "/KSCms-UHC-H", "/KSCms-UHC-V", "/KSCms-UHC-HW-H", "/KSCms-UHC-HW-V", "/KSCpc-EUC-H",
-            "/UniKS-UCS2-H", "/UniKS-UCS2-V", "/UniKS-UTF16-H", "/UniKS-UTF16-V"};
-        bool real = !ctx.opt.verifyOnly || !kPredefinedCMaps.count(refName);
-        enc.getDict().removeKey("/UseCMap");
+        bool real = !ctx.opt.verifyOnly || ctx.part == 1 || !kPredefinedCMaps.count(refName);
+        if (real) enc.getDict().removeKey("/UseCMap");
         ctx.issue("CMAP_USECMAP_REMOVED",
                   "removed /UseCMap reference not used by the embedded CMap program", real);
       }
     }
     size_t wm = text.find("/WMode");
-    if (wm != std::string::npos) {
-      int v = std::atoi(text.c_str() + wm + 6);
+    {
+      int v = wm == std::string::npos ? 0 : std::atoi(text.c_str() + wm + 6);
       QPDFObjectHandle cur = enc.getDict().getKey("/WMode");
-      if ((v == 0 || v == 1) && (!cur.isInteger() || cur.getIntValue() != v)) {
+      long long dictW = cur.isInteger() ? cur.getIntValue() : 0;
+      if ((v == 0 || v == 1) && dictW != v) {
         enc.getDict().replaceKey("/WMode", QPDFObjectHandle::newInteger(v));
         ctx.issue("CMAP_WMODE_SYNCED",
                   "synchronized CMap dictionary /WMode with embedded program", true);
@@ -1221,64 +1253,90 @@ void fixEmbeddedCMap(Ctx& ctx, QPDFObjectHandle type0) {
   }
 }
 
-void syncType3Widths(Ctx& ctx, QPDFObjectHandle font) {
+double type3ProcWidth(QPDFObjectHandle glyph) {
+  if (!glyph.isStream()) return -1;
+  std::string data;
+  try {
+    auto buf = glyph.getStreamData(qpdf_dl_all);
+    data.assign(reinterpret_cast<const char*>(buf->getBuffer()), std::min<size_t>(buf->getSize(), 512));
+  } catch (...) {
+    return -1;
+  }
+  std::vector<double> nums;
+  size_t i = 0;
+  while (i < data.size() && nums.size() < 8) {
+    while (i < data.size() && std::isspace(static_cast<unsigned char>(data[i]))) ++i;
+    size_t j = i;
+    while (j < data.size() && !std::isspace(static_cast<unsigned char>(data[j]))) ++j;
+    if (j == i) break;
+    std::string tok = data.substr(i, j - i);
+    if (tok == "d0" || tok == "d1") return nums.empty() ? -1 : nums[0];
+    char* end = nullptr;
+    double v = std::strtod(tok.c_str(), &end);
+    if (!end || *end != '\0') break;
+    nums.push_back(v);
+    i = j;
+  }
+  return -1;
+}
+
+void syncType3Widths(Ctx& ctx, QPDFObjectHandle font, const FontUse* use) {
   QPDFObjectHandle cp = font.getKey("/CharProcs");
   QPDFObjectHandle widths = font.getKey("/Widths");
-  QPDFObjectHandle fm = font.getKey("/FontMatrix");
-  if (!cp.isDictionary() || !widths.isArray()) return;
-  double a = fm.isArray() && fm.getArrayNItems() == 6 ? numOf(fm.getArrayItem(0), 0.001)
-                                                      : 0.001;
-  if (a == 0) a = 0.001;
-  (void)a;
-  int first = font.getKey("/FirstChar").isInteger()
-                  ? static_cast<int>(font.getKey("/FirstChar").getIntValue())
-                  : 0;
+  QPDFObjectHandle firstObj = font.getKey("/FirstChar");
+  QPDFObjectHandle lastObj = font.getKey("/LastChar");
+  bool keysOk = firstObj.isNumber() && lastObj.isNumber() && widths.isArray();
   SimpleEncoding enc = readEncoding(font, false);
-  bool changed = false;
+  if (use) {
+    QPDFObjectHandle fd = font.getKey("/FontDescriptor");
+    double missing = fd.isDictionary() && fd.getKey("/MissingWidth").isNumber() ? fd.getKey("/MissingWidth").getNumericValue() : 0.0;
+    int first = keysOk ? static_cast<int>(firstObj.getNumericValue()) : 0;
+    int last = keysOk ? static_cast<int>(lastObj.getNumericValue()) : -1;
+    int n = keysOk ? widths.getArrayNItems() : 0;
+    int bad = 0;
+    for (uint32_t code : use->visibleCodes) {
+      if (code > 255) continue;
+      int c = static_cast<int>(code);
+      bool inRange = n > 0 && c >= first && c <= last;
+      QPDFObjectHandle w = inRange && c - first < n ? widths.getArrayItem(c - first) : QPDFObjectHandle::newNull();
+      double dictW = inRange ? (w.isNumber() ? w.getNumericValue() : 0.0) : missing;
+      const std::string& gname = enc.diffs[code];
+      double progW = cp.isDictionary() && !gname.empty() ? type3ProcWidth(cp.getKey(gname)) : -1;
+      if (progW < 0) progW = missing;
+      if (std::fabs(dictW - progW) > 1.0) ++bad;
+    }
+    if (bad) {
+      ctx.issue("TYPE3_WIDTHS_SYNCED", std::to_string(bad) + " glyph width(s) of a Type 3 font differ from its glyph procedures", true);
+    }
+    return;
+  }
+  if (!cp.isDictionary()) return;
+  bool outside = false;
+  for (int c = 0; keysOk && c < 256; ++c) {
+    int lo = static_cast<int>(firstObj.getNumericValue());
+    if (!enc.diffs[c].empty() && cp.getKey(enc.diffs[c]).isStream() && (c < lo || c - lo >= widths.getArrayNItems())) outside = true;
+  }
+  if (!keysOk || outside) {
+    QPDFObjectHandle full = QPDFObjectHandle::newArray();
+    int lo = keysOk ? static_cast<int>(firstObj.getNumericValue()) : 0;
+    for (int c = 0; c < 256; ++c) {
+      QPDFObjectHandle old = keysOk && c >= lo && c - lo < widths.getArrayNItems() ? widths.getArrayItem(c - lo) : QPDFObjectHandle::newNull();
+      full.appendItem(old.isNumber() ? old : QPDFObjectHandle::newInteger(0));
+    }
+    widths = full;
+    font.replaceKey("/FirstChar", QPDFObjectHandle::newInteger(0));
+    font.replaceKey("/LastChar", QPDFObjectHandle::newInteger(255));
+    font.replaceKey("/Widths", widths);
+  }
+  int first = static_cast<int>(font.getKey("/FirstChar").getNumericValue());
+  bool changed = !keysOk || outside;
   for (int idx = 0; idx < widths.getArrayNItems(); ++idx) {
     int code = first + idx;
     if (code < 0 || code > 255) break;
     const std::string& gname = enc.diffs[code];
     if (gname.empty()) continue;
-    QPDFObjectHandle glyph = cp.getKey(gname);
-    if (!glyph.isStream()) continue;
-    std::string data;
-    try {
-      auto buf = glyph.getStreamData(qpdf_dl_all);
-      data.assign(reinterpret_cast<const char*>(buf->getBuffer()),
-                  std::min<size_t>(buf->getSize(), 512));
-    } catch (...) {
-      continue;
-    }
-    std::vector<double> nums;
-    size_t i = 0;
-    bool found = false;
-    double wx = 0;
-    while (i < data.size() && nums.size() < 8) {
-      while (i < data.size() && std::isspace(static_cast<unsigned char>(data[i]))) ++i;
-      size_t j = i;
-      while (j < data.size() && !std::isspace(static_cast<unsigned char>(data[j]))) ++j;
-      if (j == i) break;
-      std::string tok = data.substr(i, j - i);
-      if (tok == "d0" || tok == "d1") {
-        if (!nums.empty()) {
-          wx = nums[0];
-          found = true;
-        }
-        break;
-      }
-      char* end = nullptr;
-      double v = std::strtod(tok.c_str(), &end);
-      if (end && *end == '\0') {
-        nums.push_back(v);
-      } else {
-        break;
-      }
-      i = j;
-    }
-    if (!found) continue;
-
-    double w = wx;
+    double w = type3ProcWidth(cp.getKey(gname));
+    if (w < 0) continue;
     double cur = numOf(widths.getArrayItem(idx), -1);
     if (std::fabs(cur - w) > 0.1) {
       widths.setArrayItem(idx, QPDFObjectHandle::newReal(w, 2));
@@ -1291,22 +1349,109 @@ void syncType3Widths(Ctx& ctx, QPDFObjectHandle font) {
   }
 }
 
-int symbolicCmapAction(FtLib& lib, QPDFObjectHandle font) {
+int symbolicCmapAction(FtLib& lib, QPDFObjectHandle font, bool verifyOnly) {
   QPDFObjectHandle fd = font.getKey("/FontDescriptor");
   if (!fd.isDictionary() || !fd.getKey("/Flags").isInteger()) return 0;
   long long flags = fd.getKey("/Flags").getIntValue();
-  if (!(flags & 4) || (flags & 32)) return 0;
+  if (!(flags & 4)) return 0;
   QPDFObjectHandle program = fontFileStream(fd);
   if (!program.isStream()) return 0;
   FtFace face;
   if (!loadFace(lib, program, face)) return 0;
   int n = face.face->num_charmaps;
-  if (n == 1) return 0;
+  if (n == 1) return findCmap(face.face, 3, 1) && !verifyOnly ? 1 : 0;
   for (int i = 0; i < n; ++i) {
     FT_CharMap cm = face.face->charmaps[i];
     if (cm->platform_id == 3 && cm->encoding_id == 1) return 1;
   }
   return 2;
+}
+
+bool programHasCmap(FtLib& lib, QPDFObjectHandle font, int platform, int encoding) {
+  QPDFObjectHandle program = fontFileStream(font.getKey("/FontDescriptor"));
+  if (!program.isStream()) return true;
+  FtFace face;
+  if (!loadFace(lib, program, face)) return true;
+  for (int i = 0; i < face.face->num_charmaps; ++i) {
+    FT_CharMap cm = face.face->charmaps[i];
+    if (cm->platform_id == platform && cm->encoding_id == encoding) return true;
+  }
+  return false;
+}
+
+bool addMsUnicodeCmap(QPDFObjectHandle font) {
+  QPDFObjectHandle program = fontFileStream(font.getKey("/FontDescriptor"));
+  if (!program.isStream()) return false;
+  std::string f;
+  try {
+    auto buf = program.getStreamData(qpdf_dl_all);
+    f.assign(reinterpret_cast<const char*>(buf->getBuffer()), buf->getSize());
+  } catch (...) {
+    return false;
+  }
+  auto u16 = [&](size_t o) { return o + 2 <= f.size() ? (static_cast<unsigned char>(f[o]) << 8) | static_cast<unsigned char>(f[o + 1]) : 0; };
+  auto u32 = [&](size_t o) { return o + 4 <= f.size() ? (static_cast<uint32_t>(u16(o)) << 16) | u16(o + 2) : 0u; };
+  auto p16 = [](std::string& s, size_t o, uint32_t v) { s[o] = static_cast<char>(v >> 8); s[o + 1] = static_cast<char>(v); };
+  auto p32 = [&](std::string& s, size_t o, uint32_t v) { p16(s, o, v >> 16); p16(s, o + 2, v & 0xFFFF); };
+  if (f.size() < 12) return false;
+  int numTables = u16(4);
+  size_t dir = 0;
+  for (int i = 0; i < numTables; ++i) {
+    if (f.compare(12 + 16 * i, 4, "cmap") == 0) dir = 12 + 16 * i;
+  }
+  if (!dir) return false;
+  size_t off = u32(dir + 8), len = u32(dir + 12);
+  if (off + len > f.size() || len < 4) return false;
+  std::string cmap = f.substr(off, len);
+  int n = (static_cast<unsigned char>(cmap[2]) << 8) | static_cast<unsigned char>(cmap[3]);
+  if (4 + 8 * static_cast<size_t>(n) > cmap.size()) return false;
+  uint32_t target = 0;
+  for (int i = 0; i < n; ++i) {
+    size_t r = 4 + 8 * i;
+    int plat = (static_cast<unsigned char>(cmap[r]) << 8) | static_cast<unsigned char>(cmap[r + 1]);
+    int enc = (static_cast<unsigned char>(cmap[r + 2]) << 8) | static_cast<unsigned char>(cmap[r + 3]);
+    uint32_t so = u32(off + r + 4);
+    if (plat == 3 && (enc == 1 || enc == 0)) return false;
+    if (plat == 0 && so + 2 <= len && u16(off + so) == 4 && !target) target = so;
+  }
+  if (!target) return false;
+  std::string out = cmap.substr(0, 4 + 8 * n);
+  for (int i = 0; i < n; ++i) p32(out, 4 + 8 * i + 4, u32(off + 4 + 8 * i + 4) + 8);
+  std::string rec(8, '\0');
+  p16(rec, 0, 3);
+  p16(rec, 2, 1);
+  p32(rec, 4, target + 8);
+  out += rec + cmap.substr(4 + 8 * n);
+  p16(out, 2, n + 1);
+  while (f.size() % 4) f.push_back('\0');
+  uint32_t sum = 0;
+  std::string padded = out;
+  while (padded.size() % 4) padded.push_back('\0');
+  for (size_t i = 0; i < padded.size(); ++i) sum += static_cast<uint32_t>(static_cast<unsigned char>(padded[i])) << (24 - 8 * (i % 4));
+  p32(f, dir + 4, sum);
+  p32(f, dir + 8, static_cast<uint32_t>(f.size()));
+  p32(f, dir + 12, static_cast<uint32_t>(out.size()));
+  f += padded;
+  program.replaceStreamData(f, QPDFObjectHandle::newNull(), QPDFObjectHandle::newNull());
+  program.getDict().replaceKey("/Length1", QPDFObjectHandle::newInteger(static_cast<long long>(f.size())));
+  return true;
+}
+
+bool embeddingRestricted(FtLib& lib, QPDFObjectHandle font, const std::string& subtype) {
+  QPDFObjectHandle fd = font.getKey("/FontDescriptor");
+  if (subtype == "/Type0") {
+    QPDFObjectHandle df = font.getKey("/DescendantFonts");
+    if (!df.isArray() || df.getArrayNItems() != 1) return false;
+    fd = df.getArrayItem(0).getKey("/FontDescriptor");
+  }
+  QPDFObjectHandle program = fontFileStream(fd);
+  if (!program.isStream()) return false;
+  FtFace face;
+  if (!loadFace(lib, program, face)) return false;
+  FT_UShort fs = FT_Get_FSType_Flags(face.face);
+  return (fs & FT_FSTYPE_RESTRICTED_LICENSE_EMBEDDING) &&
+         !(fs & (FT_FSTYPE_PREVIEW_AND_PRINT_EMBEDDING | FT_FSTYPE_EDITABLE_EMBEDDING |
+                 FT_FSTYPE_BITMAP_EMBEDDING_ONLY));
 }
 
 bool programUsable(FtLib& lib, QPDFObjectHandle font, const std::string& subtype) {
@@ -1377,7 +1522,7 @@ std::map<uint32_t, std::string> parseExistingToUnicode(QPDFObjectHandle tu) {
     std::string src, dst;
     while (p < blockEnd && parseHexToken(text, p, src) && p < blockEnd &&
            parseHexToken(text, p, dst)) {
-      if (src.size() <= 8 && !dst.empty()) {
+      if (src.size() <= 8) {
         out[static_cast<uint32_t>(std::strtoul(src.c_str(), nullptr, 16))] = dst;
       }
     }
@@ -1500,7 +1645,7 @@ void ensureSimpleToUnicode(Ctx& ctx, FtLib& lib, QPDFObjectHandle font) {
   long long flags = fd.isDictionary() && fd.getKey("/Flags").isInteger()
                         ? fd.getKey("/Flags").getIntValue()
                         : 0;
-  bool symbolic = (flags & 4) != 0 && (flags & 32) == 0;
+  bool symbolic = (flags & 4) != 0;
   SimpleEncoding enc = readEncoding(font, symbolic);
   int added = 0;
   for (int code = 0; code < 256; ++code) {
@@ -1556,9 +1701,26 @@ void ensureCidToUnicode(Ctx& ctx, FtLib& lib, QPDFObjectHandle type0) {
   }
   if (numCids > 65536) numCids = 65536;
 
+  QPDFObjectHandle csi = cidFont.getKey("/CIDSystemInfo");
+  std::string ordering = csi.isDictionary() && csi.getKey("/Ordering").isString() ? csi.getKey("/Ordering").getUTF8Value() : "";
+  std::vector<CmapSpace> spaces;
+  std::map<uint32_t, int> code2cid;
+  std::string cmapOrdering;
+  bool coded = loadEncodingCmap(type0.getKey("/Encoding"), spaces, code2cid, &cmapOrdering);
+  if (coded && orderingCidCount(ordering) == 0) ordering = cmapOrdering;
+  std::vector<std::pair<uint32_t, size_t>> pairs;
+  if (coded) {
+    for (const auto& kv : code2cid) {
+      if (kv.second >= 0 && static_cast<size_t>(kv.second) < numCids) pairs.push_back({kv.first, static_cast<size_t>(kv.second)});
+    }
+  } else {
+    for (size_t cid = 0; cid < numCids; ++cid) pairs.push_back({static_cast<uint32_t>(cid), cid});
+  }
+
   int added = 0;
-  for (size_t cid = 0; cid < numCids; ++cid) {
-    auto it = entries.find(static_cast<uint32_t>(cid));
+  for (const auto& pc : pairs) {
+    size_t cid = pc.second;
+    auto it = entries.find(pc.first);
     if (it != entries.end() && !it->second.empty() && it->second != "0000") continue;
     uint32_t gid = static_cast<uint32_t>(cid);
     if (!mapData.empty()) {
@@ -1577,12 +1739,14 @@ void ensureCidToUnicode(Ctx& ctx, FtLib& lib, QPDFObjectHandle type0) {
                            : 0;
         uni = win ? win : 0xFFFD;
       }
-    } else if (cid >= 0x20 && cid <= 0x10FFFF && !(cid >= 0xD800 && cid <= 0xDFFF)) {
+    } else if (uint32_t mapped = orderingCidToUnicode(ordering, static_cast<uint32_t>(cid))) {
+      uni = mapped;
+    } else if (!coded && cid >= 0x20 && cid <= 0x10FFFF && !(cid >= 0xD800 && cid <= 0xDFFF)) {
       uni = static_cast<uint32_t>(cid);
     } else {
       uni = 0xFFFD;
     }
-    entries[static_cast<uint32_t>(cid)] = utf16Hex(uni);
+    entries[pc.first] = utf16Hex(uni);
     ++added;
   }
   if (!added) return;
@@ -1616,7 +1780,7 @@ bool charSetConsistent(FtLib& lib, QPDFObjectHandle font, const FontUse* usedOnl
   char name[128];
   if (usedOnly) {
     long long flags = fd.getKey("/Flags").isInteger() ? fd.getKey("/Flags").getIntValue() : 0;
-    bool symbolic = (flags & 4) != 0 && (flags & 32) == 0;
+    bool symbolic = (flags & 4) != 0;
     SimpleEncoding enc = readEncoding(font, symbolic);
     for (uint32_t code : usedOnly->codes) {
       if (code > 255) continue;
@@ -1639,7 +1803,7 @@ bool charSetConsistent(FtLib& lib, QPDFObjectHandle font, const FontUse* usedOnl
   return true;
 }
 
-bool cidSetConsistent(FtLib& lib, QPDFObjectHandle type0) {
+bool cidSetConsistent(FtLib& lib, QPDFObjectHandle type0, const std::set<uint32_t>* usedOnly) {
   QPDFObjectHandle df = type0.getKey("/DescendantFonts");
   if (!df.isArray() || df.getArrayNItems() != 1 || !df.getArrayItem(0).isDictionary()) return true;
   QPDFObjectHandle cidFont = df.getArrayItem(0);
@@ -1655,16 +1819,28 @@ bool cidSetConsistent(FtLib& lib, QPDFObjectHandle type0) {
   } catch (...) {
     return false;
   }
+  std::set<uint32_t> listed;
+  for (size_t i = 0; i < bits.size() * 8; ++i) {
+    if (static_cast<unsigned char>(bits[i / 8]) & (0x80 >> (i % 8))) listed.insert(static_cast<uint32_t>(i));
+  }
   long n = face.face->num_glyphs;
-  std::set<uint32_t> present;
+  std::vector<uint32_t> fontCids;
+  std::map<uint32_t, long> cidGid;
+  bool identity = false;
   FT_Bool cidKeyed = 0;
   QPDFObjectHandle c2g = cidFont.getKey("/CIDToGIDMap");
-  if (nameIs(cidFont.getKey("/Subtype"), "/CIDFontType0") && !FT_Get_CID_Is_Internally_CID_Keyed(face.face, &cidKeyed) && cidKeyed) {
-    for (long g = 0; g < n; ++g) {
-      FT_UInt cid = 0;
-      if (!FT_Get_CID_From_Glyph_Index(face.face, static_cast<FT_UInt>(g), &cid)) present.insert(cid);
+  if (nameIs(cidFont.getKey("/Subtype"), "/CIDFontType0")) {
+    if (!FT_Get_CID_Is_Internally_CID_Keyed(face.face, &cidKeyed) && cidKeyed) {
+      for (long g = 0; g < n; ++g) {
+        FT_UInt cid = 0;
+        if (FT_Get_CID_From_Glyph_Index(face.face, static_cast<FT_UInt>(g), &cid)) continue;
+        fontCids.push_back(cid);
+        cidGid[cid] = g;
+      }
+    } else {
+      identity = true;
     }
-  } else if (c2g.isStream() || nameIs(cidFont.getKey("/Subtype"), "/CIDFontType2")) {
+  } else {
     std::string map;
     try {
       if (c2g.isStream()) {
@@ -1674,25 +1850,37 @@ bool cidSetConsistent(FtLib& lib, QPDFObjectHandle type0) {
     } catch (...) {
       return true;
     }
-    bool identity = !c2g.isStream();
-    size_t count = identity ? static_cast<size_t>(n) : map.size() / 2;
-    for (size_t cid = 0; cid < count; ++cid) {
-      long gid = identity ? static_cast<long>(cid)
-                          : (static_cast<unsigned char>(map[cid * 2]) << 8) | static_cast<unsigned char>(map[cid * 2 + 1]);
-      if (gid == 0 || gid >= n) continue;
-      if (FT_Load_Glyph(face.face, static_cast<FT_UInt>(gid), FT_LOAD_NO_SCALE | FT_LOAD_NO_HINTING) != 0) continue;
-      if (face.face->glyph->outline.n_points > 0 || face.face->glyph->outline.n_contours > 0) present.insert(static_cast<uint32_t>(cid));
+    identity = !c2g.isStream();
+    if (identity) {
+      HmtxTable hm = parseHmtx(face.data);
+      long metrics = hm.ok ? static_cast<long>(hm.numH) : n;
+      for (long c = 0; c < metrics; ++c) fontCids.push_back(static_cast<uint32_t>(c));
+    } else {
+      for (size_t c = 0; c < map.size() / 2; ++c) {
+        long gid = (static_cast<unsigned char>(map[c * 2]) << 8) | static_cast<unsigned char>(map[c * 2 + 1]);
+        cidGid[static_cast<uint32_t>(c)] = gid;
+        if (c && gid < n) fontCids.push_back(static_cast<uint32_t>(c));
+      }
     }
-  } else {
-    for (long g = 0; g < n; ++g) present.insert(static_cast<uint32_t>(g));
   }
-  present.erase(0);
-  std::set<uint32_t> listed;
-  for (size_t i = 0; i < bits.size() * 8; ++i) {
-    if (static_cast<unsigned char>(bits[i / 8]) & (0x80 >> (i % 8))) listed.insert(static_cast<uint32_t>(i));
+  auto inFont = [&](uint32_t cid) {
+    if (cid == 0) return false;
+    if (identity) return static_cast<long>(cid) < n;
+    auto it = cidGid.find(cid);
+    if (it == cidGid.end()) return false;
+    return nameIs(cidFont.getKey("/Subtype"), "/CIDFontType0") ? it->second != 0 : it->second < n;
+  };
+  if (usedOnly) {
+    for (uint32_t c : *usedOnly) {
+      if (inFont(c) && !listed.count(c)) return false;
+    }
+    return true;
   }
-  for (uint32_t c : present) {
-    if (!listed.count(c)) return false;
+  for (uint32_t c : fontCids) {
+    if (c != 0 && !listed.count(c)) return false;
+  }
+  for (uint32_t c : listed) {
+    if (c != 0 && !inFont(c)) return false;
   }
   return true;
 }
@@ -1743,14 +1931,14 @@ int puaWithoutActualText(Ctx& ctx, QPDFObjectHandle font, const FontUse& use) {
 
 int verifyUnicode(Ctx& ctx, FtLib& lib, QPDFObjectHandle font, const FontUse& use, int& forbidden) {
   std::string subtype = nameOf(font.getKey("/Subtype"));
-  std::string base = nameOf(font.getKey("/BaseFont"));
-  if (base.size() > 8 && base[7] == '+') base = "/" + base.substr(8);
-  if (ctx.part == 1 && (base == "/Symbol" || base == "/ZapfDingbats")) return 0;
-  if (ctx.part >= 4 && subtype == "/Type3") return 0;
   std::map<uint32_t, std::string> entries = parseExistingToUnicode(font.getKey("/ToUnicode"));
   bool type0 = subtype == "/Type0";
   QPDFObjectHandle enc0 = font.getKey("/Encoding");
-  bool predefined = type0 && enc0.isName() && enc0.getName() != "/Identity-H" && enc0.getName() != "/Identity-V";
+  bool identityEnc = nameIs(enc0, "/Identity-H") || nameIs(enc0, "/Identity-V");
+  bool predefined = type0 && enc0.isName() && !identityEnc;
+  std::string ucsOrdering;
+  std::vector<CmapSpace> ucsSpaces;
+  std::map<uint32_t, int> ucsCids;
   if (type0) {
     QPDFObjectHandle df = font.getKey("/DescendantFonts");
     QPDFObjectHandle csi = df.isArray() && df.getArrayNItems() > 0 ? df.getArrayItem(0).getKey("/CIDSystemInfo")
@@ -1758,26 +1946,62 @@ int verifyUnicode(Ctx& ctx, FtLib& lib, QPDFObjectHandle font, const FontUse& us
     if (csi.isDictionary() && csi.getKey("/Registry").isString() && csi.getKey("/Ordering").isString() &&
         csi.getKey("/Registry").getUTF8Value() == "Adobe") {
       std::string ord = csi.getKey("/Ordering").getUTF8Value();
-      if (ord == "GB1" || ord == "CNS1" || ord == "Japan1" || ord == "Korea1") predefined = true;
+      if (ord == "GB1" || ord == "CNS1" || ord == "Japan1" || ord == "Korea1") {
+        predefined = true;
+        if (identityEnc) ucsOrdering = ord;
+      }
+    }
+    if (predefined && !identityEnc && !loadEncodingCmap(enc0, ucsSpaces, ucsCids, &ucsOrdering)) ucsOrdering.clear();
+    if (ucsOrdering != "GB1" && ucsOrdering != "CNS1" && ucsOrdering != "Japan1" && ucsOrdering != "Korea1") {
+      ucsOrdering.clear();
     }
   }
   QPDFObjectHandle fd = font.getKey("/FontDescriptor");
   long long flags = fd.isDictionary() && fd.getKey("/Flags").isInteger() ? fd.getKey("/Flags").getIntValue() : 0;
-  bool symbolic = (flags & 4) != 0 && (flags & 32) == 0;
+  bool symbolic = (flags & 4) != 0;
   SimpleEncoding enc = readEncoding(font, symbolic);
   FtFace face;
   bool haveFace = false;
   int missing = 0;
+  bool type1 = subtype == "/Type1" || subtype == "/MMType1";
+  auto nameUnicode = [&](const std::string& n) -> uint32_t {
+    uint32_t tmp = 0;
+    if (n.empty() || parseUniName(n, tmp)) return 0;
+    if (uint32_t u = aglNameToUnicode(n)) return u;
+    for (int sc = 0; sc < 256; ++sc) {
+      const char* sn = symbolCodeToName(sc);
+      if (sn && n == sn) return symbolToUnicode(sc) ? symbolToUnicode(sc) : 0x20;
+      if (!type1 && zapfCodeToName(sc) == n) return 0x20;
+    }
+    return 0;
+  };
   for (uint32_t code : use.codes) {
     auto it = entries.find(code);
     if (it != entries.end()) {
-      unsigned v = it->second.size() >= 4 ? static_cast<unsigned>(std::strtoul(it->second.substr(0, 4).c_str(), nullptr, 16)) : 0;
-      if (it->second.empty()) ++missing;
-      else if (ctx.part >= 2 && (v == 0 || v == 0xFEFF || v == 0xFFFE)) ++forbidden;
+      bool bad = false;
+      for (size_t q = 0; q + 4 <= it->second.size(); q += 4) {
+        unsigned v = static_cast<unsigned>(std::strtoul(it->second.substr(q, 4).c_str(), nullptr, 16));
+        if (v == 0 || v == 0xFEFF || v == 0xFFFE) bad = true;
+      }
+      if (ctx.part >= 2 && bad) ++forbidden;
+      continue;
+    }
+    if (subtype == "/Type3" && ctx.part == 1) {
+      ++missing;
       continue;
     }
     if (type0) {
-      if (!predefined) ++missing;
+      if (!predefined) {
+        ++missing;
+      } else if (!ucsOrdering.empty()) {
+        auto cit = ucsCids.find(code);
+        uint32_t cid = cit == ucsCids.end() ? 0 : static_cast<uint32_t>(cit->second);
+        bool firstLookup = !identityEnc && use.hasFirstCode && use.firstCode == code;
+        uint32_t count = orderingCidCount(ucsOrdering);
+        if (code >= count && !(firstLookup && cid < count)) {
+          ++missing;
+        }
+      }
       continue;
     }
     if (code > 255) {
@@ -1787,8 +2011,7 @@ int verifyUnicode(Ctx& ctx, FtLib& lib, QPDFObjectHandle font, const FontUse& us
     const std::string& dn = enc.diffs[code];
     uint32_t uni = 0;
     if (!dn.empty()) {
-      uni = aglNameToUnicode(dn.substr(1));
-      if (!uni) parseUniName(dn.substr(1), uni);
+      uni = nameUnicode(dn.substr(1));
     } else if (enc.base) {
       uni = enc.base(static_cast<int>(code));
     } else if (subtype != "/Type3") {
@@ -1803,12 +2026,7 @@ int verifyUnicode(Ctx& ctx, FtLib& lib, QPDFObjectHandle font, const FontUse& us
         }
         char gname[64];
         if (gid && FT_Get_Glyph_Name(face.face, gid, gname, sizeof(gname)) == 0 && gname[0]) {
-          uni = aglNameToUnicode(gname);
-          if (!uni) parseUniName(gname, uni);
-          for (int sc = 0; sc < 256 && !uni; ++sc) {
-            const char* sn = symbolCodeToName(sc);
-            if (sn && std::strcmp(sn, gname) == 0) uni = symbolToUnicode(sc);
-          }
+          uni = nameUnicode(gname);
         }
       }
     }
@@ -2028,6 +2246,11 @@ void buildSymbolDifferences(Ctx&, QPDFObjectHandle font, uint16_t (*table)(int))
   font.replaceKey("/Encoding", enc);
 }
 
+namespace {
+std::string subsetTrueType(const std::string& font, std::set<uint32_t> keep,
+                           const std::map<uint32_t, uint16_t>* advances, bool keepCmap);
+}
+
 void rebuildSimpleWidths(Ctx&, QPDFObjectHandle font, const FtFace& sub) {
   FT_Face face = sub.face;
   HmtxTable hmtx = parseHmtx(sub.data);
@@ -2063,11 +2286,53 @@ bool embedSimpleSubstitute(Ctx& ctx, FtLib& lib, EmbedCache& cache, QPDFObjectHa
   if (!face->face) return false;
   std::string original = nameOf(font.getKey("/BaseFont"));
 
+  QPDFObjectHandle oldWidths = font.getKey("/Widths");
+  QPDFObjectHandle encIn = font.getKey("/Encoding");
+  bool plainEncoding = nameIs(encIn, "/WinAnsiEncoding") || nameIs(encIn, "/MacRomanEncoding");
+  bool keepWidths = !c.symbolTable && plainEncoding && oldWidths.isArray() && font.getKey("/FirstChar").isInteger();
+  if (keepWidths) {
+    bool any = false;
+    for (int i = 0; i < oldWidths.getArrayNItems(); ++i)
+      if (oldWidths.getArrayItem(i).isNumber() && oldWidths.getArrayItem(i).getNumericValue() > 0) any = true;
+    keepWidths = any;
+  }
+  std::string fitted;
+  const FontAsset* ttfAsset = host ? host : findAsset(std::string(c.asset->key) + ":ttf");
+  if (keepWidths && ttfAsset) {
+    QPDFObjectHandle enc0 = font.getKey("/Encoding");
+    if (!enc0.isName() && !enc0.isDictionary()) font.replaceKey("/Encoding", QPDFObjectHandle::newName("/WinAnsiEncoding"));
+    auto tf = assetFace(lib, cache, ttfAsset);
+    if (tf->face) {
+      SimpleEncoding enc = readEncoding(font, false);
+      HmtxTable hm = parseHmtx(tf->data);
+      double upem = tf->face->units_per_EM ? tf->face->units_per_EM : 1000.0;
+      int first = static_cast<int>(font.getKey("/FirstChar").getIntValue());
+      std::set<uint32_t> keep;
+      std::map<uint32_t, uint16_t> adv;
+      bool differs = false;
+      for (int i = 0; i < oldWidths.getArrayNItems() && first + i < 256; ++i) {
+        if (first + i < 0 || !oldWidths.getArrayItem(i).isNumber()) continue;
+        double w = oldWidths.getArrayItem(i).getNumericValue();
+        FT_UInt gid = glyphForCode(tf->face, first + i, enc, false);
+        if (!gid || w <= 0 || adv.count(gid)) continue;
+        keep.insert(gid);
+        double own = programAdvance(*tf, hm, gid, upem);
+        if (std::fabs(own - w) > 1.0) differs = true;
+        adv[gid] = static_cast<uint16_t>(std::clamp<long long>(llround(w * upem / 1000.0), 0, 65535));
+      }
+      if (differs && !keep.empty()) fitted = subsetTrueType(tf->data, keep, &adv, true);
+    }
+  }
   QPDFObjectHandle fd = buildDescriptor(ctx, c, face->face, c.asset->psName);
-  fd.replaceKey(host ? "/FontFile2" : "/FontFile3",
-                assetStream(ctx, cache, c.asset, host != nullptr));
+  if (!fitted.empty()) {
+    QPDFObjectHandle prog = QPDFObjectHandle::newStream(&ctx.pdf, fitted);
+    prog.getDict().replaceKey("/Length1", QPDFObjectHandle::newInteger(static_cast<long long>(fitted.size())));
+    fd.replaceKey("/FontFile2", ctx.pdf.makeIndirectObject(prog));
+  } else {
+    fd.replaceKey(host ? "/FontFile2" : "/FontFile3", assetStream(ctx, cache, c.asset, host != nullptr));
+  }
   font.replaceKey("/FontDescriptor", ctx.pdf.makeIndirectObject(fd));
-  font.replaceKey("/Subtype", QPDFObjectHandle::newName(host ? "/TrueType" : "/Type1"));
+  font.replaceKey("/Subtype", QPDFObjectHandle::newName(host || !fitted.empty() ? "/TrueType" : "/Type1"));
   font.replaceKey("/BaseFont", QPDFObjectHandle::newName("/" + std::string(c.asset->psName)));
 
   if (c.symbolTable) {
@@ -2082,7 +2347,34 @@ bool embedSimpleSubstitute(Ctx& ctx, FtLib& lib, EmbedCache& cache, QPDFObjectHa
       font.replaceKey("/Encoding", QPDFObjectHandle::newName("/WinAnsiEncoding"));
     }
   }
-  rebuildSimpleWidths(ctx, font, *face);
+  if (fitted.empty() && !host && !c.symbolTable && FT_HAS_GLYPH_NAMES(face->face)) {
+    SimpleEncoding enc = readEncoding(font, false);
+    QPDFObjectHandle diffs = QPDFObjectHandle::newArray();
+    int last = -2;
+    for (int code = 0; code < 256; ++code) {
+      FT_UInt gid = glyphForCode(face->face, code, enc, false);
+      char name[128];
+      if (!gid || FT_Get_Glyph_Name(face->face, gid, name, sizeof(name)) || !*name) continue;
+      std::string own(name);
+      if (!enc.diffs[code].empty()) {
+        if (FT_Get_Name_Index(face->face, enc.diffs[code].substr(1).c_str()) == gid) continue;
+      } else if (enc.base && enc.base(code) && aglNameToUnicode(own) == enc.base(code) && own.rfind("uni", 0) != 0) {
+        continue;
+      }
+      if (code != last + 1) diffs.appendItem(QPDFObjectHandle::newInteger(code));
+      diffs.appendItem(QPDFObjectHandle::newName("/" + own));
+      last = code;
+    }
+    if (diffs.getArrayNItems()) {
+      QPDFObjectHandle e = font.getKey("/Encoding");
+      QPDFObjectHandle d = e.isDictionary() ? e : QPDFObjectHandle::newDictionary();
+      if (e.isName()) d.replaceKey("/BaseEncoding", e);
+      d.replaceKey("/Type", QPDFObjectHandle::newName("/Encoding"));
+      d.replaceKey("/Differences", diffs);
+      font.replaceKey("/Encoding", d);
+    }
+  }
+  if (fitted.empty()) rebuildSimpleWidths(ctx, font, *face);
   font.removeKey("/ToUnicode");
   ctx.issue("FONT_SUBSTITUTED",
             "embedded " + std::string(c.asset->psName) + " as substitute for " + original +
@@ -2122,6 +2414,7 @@ bool embedCidSubstitute(Ctx& ctx, FtLib& lib, EmbedCache& cache, QPDFObjectHandl
   std::string original = nameOf(type0.getKey("/BaseFont"));
 
   std::map<uint32_t, std::string> toUni = parseExistingToUnicode(type0.getKey("/ToUnicode"));
+  if (toUni.empty() && nameIs(cidFont.getKey("/Subtype"), "/CIDFontType2")) return false;
   uint32_t maxCid = 255;
   for (const auto& kv : toUni) maxCid = std::max(maxCid, kv.first);
   QPDFObjectHandle oldW = cidFont.getKey("/W");
@@ -2143,10 +2436,24 @@ bool embedCidSubstitute(Ctx& ctx, FtLib& lib, EmbedCache& cache, QPDFObjectHandl
     auto it = toUni.find(cid);
     if (it != toUni.end()) {
       uni = hexToCodepoint(it->second);
-    } else if (cid >= 0x20 && !(cid >= 0xD800 && cid <= 0xDFFF)) {
+      size_t unitLen = uni > 0xFFFF ? 8 : 4;
+      if (it->second.size() > unitLen) {
+        static const std::map<std::string, uint32_t> kLatinLigatures = {
+            {"00660066", 0xFB00}, {"00660069", 0xFB01}, {"0066006C", 0xFB02},
+            {"006600660069", 0xFB03}, {"00660066006C", 0xFB04}};
+        std::string up = it->second;
+        std::transform(up.begin(), up.end(), up.begin(), [](unsigned char ch) { return std::toupper(ch); });
+        auto lig = kLatinLigatures.find(up);
+        if (lig == kLatinLigatures.end()) return false;
+        uni = lig->second;
+      }
+    } else if (toUni.empty() && cid >= 0x20 && !(cid >= 0xD800 && cid <= 0xDFFF)) {
       uni = cid;
     }
     FT_UInt gid = (uni && haveUnicodeCmap) ? FT_Get_Char_Index(face->face, uni) : 0;
+    if (!gid && it != toUni.end() && uni > 0x20 && !(uni >= 0x7F && uni <= 0xA0) && uni != 0xAD &&
+        !(uni >= 0x200B && uni <= 0x200F) && uni != 0xFEFF)
+      return false;
     mapData[cid * 2] = static_cast<char>((gid >> 8) & 0xFF);
     mapData[cid * 2 + 1] = static_cast<char>(gid & 0xFF);
   }
@@ -2170,6 +2477,354 @@ bool embedCidSubstitute(Ctx& ctx, FtLib& lib, EmbedCache& cache, QPDFObjectHandl
   ctx.issue("FONT_SUBSTITUTED",
             "embedded " + std::string(c.asset->psName) + " as substitute for " + original +
                 " (visual fidelity depends on metric compatibility)",
+            true);
+  return true;
+}
+
+namespace {
+uint32_t be32(const std::string& s, size_t o) {
+  return (static_cast<uint32_t>(static_cast<unsigned char>(s[o])) << 24) |
+         (static_cast<uint32_t>(static_cast<unsigned char>(s[o + 1])) << 16) |
+         (static_cast<uint32_t>(static_cast<unsigned char>(s[o + 2])) << 8) |
+         static_cast<unsigned char>(s[o + 3]);
+}
+uint16_t be16(const std::string& s, size_t o) {
+  return static_cast<uint16_t>((static_cast<unsigned char>(s[o]) << 8) | static_cast<unsigned char>(s[o + 1]));
+}
+void put32(std::string& s, size_t o, uint32_t v) {
+  for (int i = 0; i < 4; ++i) s[o + i] = static_cast<char>((v >> (24 - 8 * i)) & 0xFF);
+}
+void put16(std::string& s, size_t o, uint16_t v) {
+  s[o] = static_cast<char>(v >> 8);
+  s[o + 1] = static_cast<char>(v & 0xFF);
+}
+uint32_t tableSum(const std::string& t) {
+  uint32_t sum = 0;
+  std::string p = t;
+  while (p.size() % 4) p += '\0';
+  for (size_t i = 0; i < p.size(); i += 4) sum += be32(p, i);
+  return sum;
+}
+
+std::string subsetTrueType(const std::string& font, std::set<uint32_t> keep,
+                           const std::map<uint32_t, uint16_t>* advances, bool keepCmap) {
+  if (font.size() < 12) return std::string();
+  uint16_t numTables = be16(font, 4);
+  std::map<std::string, std::string> tables;
+  for (uint16_t i = 0; i < numTables && 12 + 16u * (i + 1) <= font.size(); ++i) {
+    size_t rec = 12 + 16u * i;
+    uint32_t off = be32(font, rec + 8), len = be32(font, rec + 12);
+    if (off > font.size() || len > font.size() - off) return std::string();
+    tables[font.substr(rec, 4)] = font.substr(off, len);
+  }
+  for (const char* need : {"head", "hhea", "maxp", "hmtx", "loca", "glyf"}) {
+    if (!tables.count(need)) return std::string();
+  }
+  std::string& head = tables["head"];
+  if (head.size() < 54 || tables["maxp"].size() < 6 || tables["hhea"].size() < 36) return std::string();
+  bool longLoca = be16(head, 50) == 1;
+  uint32_t numGlyphs = be16(tables["maxp"], 4);
+  const std::string& loca = tables["loca"];
+  const std::string& glyf = tables["glyf"];
+  auto glyphRange = [&](uint32_t g, uint32_t& a, uint32_t& b) {
+    if (g >= numGlyphs) return false;
+    if (longLoca) {
+      if ((g + 2) * 4 > loca.size()) return false;
+      a = be32(loca, g * 4);
+      b = be32(loca, (g + 1) * 4);
+    } else {
+      if ((g + 2) * 2 > loca.size()) return false;
+      a = be16(loca, g * 2) * 2u;
+      b = be16(loca, (g + 1) * 2) * 2u;
+    }
+    return a <= b && b <= glyf.size();
+  };
+  keep.insert(0);
+  std::vector<uint32_t> work(keep.begin(), keep.end());
+  while (!work.empty()) {
+    uint32_t g = work.back();
+    work.pop_back();
+    uint32_t a, b;
+    if (!glyphRange(g, a, b) || b - a < 10) continue;
+    if (static_cast<int16_t>(be16(glyf, a)) >= 0) continue;
+    size_t p = a + 10;
+    for (;;) {
+      if (p + 4 > b) break;
+      uint16_t flags = be16(glyf, p);
+      uint16_t comp = be16(glyf, p + 2);
+      if (keep.insert(comp).second) work.push_back(comp);
+      p += 4 + ((flags & 1) ? 4 : 2);
+      if (flags & 8) p += 2;
+      else if (flags & 0x40) p += 4;
+      else if (flags & 0x80) p += 8;
+      if (!(flags & 0x20)) break;
+    }
+  }
+  std::string newGlyf, newLoca;
+  for (uint32_t g = 0; g < numGlyphs; ++g) {
+    std::string off(4, '\0');
+    put32(off, 0, static_cast<uint32_t>(newGlyf.size()));
+    newLoca += off;
+    uint32_t a, b;
+    if (keep.count(g) && glyphRange(g, a, b)) {
+      newGlyf += glyf.substr(a, b - a);
+      while (newGlyf.size() % 4) newGlyf += '\0';
+    }
+  }
+  std::string end(4, '\0');
+  put32(end, 0, static_cast<uint32_t>(newGlyf.size()));
+  newLoca += end;
+  tables["glyf"] = newGlyf;
+  tables["loca"] = newLoca;
+  put16(head, 50, 1);
+  put32(head, 8, 0);
+  std::string& hmtx = tables["hmtx"];
+  uint16_t numMetrics = be16(tables["hhea"], 34);
+  if (advances && !advances->empty() && numMetrics > 0 && numGlyphs <= 0xFFFF) {
+    std::string full(static_cast<size_t>(numGlyphs) * 4, '\0');
+    for (uint32_t g = 0; g < numGlyphs; ++g) {
+      uint32_t src = g < numMetrics ? g : numMetrics - 1u;
+      uint16_t adv = src * 4 + 2 <= hmtx.size() ? be16(hmtx, src * 4) : 0;
+      size_t lsbAt = g < numMetrics ? g * 4u + 2 : numMetrics * 4u + (g - numMetrics) * 2u;
+      int16_t lsb = lsbAt + 2 <= hmtx.size() ? static_cast<int16_t>(be16(hmtx, lsbAt)) : 0;
+      auto it = advances->find(g);
+      if (it != advances->end()) adv = it->second;
+      put16(full, g * 4, adv);
+      put16(full, g * 4 + 2, static_cast<uint16_t>(lsb));
+    }
+    hmtx = full;
+    numMetrics = static_cast<uint16_t>(numGlyphs);
+    put16(tables["hhea"], 34, numMetrics);
+    uint16_t maxAdv = 0;
+    for (uint32_t g = 0; g < numGlyphs; ++g) maxAdv = std::max<uint16_t>(maxAdv, be16(hmtx, g * 4));
+    put16(tables["hhea"], 10, maxAdv);
+  }
+  for (uint32_t g = 0; g < numGlyphs; ++g) {
+    if (keep.count(g)) continue;
+    if (g < numMetrics) {
+      if (g * 4 + 4 <= hmtx.size()) put32(hmtx, g * 4, 0);
+    } else {
+      size_t o = numMetrics * 4u + (g - numMetrics) * 2u;
+      if (o + 2 <= hmtx.size()) put16(hmtx, o, 0);
+    }
+  }
+  if (tables.count("post") && tables["post"].size() >= 32) {
+    tables["post"] = tables["post"].substr(0, 32);
+    put32(tables["post"], 0, 0x00030000);
+  }
+  std::vector<std::string> order;
+  for (const char* t : {"OS/2", "cmap", "cvt ", "fpgm", "glyf", "head", "hhea", "hmtx", "loca", "maxp", "name", "post", "prep"}) {
+    if (tables.count(t) && (keepCmap || std::strcmp(t, "cmap") != 0)) order.push_back(t);
+  }
+  uint16_t n = static_cast<uint16_t>(order.size());
+  uint16_t pow2 = 1, log2 = 0;
+  while (pow2 * 2 <= n) {
+    pow2 *= 2;
+    ++log2;
+  }
+  std::string out(12 + 16u * n, '\0');
+  put32(out, 0, 0x00010000);
+  put16(out, 4, n);
+  put16(out, 6, static_cast<uint16_t>(pow2 * 16));
+  put16(out, 8, log2);
+  put16(out, 10, static_cast<uint16_t>(n * 16 - pow2 * 16));
+  size_t headOffset = 0;
+  for (uint16_t i = 0; i < n; ++i) {
+    const std::string& t = tables[order[i]];
+    size_t rec = 12 + 16u * i;
+    out.replace(rec, 4, order[i]);
+    put32(out, rec + 4, tableSum(t));
+    put32(out, rec + 8, static_cast<uint32_t>(out.size()));
+    put32(out, rec + 12, static_cast<uint32_t>(t.size()));
+    if (order[i] == "head") headOffset = out.size();
+    out += t;
+    while (out.size() % 4) out += '\0';
+  }
+  put32(out, headOffset + 8, 0xB1B0AFBAu - tableSum(out));
+  return out;
+}
+
+std::string cjkScriptOf(QPDFObjectHandle type0, bool& vertical, bool& unicodeCodes) {
+  std::string enc = nameOf(type0.getKey("/Encoding"));
+  vertical = enc.size() > 2 && enc.compare(enc.size() - 2, 2, "-V") == 0;
+  unicodeCodes = false;
+  static const std::pair<const char*, const char*> kPrefixes[] = {
+      {"/UniGB-", "SC"}, {"/UniCNS-", "TC"}, {"/UniJIS-", "JP"}, {"/UniKS-", "KR"}};
+  for (const auto& p : kPrefixes) {
+    if (enc.rfind(p.first, 0) == 0 && (enc.find("UCS2") != std::string::npos || enc.find("UTF16") != std::string::npos)) {
+      unicodeCodes = true;
+      return p.second;
+    }
+  }
+  if (enc != "/Identity-H" && enc != "/Identity-V") return std::string();
+  QPDFObjectHandle df = type0.getKey("/DescendantFonts");
+  if (!df.isArray() || df.getArrayNItems() != 1 || !df.getArrayItem(0).isDictionary()) return std::string();
+  QPDFObjectHandle info = df.getArrayItem(0).getKey("/CIDSystemInfo");
+  std::string ordering = info.isDictionary() && info.getKey("/Ordering").isString() ? info.getKey("/Ordering").getStringValue() : "";
+  if (ordering == "GB1") return "SC";
+  if (ordering == "CNS1") return "TC";
+  if (ordering == "Japan1") return "JP";
+  if (ordering == "Korea1") return "KR";
+  return std::string();
+}
+
+std::string subsetTag(const std::set<uint32_t>& gids, const std::string& salt) {
+  uint32_t h = 2166136261u;
+  for (char c : salt) h = (h ^ static_cast<unsigned char>(c)) * 16777619u;
+  for (uint32_t g : gids) h = (h ^ g) * 16777619u;
+  std::string tag;
+  for (int i = 0; i < 6; ++i) {
+    tag += static_cast<char>('A' + h % 26);
+    h /= 26;
+    if (!h) h = 2654435761u;
+  }
+  return tag;
+}
+}
+
+bool embedCjkSubstitute(Ctx& ctx, FtLib& lib, EmbedCache& cache, QPDFObjectHandle type0, const FontUse* use) {
+  if (!ctx.opt.loadCjkFont) return false;
+  bool vertical = false, unicodeCodes = false;
+  std::string script = cjkScriptOf(type0, vertical, unicodeCodes);
+  if (script.empty()) return false;
+  QPDFObjectHandle df = type0.getKey("/DescendantFonts");
+  if (!df.isArray() || df.getArrayNItems() != 1 || !df.getArrayItem(0).isDictionary()) return false;
+  QPDFObjectHandle cidFont = df.getArrayItem(0);
+  SubstituteChoice c = chooseSubstitute(type0, cidFont.getKey("/FontDescriptor"));
+  std::string key = "cjk:" + script + (c.bold ? ":b" : ":r");
+  auto fit = cache.faces.find(key);
+  if (fit == cache.faces.end()) {
+    auto face = std::make_shared<FtFace>();
+    if (!ctx.opt.loadCjkFont(script, c.bold, face->data) &&
+        !(c.bold && ctx.opt.loadCjkFont(script, false, face->data))) {
+      face->data.clear();
+    }
+    if (!face->data.empty()) {
+      FT_New_Memory_Face(lib.lib, reinterpret_cast<const FT_Byte*>(face->data.data()),
+                         static_cast<FT_Long>(face->data.size()), 0, &face->face);
+    }
+    fit = cache.faces.emplace(key, face).first;
+  }
+  FT_Face face = fit->second->face;
+  if (!face || FT_Select_Charmap(face, FT_ENCODING_UNICODE) != 0) return false;
+  std::map<uint32_t, std::string> toUni = parseExistingToUnicode(type0.getKey("/ToUnicode"));
+  bool orderingUni = !unicodeCodes && !type0.getKey("/ToUnicode").isStream();
+  QPDFObjectHandle cjkInfo = cidFont.getKey("/CIDSystemInfo");
+  std::string cjkOrdering =
+      cjkInfo.isDictionary() && cjkInfo.getKey("/Ordering").isString() ? cjkInfo.getKey("/Ordering").getUTF8Value() : "";
+  std::set<uint32_t> codes;
+  if (use) codes = use->codes;
+  else if (orderingUni) for (uint32_t cid = 0; cid < orderingCidCount(cjkOrdering); ++cid) codes.insert(cid);
+  else for (const auto& kv : toUni) codes.insert(kv.first);
+  std::map<uint32_t, uint32_t> codeUni;
+  for (uint32_t code : codes) {
+    if (code > 0xFFFF) return false;
+    uint32_t uni = 0;
+    if (unicodeCodes) {
+      if (code >= 0xD800 && code <= 0xDFFF) return false;
+      uni = code;
+    } else {
+      auto it = toUni.find(code);
+      if (it != toUni.end()) uni = hexToCodepoint(it->second);
+      else if (orderingUni) uni = orderingCidToUnicode(cjkOrdering, code);
+    }
+    codeUni[code] = uni;
+  }
+  std::set<uint32_t> keep;
+  std::map<uint32_t, uint32_t> codeGid;
+  for (const auto& kv : codeUni) {
+    FT_UInt gid = kv.second ? FT_Get_Char_Index(face, kv.second) : 0;
+    codeGid[kv.first] = gid;
+    if (gid) keep.insert(gid);
+  }
+  std::map<uint32_t, double> origW;
+  double origDW = cidFont.getKey("/DW").isNumber() ? cidFont.getKey("/DW").getNumericValue() : 1000.0;
+  {
+    QPDFObjectHandle wArr = cidFont.getKey("/W");
+    for (int i = 0; wArr.isArray() && i + 1 < wArr.getArrayNItems();) {
+      QPDFObjectHandle a = wArr.getArrayItem(i), b = wArr.getArrayItem(i + 1);
+      if (!a.isInteger()) break;
+      long long c0 = a.getIntValue();
+      if (b.isArray()) {
+        for (int k = 0; k < b.getArrayNItems(); ++k)
+          if (b.getArrayItem(k).isNumber()) origW[static_cast<uint32_t>(c0 + k)] = b.getArrayItem(k).getNumericValue();
+        i += 2;
+      } else if (b.isInteger() && i + 2 < wArr.getArrayNItems() && wArr.getArrayItem(i + 2).isNumber()) {
+        double v = wArr.getArrayItem(i + 2).getNumericValue();
+        for (long long cc = c0; cc <= b.getIntValue() && cc - c0 < 65536; ++cc) origW[static_cast<uint32_t>(cc)] = v;
+        i += 3;
+      } else {
+        break;
+      }
+    }
+  }
+  auto originalWidth = [&](uint32_t code) {
+    uint32_t cid = code;
+    if (unicodeCodes) {
+      if (code < 0x20 || code > 0x7E) return origDW;
+      cid = code - 0x1F;
+    }
+    auto it = origW.find(cid);
+    return it != origW.end() ? it->second : origDW;
+  };
+  double upemK = face->units_per_EM ? face->units_per_EM / 1000.0 : 1.0;
+  std::map<uint32_t, uint16_t> advances;
+  std::map<uint32_t, double> codeWidth;
+  for (const auto& kv : codeGid) {
+    double ow = originalWidth(kv.first);
+    codeWidth[kv.first] = ow;
+    if (kv.second && !advances.count(kv.second) && ow >= 0 && ow * upemK < 65535)
+      advances[kv.second] = static_cast<uint16_t>(llround(ow * upemK));
+  }
+  std::string program = subsetTrueType(fit->second->data, keep, &advances, false);
+  if (program.empty()) return false;
+  uint32_t maxCode = codeGid.empty() ? 0 : codeGid.rbegin()->first;
+  std::string mapData((static_cast<size_t>(maxCode) + 1) * 2, '\0');
+  for (const auto& kv : codeGid) {
+    mapData[kv.first * 2] = static_cast<char>((kv.second >> 8) & 0xFF);
+    mapData[kv.first * 2 + 1] = static_cast<char>(kv.second & 0xFF);
+  }
+  QPDFObjectHandle w = QPDFObjectHandle::newArray();
+  for (const auto& kv : codeGid) {
+    double adv = kv.second && advances.count(kv.second) ? advances[kv.second] / upemK : codeWidth[kv.first];
+    QPDFObjectHandle one = QPDFObjectHandle::newArray();
+    one.appendItem(QPDFObjectHandle::newInteger(llround(adv)));
+    w.appendItem(QPDFObjectHandle::newInteger(kv.first));
+    w.appendItem(one);
+  }
+  const char* ps = FT_Get_Postscript_Name(face);
+  std::string psName = subsetTag(keep, key) + "+" + (ps ? ps : "NotoSansCJK");
+  std::string original = nameOf(type0.getKey("/BaseFont"));
+  QPDFObjectHandle fd = buildDescriptor(ctx, c, face, psName);
+  fd.replaceKey("/Flags", QPDFObjectHandle::newInteger(4));
+  QPDFObjectHandle prog = QPDFObjectHandle::newStream(&ctx.pdf, program);
+  prog.getDict().replaceKey("/Length1", QPDFObjectHandle::newInteger(static_cast<long long>(program.size())));
+  fd.replaceKey("/FontFile2", ctx.pdf.makeIndirectObject(prog));
+  cidFont.replaceKey("/FontDescriptor", ctx.pdf.makeIndirectObject(fd));
+  cidFont.replaceKey("/Subtype", QPDFObjectHandle::newName("/CIDFontType2"));
+  cidFont.replaceKey("/BaseFont", QPDFObjectHandle::newName("/" + psName));
+  QPDFObjectHandle sysInfo = QPDFObjectHandle::newDictionary();
+  sysInfo.replaceKey("/Registry", QPDFObjectHandle::newString("Adobe"));
+  sysInfo.replaceKey("/Ordering", QPDFObjectHandle::newString("Identity"));
+  sysInfo.replaceKey("/Supplement", QPDFObjectHandle::newInteger(0));
+  cidFont.replaceKey("/CIDSystemInfo", sysInfo);
+  cidFont.replaceKey("/CIDToGIDMap", ctx.pdf.makeIndirectObject(QPDFObjectHandle::newStream(&ctx.pdf, mapData)));
+  cidFont.replaceKey("/W", w);
+  cidFont.replaceKey("/DW", QPDFObjectHandle::newInteger(1000));
+  cidFont.removeKey("/W2");
+  cidFont.removeKey("/DW2");
+  type0.replaceKey("/BaseFont", QPDFObjectHandle::newName("/" + psName));
+  type0.replaceKey("/Encoding", QPDFObjectHandle::newName(vertical ? "/Identity-V" : "/Identity-H"));
+  if (unicodeCodes || orderingUni) {
+    std::map<uint32_t, std::string> entries;
+    for (const auto& kv : codeUni) {
+      if (kv.second) entries[kv.first] = utf16Hex(kv.second);
+    }
+    type0.replaceKey("/ToUnicode", ctx.pdf.makeIndirectObject(QPDFObjectHandle::newStream(&ctx.pdf, buildCMapStream(entries, true))));
+  }
+  ctx.issue("FONT_SUBSTITUTED",
+            "embedded a subset of " + std::string(ps ? ps : "a CJK font") + " (" + std::to_string(keep.size()) +
+                " glyphs) as substitute for " + original,
             true);
   return true;
 }
@@ -2243,7 +2898,7 @@ bool fontEmbedded(QPDFObjectHandle font) {
 }
 
 void collectFonts(Ctx& ctx, QPDFObjectHandle res, Visited& visited,
-                  std::vector<QPDFObjectHandle>& fonts) {
+                  std::vector<QPDFObjectHandle>& fonts, const std::map<QPDFObjGen, FontUse>* uses = nullptr) {
   DepthGuard g_(visited);
   if (g_.over) return;
   if (!res.isDictionary() || !visited.enter(res)) return;
@@ -2251,11 +2906,28 @@ void collectFonts(Ctx& ctx, QPDFObjectHandle res, Visited& visited,
   if (fd.isDictionary()) {
     for (const std::string& k : fd.getKeys()) {
       QPDFObjectHandle f = fd.getKey(k);
-      if (!f.isDictionary()) continue;
+      bool notDict = !f.isDictionary() || f.isStream();
+      std::string sub = notDict ? std::string() : nameOf(f.getKey("/Subtype"));
+      bool fontType = !notDict && (!f.hasKey("/Type") || nameIs(f.getKey("/Type"), "/Font"));
+      bool judged = !uses || (f.isIndirect() && uses->count(f.getObjGen()));
+      if (fontType && (sub == "/CIDFontType0" || sub == "/CIDFontType2")) {
+        QPDFObjectHandle wrap = QPDFObjectHandle::parse("<< /Type /Font /Subtype /Type0 /Encoding /Identity-H >>");
+        wrap.replaceKey("/BaseFont", f.getKey("/BaseFont").isName() ? f.getKey("/BaseFont") : QPDFObjectHandle::newName("/Unnamed"));
+        wrap.replaceKey("/DescendantFonts", QPDFObjectHandle::newArray({f}));
+        f = ctx.pdf.makeIndirectObject(wrap);
+        fd.replaceKey(k, f);
+        ctx.issue("FONT_RESOURCE_REPAIRED", "font resource " + k + " pointed at a CIDFont directly; wrapped it in a composite font", judged);
+      } else if (notDict || !fontType || (sub != "/Type0" && sub != "/Type1" && sub != "/MMType1" && sub != "/Type3" && sub != "/TrueType") ||
+                 f.hasKey("/Ordering") || f.hasKey("/BM")) {
+        f = ctx.pdf.makeIndirectObject(
+            QPDFObjectHandle::parse("<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>"));
+        fd.replaceKey(k, f);
+        ctx.issue("FONT_RESOURCE_REPAIRED", "font resource " + k + " pointed at an object that is not a font; replaced it with a standard font", judged);
+      }
       if (f.isIndirect() && !visited.enter(f)) continue;
       fonts.push_back(f);
       if (nameIs(f.getKey("/Subtype"), "/Type3")) {
-        collectFonts(ctx, f.getKey("/Resources"), visited, fonts);
+        collectFonts(ctx, f.getKey("/Resources"), visited, fonts, uses);
       }
     }
   }
@@ -2265,7 +2937,7 @@ void collectFonts(Ctx& ctx, QPDFObjectHandle res, Visited& visited,
       QPDFObjectHandle xo = xod.getKey(k);
       if (xo.isStream() && visited.enter(xo) &&
           nameIs(xo.getDict().getKey("/Subtype"), "/Form")) {
-        collectFonts(ctx, xo.getDict().getKey("/Resources"), visited, fonts);
+        collectFonts(ctx, xo.getDict().getKey("/Resources"), visited, fonts, uses);
       }
     }
   }
@@ -2274,7 +2946,7 @@ void collectFonts(Ctx& ctx, QPDFObjectHandle res, Visited& visited,
     for (const std::string& k : pat.getKeys()) {
       QPDFObjectHandle p = pat.getKey(k);
       if (p.isStream() && visited.enter(p)) {
-        collectFonts(ctx, p.getDict().getKey("/Resources"), visited, fonts);
+        collectFonts(ctx, p.getDict().getKey("/Resources"), visited, fonts, uses);
       }
     }
   }
@@ -2312,15 +2984,516 @@ bool simpleFontAdvances(QPDFObjectHandle font, std::vector<double>& w) {
   return true;
 }
 
+namespace {
+bool sfntTable(const std::string& f, const char* tag, std::string& out) {
+  const unsigned char* d = reinterpret_cast<const unsigned char*>(f.data());
+  if (f.size() < 12) return false;
+  unsigned numTables = (d[4] << 8) | d[5];
+  for (unsigned i = 0; i < numTables && 12 + 16 * (i + 1) <= f.size(); ++i) {
+    const unsigned char* rec = d + 12 + 16 * i;
+    if (std::memcmp(rec, tag, 4) != 0) continue;
+    size_t off = (static_cast<size_t>(rec[8]) << 24) | (rec[9] << 16) | (rec[10] << 8) | rec[11];
+    size_t len = (static_cast<size_t>(rec[12]) << 24) | (rec[13] << 16) | (rec[14] << 8) | rec[15];
+    if (off > f.size() || len > f.size() - off) return false;
+    out = f.substr(off, len);
+    return true;
+  }
+  return false;
+}
+
+bool cffIndexSkip(const std::string& c, size_t& pos, size_t* firstStart, size_t* firstEnd) {
+  if (pos + 2 > c.size()) return false;
+  unsigned count = (static_cast<unsigned char>(c[pos]) << 8) | static_cast<unsigned char>(c[pos + 1]);
+  if (count == 0) {
+    pos += 2;
+    return true;
+  }
+  if (pos + 3 > c.size()) return false;
+  unsigned offSize = static_cast<unsigned char>(c[pos + 2]);
+  if (offSize < 1 || offSize > 4) return false;
+  size_t offs = pos + 3;
+  if (offs + static_cast<size_t>(count + 1) * offSize > c.size()) return false;
+  auto off = [&](unsigned i) {
+    size_t v = 0;
+    for (unsigned k = 0; k < offSize; ++k) v = (v << 8) | static_cast<unsigned char>(c[offs + i * offSize + k]);
+    return v;
+  };
+  size_t data = offs + static_cast<size_t>(count + 1) * offSize - 1;
+  if (firstStart) *firstStart = data + off(0);
+  if (firstEnd) *firstEnd = data + off(1);
+  pos = data + off(count);
+  return pos <= c.size();
+}
+
+bool cffCidKeyed(const std::string& c) {
+  if (c.size() < 4) return false;
+  size_t pos = static_cast<unsigned char>(c[2]);
+  size_t ts = 0, te = 0;
+  if (!cffIndexSkip(c, pos, nullptr, nullptr) || !cffIndexSkip(c, pos, &ts, &te) || te > c.size()) return false;
+  for (size_t i = ts; i < te;) {
+    unsigned b = static_cast<unsigned char>(c[i]);
+    if (b == 12) {
+      if (i + 1 < te && static_cast<unsigned char>(c[i + 1]) == 30) return true;
+      i += 2;
+    } else if (b <= 21) {
+      i += 1;
+    } else if (b == 28) {
+      i += 3;
+    } else if (b == 29) {
+      i += 5;
+    } else if (b == 30) {
+      ++i;
+      while (i < te && (static_cast<unsigned char>(c[i]) & 0x0F) != 0x0F && (static_cast<unsigned char>(c[i]) >> 4) != 0x0F) ++i;
+      ++i;
+    } else if (b >= 247 && b <= 254) {
+      i += 2;
+    } else {
+      i += 1;
+    }
+  }
+  return false;
+}
+
+void unwrapOpenType(Ctx& ctx, QPDFObjectHandle font, bool nameKeyedCidOnly, bool mislabeledOnly = false) {
+  QPDFObjectHandle target = font;
+  if (nameOf(font.getKey("/Subtype")) == "/Type0") {
+    QPDFObjectHandle df = font.getKey("/DescendantFonts");
+    if (!df.isArray() || df.getArrayNItems() != 1) return;
+    target = df.getArrayItem(0);
+  }
+  QPDFObjectHandle fd = target.getKey("/FontDescriptor");
+  QPDFObjectHandle ff = fd.isDictionary() ? fd.getKey("/FontFile3") : QPDFObjectHandle::newNull();
+  if (!ff.isStream()) return;
+  std::string otf;
+  try {
+    auto buf = ff.getStreamData(qpdf_dl_all);
+    otf.assign(reinterpret_cast<const char*>(buf->getBuffer()), buf->getSize());
+  } catch (...) {
+    return;
+  }
+  bool mislabeled = nameOf(ff.getDict().getKey("/Subtype")) != "/OpenType" && otf.compare(0, 4, "OTTO") == 0;
+  if ((nameOf(ff.getDict().getKey("/Subtype")) != "/OpenType" || mislabeledOnly) && !mislabeled) return;
+  if (mislabeled) nameKeyedCidOnly = false;
+  std::string sub = nameOf(target.getKey("/Subtype"));
+  bool cid = sub == "/CIDFontType0" || sub == "/CIDFontType2";
+  std::string base = nameOf(target.getKey("/BaseFont"));
+  std::string cff;
+  if (nameKeyedCidOnly &&
+      !(sub == "/CIDFontType0" && otf.compare(0, 4, "OTTO") == 0 && sfntTable(otf, "CFF ", cff) && !cffCidKeyed(cff)))
+    return;
+  if (mislabeled && (!sfntTable(otf, "CFF ", cff) || (cid && target.getKey("/CIDToGIDMap").isStream()))) return;
+  if (otf.compare(0, 4, "OTTO") == 0 && sfntTable(otf, "CFF ", cff) &&
+      !(cid && target.getKey("/CIDToGIDMap").isStream())) {
+    QPDFObjectHandle st = ctx.pdf.makeIndirectObject(QPDFObjectHandle::newStream(&ctx.pdf, cff));
+    st.getDict().replaceKey("/Subtype", QPDFObjectHandle::newName(cid ? "/CIDFontType0C" : "/Type1C"));
+    fd.replaceKey("/FontFile3", st);
+    if (cid) target.replaceKey("/Subtype", QPDFObjectHandle::newName("/CIDFontType0"));
+    else if (sub != "/Type1" && sub != "/MMType1") target.replaceKey("/Subtype", QPDFObjectHandle::newName("/Type1"));
+    if (cid) target.removeKey("/CIDToGIDMap");
+  } else if (otf.compare(0, 4, std::string("\0\1\0\0", 4)) == 0 || otf.compare(0, 4, "true") == 0) {
+    QPDFObjectHandle st = ctx.pdf.makeIndirectObject(QPDFObjectHandle::newStream(&ctx.pdf, otf));
+    st.getDict().replaceKey("/Length1", QPDFObjectHandle::newInteger(static_cast<long long>(otf.size())));
+    fd.removeKey("/FontFile3");
+    fd.replaceKey("/FontFile2", st);
+    if (cid) {
+      if (sub != "/CIDFontType2") {
+        target.replaceKey("/Subtype", QPDFObjectHandle::newName("/CIDFontType2"));
+        target.replaceKey("/CIDToGIDMap", QPDFObjectHandle::newName("/Identity"));
+      }
+    } else {
+      target.replaceKey("/Subtype", QPDFObjectHandle::newName("/TrueType"));
+    }
+  } else {
+    ctx.fatal("FONT_FORMAT_NOT_ALLOWED", "font " + base + " is an OpenType font that cannot be stored in a PDF 1.4 format");
+    return;
+  }
+  ctx.issue("OPENTYPE_UNWRAPPED", "stored the font program of " + base + " as bare compact font data", true);
+}
+}
+
+bool fixProgramLengths(QPDFObjectHandle font) {
+  QPDFObjectHandle target = font;
+  if (nameIs(font.getKey("/Subtype"), "/Type0")) {
+    QPDFObjectHandle df = font.getKey("/DescendantFonts");
+    if (!df.isArray() || df.getArrayNItems() != 1) return false;
+    target = df.getArrayItem(0);
+  }
+  QPDFObjectHandle fd = target.getKey("/FontDescriptor");
+  if (!fd.isDictionary()) return false;
+  QPDFObjectHandle ff = fd.getKey("/FontFile2");
+  bool type1 = false;
+  if (!ff.isStream()) {
+    ff = fd.getKey("/FontFile");
+    type1 = true;
+  }
+  if (!ff.isStream()) return false;
+  std::string prog;
+  try {
+    auto buf = ff.getStreamData(qpdf_dl_all);
+    prog.assign(reinterpret_cast<const char*>(buf->getBuffer()), buf->getSize());
+  } catch (...) {
+    return false;
+  }
+  long long l1 = static_cast<long long>(prog.size()), l2 = -1, l3 = -1;
+  if (type1) {
+    size_t e = prog.find("eexec");
+    if (e == std::string::npos) return false;
+    size_t p = e + 5;
+    while (p < prog.size() && (prog[p] == '\r' || prog[p] == '\n' || prog[p] == ' ' || prog[p] == '\t')) ++p;
+    size_t c = prog.rfind("cleartomark");
+    size_t t = prog.size();
+    if (c != std::string::npos && c > p) {
+      t = c;
+      while (t > p && (prog[t - 1] == '0' || prog[t - 1] == '\r' || prog[t - 1] == '\n' || prog[t - 1] == ' ' || prog[t - 1] == '\t')) --t;
+    }
+    l1 = static_cast<long long>(p);
+    l2 = static_cast<long long>(t - p);
+    l3 = static_cast<long long>(prog.size() - t);
+  }
+  QPDFObjectHandle d = ff.getDict();
+  long long size = static_cast<long long>(prog.size());
+  auto val = [&](const char* k) { return d.getKey(k).isInteger() ? d.getKey(k).getIntValue() : -1; };
+  long long g1 = val("/Length1"), g2 = val("/Length2"), g3 = val("/Length3");
+  bool broken = g1 <= 0 || g1 > size;
+  if (type1) broken = broken || g2 <= 0 || g3 < 0 || g1 + g2 + g3 > size + 2;
+  if (!broken) return false;
+  d.replaceKey("/Length1", QPDFObjectHandle::newInteger(l1));
+  if (type1) {
+    d.replaceKey("/Length2", QPDFObjectHandle::newInteger(l2));
+    d.replaceKey("/Length3", QPDFObjectHandle::newInteger(l3));
+  }
+  return true;
+}
+
+bool trimType1Program(QPDFObjectHandle font) {
+  QPDFObjectHandle fd = font.getKey("/FontDescriptor");
+  QPDFObjectHandle ff = fd.isDictionary() ? fd.getKey("/FontFile") : QPDFObjectHandle::newNull();
+  if (!ff.isStream()) return false;
+  QPDFObjectHandle d = ff.getDict();
+  if (!d.getKey("/Length1").isInteger() || !d.getKey("/Length2").isInteger()) return false;
+  std::string prog;
+  try {
+    auto buf = ff.getStreamData(qpdf_dl_all);
+    prog.assign(reinterpret_cast<const char*>(buf->getBuffer()), buf->getSize());
+  } catch (...) {
+    return false;
+  }
+  long long l1 = d.getKey("/Length1").getIntValue(), l2 = d.getKey("/Length2").getIntValue();
+  if (l1 <= 0 || l2 <= 4 || l1 + l2 > static_cast<long long>(prog.size())) return false;
+  std::string plain(static_cast<size_t>(l2), '\0');
+  unsigned r = 55665;
+  for (long long i = 0; i < l2; ++i) {
+    unsigned char c = static_cast<unsigned char>(prog[static_cast<size_t>(l1 + i)]);
+    plain[static_cast<size_t>(i)] = static_cast<char>(c ^ (r >> 8));
+    r = ((c + r) * 52845u + 22719u) & 0xFFFFu;
+  }
+  size_t end = plain.find("closefile", 4);
+  if (end == std::string::npos) return false;
+  end += 9;
+  size_t rest = end;
+  while (rest < plain.size() && (plain[rest] == '\n' || plain[rest] == '\r' || plain[rest] == ' ' || plain[rest] == '\t')) ++rest;
+  if (rest >= plain.size()) return false;
+  plain.resize(end);
+  plain += '\n';
+  std::string enc(plain.size(), '\0');
+  r = 55665;
+  for (size_t i = 0; i < plain.size(); ++i) {
+    unsigned char c = static_cast<unsigned char>(static_cast<unsigned char>(plain[i]) ^ (r >> 8));
+    enc[i] = static_cast<char>(c);
+    r = ((c + r) * 52845u + 22719u) & 0xFFFFu;
+  }
+  std::string out = prog.substr(0, static_cast<size_t>(l1)) + enc + prog.substr(static_cast<size_t>(l1 + l2));
+  ff.replaceStreamData(out, QPDFObjectHandle::newNull(), QPDFObjectHandle::newNull());
+  d.replaceKey("/Length2", QPDFObjectHandle::newInteger(static_cast<long long>(enc.size())));
+  d.replaceKey("/Length3", QPDFObjectHandle::newInteger(static_cast<long long>(prog.size()) - l1 - l2));
+  return true;
+}
+
+bool inlineType1MetricSubrs(QPDFObjectHandle font) {
+  QPDFObjectHandle fd = font.getKey("/FontDescriptor");
+  QPDFObjectHandle ff = fd.isDictionary() ? fd.getKey("/FontFile") : QPDFObjectHandle::newNull();
+  if (!ff.isStream()) return false;
+  QPDFObjectHandle d = ff.getDict();
+  if (!d.getKey("/Length1").isInteger() || !d.getKey("/Length2").isInteger()) return false;
+  std::string prog;
+  try {
+    auto buf = ff.getStreamData(qpdf_dl_all);
+    prog.assign(reinterpret_cast<const char*>(buf->getBuffer()), buf->getSize());
+  } catch (...) {
+    return false;
+  }
+  long long l1 = d.getKey("/Length1").getIntValue(), l2 = d.getKey("/Length2").getIntValue();
+  if (l1 <= 0 || l2 <= 4 || l1 + l2 > static_cast<long long>(prog.size())) return false;
+  if (static_cast<unsigned char>(prog[static_cast<size_t>(l1)]) == 0x80) return false;
+  std::string plain(static_cast<size_t>(l2), '\0');
+  unsigned r = 55665;
+  for (long long i = 0; i < l2; ++i) {
+    unsigned char c = static_cast<unsigned char>(prog[static_cast<size_t>(l1 + i)]);
+    plain[static_cast<size_t>(i)] = static_cast<char>(c ^ (r >> 8));
+    r = ((c + r) * 52845u + 22719u) & 0xFFFFu;
+  }
+  int lenIV = 4;
+  size_t li = plain.find("/lenIV");
+  if (li != std::string::npos) lenIV = std::atoi(plain.c_str() + li + 6);
+  if (lenIV < 0) return false;
+  auto crypt = [](const std::string& in, bool decrypt) {
+    std::string out(in.size(), '\0');
+    unsigned k = 4330;
+    for (size_t i = 0; i < in.size(); ++i) {
+      unsigned char c = static_cast<unsigned char>(in[i]);
+      unsigned char o = static_cast<unsigned char>(c ^ (k >> 8));
+      out[i] = static_cast<char>(o);
+      unsigned char cipher = decrypt ? c : o;
+      k = ((cipher + k) * 52845u + 22719u) & 0xFFFFu;
+    }
+    return out;
+  };
+  auto isWs = [](char c) { return c == ' ' || c == '\n' || c == '\r' || c == '\t'; };
+  auto readEntry = [&](size_t& pos, long long& len, size_t& dataAt) {
+    while (pos < plain.size() && isWs(plain[pos])) ++pos;
+    size_t numAt = pos;
+    while (pos < plain.size() && std::isdigit(static_cast<unsigned char>(plain[pos]))) ++pos;
+    if (pos == numAt) return false;
+    len = std::atoll(plain.c_str() + numAt);
+    while (pos < plain.size() && isWs(plain[pos])) ++pos;
+    size_t tok = pos;
+    while (pos < plain.size() && !isWs(plain[pos])) ++pos;
+    std::string t = plain.substr(tok, pos - tok);
+    if (t != "RD" && t != "-|") return false;
+    dataAt = pos + 1;
+    if (len < 0 || dataAt + static_cast<size_t>(len) > plain.size()) return false;
+    pos = dataAt + static_cast<size_t>(len);
+    return true;
+  };
+  std::map<long long, std::string> subrs;
+  size_t sp = plain.find("/Subrs");
+  size_t csAt = plain.find("/CharStrings");
+  if (sp == std::string::npos || csAt == std::string::npos || sp > csAt) return false;
+  for (size_t pos = sp; pos < csAt;) {
+    size_t dup = plain.find("dup ", pos);
+    if (dup == std::string::npos || dup > csAt) break;
+    pos = dup + 4;
+    size_t idxAt = pos;
+    while (pos < plain.size() && std::isdigit(static_cast<unsigned char>(plain[pos]))) ++pos;
+    if (pos == idxAt) continue;
+    long long idx = std::atoll(plain.c_str() + idxAt);
+    long long len = 0;
+    size_t dataAt = 0;
+    if (!readEntry(pos, len, dataAt)) return false;
+    std::string dec = crypt(plain.substr(dataAt, static_cast<size_t>(len)), true);
+    if (dec.size() < static_cast<size_t>(lenIV)) return false;
+    subrs[idx] = dec.substr(static_cast<size_t>(lenIV));
+  }
+  auto setsMetrics = [](const std::string& b) {
+    for (size_t i = 0; i < b.size();) {
+      unsigned char v = static_cast<unsigned char>(b[i]);
+      if (v >= 32) {
+        i += v <= 246 ? 1 : v <= 254 ? 2 : 5;
+        continue;
+      }
+      if (v == 13) return true;
+      if (v == 12) {
+        if (i + 1 < b.size() && static_cast<unsigned char>(b[i + 1]) == 7) return true;
+        i += 2;
+        continue;
+      }
+      if (v == 11) return false;
+      ++i;
+    }
+    return false;
+  };
+  std::string rebuilt = plain.substr(0, csAt);
+  size_t pos = csAt;
+  bool changed = false;
+  size_t dictStart = plain.find("begin", csAt);
+  if (dictStart == std::string::npos) return false;
+  dictStart += 5;
+  rebuilt += plain.substr(csAt, dictStart - csAt);
+  pos = dictStart;
+  while (true) {
+    size_t slash = pos;
+    while (slash < plain.size() && isWs(plain[slash])) ++slash;
+    if (plain.compare(slash, 2, "ND") == 0 || plain.compare(slash, 2, "|-") == 0) slash += 2;
+    while (slash < plain.size() && isWs(plain[slash])) ++slash;
+    if (slash >= plain.size() || plain[slash] != '/') break;
+    size_t nameEnd = slash + 1;
+    while (nameEnd < plain.size() && !isWs(plain[nameEnd]) && plain[nameEnd] != '/') ++nameEnd;
+    size_t p2 = nameEnd;
+    long long len = 0;
+    size_t dataAt = 0;
+    if (!readEntry(p2, len, dataAt)) return false;
+    std::string dec = crypt(plain.substr(dataAt, static_cast<size_t>(len)), true);
+    std::string head = dec.substr(0, std::min(dec.size(), static_cast<size_t>(lenIV)));
+    std::string body = dec.size() > static_cast<size_t>(lenIV) ? dec.substr(static_cast<size_t>(lenIV)) : std::string();
+    size_t lastOpnd = std::string::npos, i = 0;
+    int op = -1;
+    while (i < body.size()) {
+      unsigned char v = static_cast<unsigned char>(body[i]);
+      if (v >= 32) {
+        lastOpnd = i;
+        i += v <= 246 ? 1 : v <= 254 ? 2 : 5;
+        continue;
+      }
+      op = v;
+      break;
+    }
+    std::string nb = body;
+    if (op == 10 && lastOpnd != std::string::npos && i < body.size()) {
+      unsigned char v = static_cast<unsigned char>(body[lastOpnd]);
+      long long n = -1;
+      if (v <= 246) n = v - 139;
+      else if (v <= 250) n = (v - 247) * 256 + static_cast<unsigned char>(body[lastOpnd + 1]) + 108;
+      else if (v <= 254) n = -(v - 251) * 256 - static_cast<unsigned char>(body[lastOpnd + 1]) - 108;
+      else if (lastOpnd + 4 < body.size()) {
+        uint32_t u = 0;
+        for (int b = 1; b <= 4; ++b) u = (u << 8) | static_cast<unsigned char>(body[lastOpnd + b]);
+        n = static_cast<int32_t>(u);
+      }
+      auto it = subrs.find(n);
+      if (it != subrs.end() && !it->second.empty() &&
+          static_cast<unsigned char>(it->second.back()) == 11 && setsMetrics(it->second)) {
+        nb = body.substr(0, lastOpnd) + it->second.substr(0, it->second.size() - 1) + body.substr(i + 1);
+      }
+    }
+    std::string enc = crypt(head + nb, false);
+    if (nb != body) changed = true;
+    size_t after = dataAt + static_cast<size_t>(len);
+    rebuilt += plain.substr(pos, nameEnd - pos) + " " + std::to_string(enc.size()) + " " +
+               plain.substr(dataAt - 3, 3) + enc;
+    pos = after;
+  }
+  if (!changed) return false;
+  rebuilt += plain.substr(pos);
+  std::string enc(rebuilt.size(), '\0');
+  r = 55665;
+  for (size_t k = 0; k < rebuilt.size(); ++k) {
+    unsigned char c = static_cast<unsigned char>(static_cast<unsigned char>(rebuilt[k]) ^ (r >> 8));
+    enc[k] = static_cast<char>(c);
+    r = ((c + r) * 52845u + 22719u) & 0xFFFFu;
+  }
+  std::string out = prog.substr(0, static_cast<size_t>(l1)) + enc + prog.substr(static_cast<size_t>(l1 + l2));
+  ff.replaceStreamData(out, QPDFObjectHandle::newNull(), QPDFObjectHandle::newNull());
+  d.replaceKey("/Length2", QPDFObjectHandle::newInteger(static_cast<long long>(enc.size())));
+  return true;
+}
+
+std::map<uint32_t, std::string> worldToUnicodeMap(QPDFObjectHandle tu) {
+  std::map<uint32_t, std::string> out = parseExistingToUnicode(tu);
+  for (auto it = out.begin(); it != out.end();) it = it->second.empty() ? out.erase(it) : std::next(it);
+  return out;
+}
+std::set<uint32_t> puaGlyphCodes(QPDFObjectHandle font) {
+  std::set<uint32_t> out;
+  if (!font.isDictionary()) return out;
+  for (const auto& [code, hex] : parseExistingToUnicode(font.getKey("/ToUnicode"))) {
+    for (size_t i = 0; i + 4 <= hex.size(); i += 4) {
+      unsigned long u = std::strtoul(hex.substr(i, 4).c_str(), nullptr, 16);
+      if ((u >= 0xE000 && u <= 0xF8FF) || (u >= 0xDB80 && u <= 0xDBFF)) {
+        out.insert(code);
+        break;
+      }
+    }
+  }
+  return out;
+}
+std::string worldToUnicodeCMap(const std::map<uint32_t, std::string>& entries, bool twoByte) {
+  return buildCMapStream(entries, twoByte);
+}
+
+namespace {
+bool simpleCoveredByLiberation(FtLib& lib, EmbedCache& cache, QPDFObjectHandle font) {
+  SubstituteChoice c = chooseSubstitute(font, font.getKey("/FontDescriptor"));
+  if (!c.asset || c.symbolTable) return true;
+  auto face = assetFace(lib, cache, c.asset);
+  if (!face->face || FT_Select_Charmap(face->face, FT_ENCODING_UNICODE) != 0) return true;
+  std::map<uint32_t, std::string> tu = parseExistingToUnicode(font.getKey("/ToUnicode"));
+  SimpleEncoding enc = readEncoding(font, false);
+  for (int code = 0; code < 256; ++code) {
+    uint32_t u = 0;
+    auto t = tu.find(static_cast<uint32_t>(code));
+    if (t != tu.end()) {
+      u = hexToCodepoint(t->second);
+    } else if (!enc.diffs[code].empty()) {
+      u = aglNameToUnicode(enc.diffs[code].substr(1));
+    }
+    if (!u || u <= 0x20 || (u >= 0x7F && u <= 0xA0)) continue;
+    if (!FT_Get_Char_Index(face->face, u)) return false;
+  }
+  return true;
+}
+
+bool standardFourteen(const std::string& base) {
+  static const std::set<std::string> kNames = {
+      "/Courier", "/Courier-Bold", "/Courier-BoldOblique", "/Courier-Oblique", "/Helvetica",
+      "/Helvetica-Bold", "/Helvetica-BoldOblique", "/Helvetica-Oblique", "/Symbol", "/Times-Bold",
+      "/Times-BoldItalic", "/Times-Italic", "/Times-Roman", "/ZapfDingbats"};
+  return kNames.count(base) != 0;
+}
+
+bool fontKeysConform(Ctx& ctx, QPDFObjectHandle dict, bool fix) {
+  bool ok = true;
+  if (!nameIs(dict.getKey("/Type"), "/Font")) {
+    ok = false;
+    if (fix) dict.replaceKey("/Type", QPDFObjectHandle::newName("/Font"));
+  }
+  QPDFObjectHandle fd = dict.getKey("/FontDescriptor");
+  if (!nameIs(dict.getKey("/Subtype"), "/Type3") && !dict.getKey("/BaseFont").isName()) {
+    ok = false;
+    if (fix) {
+      QPDFObjectHandle fn = fd.isDictionary() ? fd.getKey("/FontName") : QPDFObjectHandle::newNull();
+      dict.replaceKey("/BaseFont", fn.isName() ? fn : QPDFObjectHandle::newName("/Unnamed"));
+    }
+  }
+  if (!fd.isDictionary()) return ok;
+  for (const char* key : {"/FontFile", "/FontFile2", "/FontFile3"}) {
+    QPDFObjectHandle ff = fd.getKey(key);
+    if (!ff.isStream()) continue;
+    QPDFObjectHandle st = ff.getDict().getKey("/Subtype");
+    std::string sub = st.isName() ? st.getName() : "";
+    if (!st.isName() || sub == "/Type1C" || sub == "/CIDFontType0C" || (sub == "/OpenType" && ctx.part >= 2)) break;
+    ok = false;
+    if (!fix) break;
+    if (std::string(key) != "/FontFile3") {
+      ff.getDict().removeKey("/Subtype");
+      break;
+    }
+    std::string data;
+    try {
+      auto buf = ff.getStreamData(qpdf_dl_all);
+      data.assign(reinterpret_cast<const char*>(buf->getBuffer()), buf->getSize());
+    } catch (...) {
+      break;
+    }
+    std::string fixed = data.compare(0, 4, "OTTO") == 0 ? "/OpenType" : cffCidKeyed(data) ? "/CIDFontType0C" : "/Type1C";
+    ff.getDict().replaceKey("/Subtype", QPDFObjectHandle::newName(fixed));
+    break;
+  }
+  return ok;
+}
+
+bool simpleWidthKeysConform(QPDFObjectHandle f) {
+  std::string sub = nameOf(f.getKey("/Subtype"));
+  if ((sub == "/Type1" || sub == "/MMType1") && !fontEmbedded(f) && standardFourteen(nameOf(f.getKey("/BaseFont")))) return true;
+  QPDFObjectHandle first = f.getKey("/FirstChar");
+  QPDFObjectHandle last = f.getKey("/LastChar");
+  QPDFObjectHandle widths = f.getKey("/Widths");
+  return first.isNumber() && last.isNumber() && widths.isArray() &&
+         widths.getArrayNItems() == static_cast<int>(last.getNumericValue() - first.getNumericValue()) + 1;
+}
+}
+
 void passFonts(Ctx& ctx) {
   QPDFPageDocumentHelper dh(ctx.pdf);
   std::vector<QPDFObjectHandle> fonts;
   Visited visited;
+  std::map<QPDFObjGen, FontUse> uses;
+  if (ctx.opt.verifyOnly) uses = collectFontUse(ctx.pdf);
+  const bool judgeUsed = ctx.opt.verifyOnly && ctx.isA();
   int kuraPage1 = 0;
   for (auto& ph : dh.getAllPages()) {
     PageScope kuraScope1(ctx, ++kuraPage1);
     QPDFObjectHandle page = ph.getObjectHandle();
-    collectFonts(ctx, page.getKey("/Resources"), visited, fonts);
+    collectFonts(ctx, ph.getAttribute("/Resources", false), visited, fonts, judgeUsed ? &uses : nullptr);
     QPDFObjectHandle annots = page.getKey("/Annots");
     if (annots.isArray()) {
       for (int i = 0; i < annots.getArrayNItems(); ++i) {
@@ -2328,7 +3501,7 @@ void passFonts(Ctx& ctx) {
         if (!a.isDictionary()) continue;
         std::vector<QPDFObjectHandle> streams = normalAppearanceStreams(a);
         for (QPDFObjectHandle s : streams) {
-          collectFonts(ctx, s.getDict().getKey("/Resources"), visited, fonts);
+          collectFonts(ctx, s.getDict().getKey("/Resources"), visited, fonts, judgeUsed ? &uses : nullptr);
         }
       }
     }
@@ -2336,8 +3509,6 @@ void passFonts(Ctx& ctx) {
 
   FtLib lib;
   EmbedCache cache;
-  std::map<QPDFObjGen, FontUse> uses;
-  if (ctx.opt.verifyOnly) uses = collectFontUse(ctx.pdf);
   const FontUse noUse;
   auto fontUse = [&](QPDFObjectHandle f) -> const FontUse* {
     if (!ctx.opt.verifyOnly || !f.isIndirect()) return nullptr;
@@ -2346,12 +3517,56 @@ void passFonts(Ctx& ctx) {
   };
   std::set<std::string> reported;
   std::set<QPDFObjGen> unfixable;
+  std::map<QPDFObjGen, FontUse> cjkUses;
   for (QPDFObjectHandle f : fonts) {
+    if (judgeUsed && (!f.isIndirect() || !uses.count(f.getObjGen()))) {
+      sanitizeFontNames(ctx, f);
+      continue;
+    }
+    {
+      QPDFObjectHandle dfk = f.getKey("/DescendantFonts");
+      bool keysOk = fontKeysConform(ctx, f, !ctx.opt.verifyOnly);
+      if (nameIs(f.getKey("/Subtype"), "/Type0") && dfk.isArray() && dfk.getArrayNItems() == 1 &&
+          dfk.getArrayItem(0).isDictionary()) {
+        keysOk = fontKeysConform(ctx, dfk.getArrayItem(0), !ctx.opt.verifyOnly) && keysOk;
+      }
+      if (!keysOk && ctx.isA()) {
+        ctx.issue("FONT_DICT_REPAIRED", "font dictionary of " + nameOf(f.getKey("/BaseFont")) +
+                                            " lacks a required entry or names a disallowed font program type", true);
+      }
+      std::string sk = nameOf(f.getKey("/Subtype"));
+      if (judgeUsed && (sk == "/Type1" || sk == "/MMType1" || sk == "/TrueType" || sk == "/Type3") &&
+          !simpleWidthKeysConform(f)) {
+        ctx.issue("FONT_WIDTHS_SYNCED", "/FirstChar, /LastChar or /Widths of " + nameOf(f.getKey("/BaseFont")) +
+                                            " is missing or does not cover the declared code range", true);
+      }
+    }
     sanitizeFontNames(ctx, f);
+    if (ctx.pdf14Target() || ctx.isX()) {
+      unwrapOpenType(ctx, f, !ctx.pdf14Target());
+      if (ctx.failed()) return;
+    } else {
+      unwrapOpenType(ctx, f, false, true);
+    }
     std::string base = nameOf(f.getKey("/BaseFont"));
     std::string subtype = nameOf(f.getKey("/Subtype"));
     bool embedded = fontEmbedded(f);
     bool corrupt = embedded && subtype != "/Type3" && !programUsable(lib, f, subtype);
+    const Level lvl = ctx.opt.level;
+    if (embedded && !corrupt && subtype != "/Type3" &&
+        (ctx.opt.ua || ctx.isA() || ((lvl == Level::X1A || lvl == Level::X3) ? subtype == "/TrueType" || subtype == "/Type0"
+                                                                : lvl == Level::X6)) &&
+        embeddingRestricted(lib, f, subtype)) {
+      QPDFObjectHandle lfd = subtype == "/Type0" && f.getKey("/DescendantFonts").isArray() &&
+                                     f.getKey("/DescendantFonts").getArrayNItems() == 1
+                                 ? f.getKey("/DescendantFonts").getArrayItem(0).getKey("/FontDescriptor")
+                                 : f.getKey("/FontDescriptor");
+      if (lfd.isDictionary()) {
+        for (const char* k : {"/FontFile", "/FontFile2", "/FontFile3"}) lfd.removeKey(k);
+      }
+      ctx.issue("FONT_FSTYPE_RESTRICTED", "the OS/2 fsType of " + base + " allows only restricted-licence embedding; replaced with a substitute", true);
+      embedded = false;
+    }
     if (corrupt) {
       QPDFObjectHandle fd = subtype == "/Type0" && f.getKey("/DescendantFonts").isArray() &&
                                     f.getKey("/DescendantFonts").getArrayNItems() == 1
@@ -2365,25 +3580,45 @@ void passFonts(Ctx& ctx) {
                 "embedded program for " + base + " could not be parsed; substituting", true);
       embedded = false;
     }
-    if (!embedded && subtype != "/Type3" && fontUse(f) && fontUse(f)->visibleCodes.empty()) continue;
+    if (embedded && fixProgramLengths(f)) {
+      ctx.issue("FONT_PROGRAM_LENGTHS_FIXED", "recorded the correct program section lengths for " + base, !ctx.opt.verifyOnly);
+    }
+    if (embedded && subtype == "/Type1" && trimType1Program(f)) {
+      ctx.issue("FONT_PROGRAM_TRIMMED", "removed data after the end of the encrypted section of " + base, true);
+    }
+    if (embedded && subtype == "/Type1" && inlineType1MetricSubrs(f)) {
+      ctx.issue("FONT_PROGRAM_METRICS_INLINED",
+                "moved glyph width instructions of " + base + " out of shared subroutines so every glyph states its own width",
+                true);
+    }
+    if (!embedded && subtype != "/Type3" && fontUse(f) && !fontUse(f)->visibleShow) continue;
     if (!embedded && subtype != "/Type3") {
       bool ok = false;
       if (subtype == "/Type0") {
-        ok = embedCidSubstitute(ctx, lib, cache, f);
+        if (ctx.opt.loadCjkFont && !fontUse(f) && cjkUses.empty()) cjkUses = collectFontUse(ctx.pdf);
+        const FontUse* cu = fontUse(f);
+        if (!cu && f.isIndirect()) {
+          auto cit = cjkUses.find(f.getObjGen());
+          if (cit != cjkUses.end()) cu = &cit->second;
+        }
+        ok = embedCjkSubstitute(ctx, lib, cache, f, cu);
+        if (!ok) ok = embedCidSubstitute(ctx, lib, cache, f);
+        if (!ok) ok = embedWorldSubstitute(ctx, f);
       } else {
-        ok = embedSimpleSubstitute(ctx, lib, cache, f);
+        ok = simpleCoveredByLiberation(lib, cache, f) && embedSimpleSubstitute(ctx, lib, cache, f);
+        if (!ok) ok = embedWorldSubstitute(ctx, f);
       }
       if (!ok) {
         if (f.isIndirect()) unfixable.insert(f.getObjGen());
         if (reported.insert(base).second) {
           ctx.issue("FONT_NOT_EMBEDDED",
-                    "font " + base + " is not embedded and no substitute applies", false);
+                    "font " + base + " is not embedded and no substitute applies", ctx.opt.verifyOnly);
         }
         continue;
       }
       subtype = nameOf(f.getKey("/Subtype"));
     }
-    bool needUnicode = ctx.needUnicode();
+    bool needUnicode = ctx.needUnicode() && !(ctx.opt.verifyOnly && ctx.part >= 4 && !ctx.ua2());
     if (subtype == "/TrueType" || subtype == "/Type1" || subtype == "/MMType1" ||
         subtype == "/Type3") {
       if (needUnicode && !fontUse(f)) ensureSimpleToUnicode(ctx, lib, f);
@@ -2402,7 +3637,7 @@ void passFonts(Ctx& ctx) {
       if (ctx.conf == 'A' && (ctx.part == 2 || ctx.part == 3) && puaWithoutActualText(ctx, f, *fontUse(f))) {
         ctx.issue("ACTUALTEXT_MISSING", "private-use characters of " + base + " are shown without ActualText", true);
       }
-      if (forbidden && needUnicode) {
+      if (forbidden && (needUnicode || (ctx.isA() && ctx.part >= 4))) {
         ctx.issue("TOUNICODE_SCRUBBED", std::to_string(forbidden) + " used character code(s) of " + base +
                                             " map to U+0000, U+FEFF or U+FFFE", true);
       }
@@ -2410,8 +3645,15 @@ void passFonts(Ctx& ctx) {
       scrubToUnicode(ctx, f);
     }
     if (subtype == "/TrueType" || subtype == "/Type1" || subtype == "/MMType1") {
-      if (subtype == "/TrueType" && ctx.isA()) {
-        int act = symbolicCmapAction(lib, f);
+      QPDFObjectHandle flagFd = f.getKey("/FontDescriptor");
+      if (subtype == "/TrueType" && !ctx.opt.verifyOnly && flagFd.isDictionary() && flagFd.getKey("/Flags").isInteger() &&
+          (flagFd.getKey("/Flags").getIntValue() & 36) == 36) {
+        long long fl = flagFd.getKey("/Flags").getIntValue();
+        flagFd.replaceKey("/Flags", QPDFObjectHandle::newInteger(programHasCmap(lib, f, 3, 0) ? fl & ~32LL : fl & ~4LL));
+        ctx.issue("FONT_FLAGS_FIXED", "made the symbolic and non-symbolic flags of " + base + " consistent", true);
+      }
+      if (subtype == "/TrueType" && (ctx.isA() || ctx.isX() || ctx.isE())) {
+        int act = symbolicCmapAction(lib, f, ctx.opt.verifyOnly);
         if (act == 1) {
           QPDFObjectHandle fd2 = f.getKey("/FontDescriptor");
           long long fl = fd2.getKey("/Flags").getIntValue();
@@ -2435,18 +3677,47 @@ void passFonts(Ctx& ctx) {
           }
         }
       }
+      if (subtype == "/TrueType" && (lvl == Level::X6 || (ctx.isA() && ctx.part >= 2))) {
+        QPDFObjectHandle fdx = f.getKey("/FontDescriptor");
+        long long flx = fdx.isDictionary() && fdx.getKey("/Flags").isInteger() ? fdx.getKey("/Flags").getIntValue() : 0;
+        QPDFObjectHandle encx = f.getKey("/Encoding");
+        bool diffx = ctx.isA() && encx.isDictionary() && encx.hasKey("/Differences");
+        if (!(flx & 4) && fontEmbedded(f) && !programHasCmap(lib, f, 3, 1) &&
+            (diffx || !programHasCmap(lib, f, 1, 0)) && addMsUnicodeCmap(f)) {
+          ctx.issue("FONT_CMAP_ADDED", "added a Microsoft Unicode cmap subtable to " + base, true);
+        }
+        if (!(flx & 4) && fontEmbedded(f) && !programHasCmap(lib, f, 3, 1) &&
+            (diffx || !programHasCmap(lib, f, 1, 0))) {
+          for (const char* k : {"/FontFile", "/FontFile2", "/FontFile3"}) fdx.removeKey(k);
+          if (embedSimpleSubstitute(ctx, lib, cache, f)) {
+            ctx.issue("FONT_SUBSTITUTED", "replaced " + base + " (its program has no cmap subtable that can resolve its encoding)", true);
+            subtype = nameOf(f.getKey("/Subtype"));
+          } else if (f.isIndirect()) {
+            unfixable.insert(f.getObjGen());
+          }
+        }
+      }
+      if (subtype == "/TrueType" && (ctx.isX() || ctx.isE()) && !ctx.opt.verifyOnly) {
+        QPDFObjectHandle fdx = f.getKey("/FontDescriptor");
+        long long flx = fdx.isDictionary() && fdx.getKey("/Flags").isInteger() ? fdx.getKey("/Flags").getIntValue() : 0;
+        if (!(flx & 4) && fontEmbedded(f) && !programHasCmap(lib, f, 3, 1) && !programHasCmap(lib, f, 1, 0) &&
+            addMsUnicodeCmap(f)) {
+          ctx.issue("FONT_CMAP_ADDED", "added a Microsoft Unicode cmap subtable to " + base, true);
+        }
+      }
       if (subtype == "/TrueType") {
         fixNonsymbolicTtfEncoding(ctx, f);
         QPDFObjectHandle fd = f.getKey("/FontDescriptor");
         long long flags = fd.isDictionary() && fd.getKey("/Flags").isInteger()
                               ? fd.getKey("/Flags").getIntValue()
                               : 0;
-        if ((flags & 4) && !(flags & 32) && f.hasKey("/Encoding")) {
+        if ((flags & 4) && f.hasKey("/Encoding")) {
           f.removeKey("/Encoding");
           ctx.issue("SYMBOLIC_ENCODING_REMOVED",
                     "removed /Encoding from symbolic TrueType font " + base, true);
         }
-        if (ctx.isA() && ctx.part == 1) {
+        if ((ctx.isA() && ctx.part == 1) || ctx.isE() || lvl == Level::X4 || lvl == Level::VT1 || lvl == Level::VT3 ||
+            (lvl == Level::X6 && !programHasCmap(lib, f, 3, 1))) {
           QPDFObjectHandle e2 = f.getKey("/Encoding");
           if (e2.isDictionary() && e2.hasKey("/Differences")) {
             std::string be = nameOf(e2.getKey("/BaseEncoding"));
@@ -2456,7 +3727,7 @@ void passFonts(Ctx& ctx) {
                                                        : "/WinAnsiEncoding"));
             ctx.issue("TT_DIFFERENCES_REMOVED",
                       "removed /Differences from TrueType font " + base +
-                          " (PDF/A-1 requires plain MacRoman/WinAnsi encoding; visual "
+                          " (the target requires plain MacRoman/WinAnsi encoding; visual "
                           "difference possible)",
                       true);
           }
@@ -2467,9 +3738,9 @@ void passFonts(Ctx& ctx) {
       bool isT1 = subtype == "/Type1" || subtype == "/MMType1";
       if (ctx.opt.verifyOnly && ctx.isA() && isT1 && fontEmbedded(f)) {
         bool has = csFd.isDictionary() && csFd.hasKey("/CharSet");
-        bool required = ctx.part == 1 && isSubsetName(base);
         const FontUse* used = ctx.part == 1 ? fontUse(f) : nullptr;
-        if ((has && ctx.part <= 3 && !charSetConsistent(lib, f, used)) || (!has && required)) {
+        if (isSubsetName(base) && (ctx.part == 1 ? !has || !charSetConsistent(lib, f, used)
+                                                  : has && ctx.part <= 3 && !charSetConsistent(lib, f, nullptr))) {
           ctx.issue("CHARSET_ADDED", "/CharSet of " + base + " does not list exactly the glyphs of the font program", true);
         }
       } else if (ctx.opt.verifyOnly && ctx.isA()) {
@@ -2484,7 +3755,7 @@ void passFonts(Ctx& ctx) {
         }
       }
     } else if (subtype == "/Type3") {
-      syncType3Widths(ctx, f);
+      syncType3Widths(ctx, f, fontUse(f));
     } else if (subtype == "/Type0") {
       if (ctx.isA() && f.isIndirect()) {
         QPDFObjectHandle enc0 = f.getKey("/Encoding");
@@ -2511,8 +3782,10 @@ void passFonts(Ctx& ctx) {
                                    : QPDFObjectHandle::newNull();
       if (ctx.opt.verifyOnly && ctx.isA()) {
         bool has = cidFd.isDictionary() && cidFd.hasKey("/CIDSet");
-        bool required = ctx.part == 1 && (isSubsetName(base) || isSubsetName(nameOf(dfv.isArray() && dfv.getArrayNItems() == 1 ? dfv.getArrayItem(0).getKey("/BaseFont") : QPDFObjectHandle::newNull())));
-        if ((has && ctx.part <= 3 && !cidSetConsistent(lib, f)) || (!has && required)) {
+        bool subset = isSubsetName(nameOf(dfv.isArray() && dfv.getArrayNItems() == 1 ? dfv.getArrayItem(0).getKey("/BaseFont") : QPDFObjectHandle::newNull()));
+        const std::set<uint32_t>* usedCids = ctx.part == 1 && fontUse(f) ? &fontUse(f)->cids : nullptr;
+        if (subset && (ctx.part == 1 ? !has || !cidSetConsistent(lib, f, usedCids)
+                                     : has && ctx.part <= 3 && fontEmbedded(f) && !cidSetConsistent(lib, f, nullptr))) {
           ctx.issue("CIDSET_ADDED", "/CIDSet of " + base + " does not identify exactly the CIDs of the font program", true);
         }
       } else if ((ctx.isA() && ctx.part == 1) || ctx.isE()) {
@@ -2573,7 +3846,24 @@ void passFonts(Ctx& ctx) {
         }
       }
       if (badContent) {
-        if (!ctx.opt.rasterizePage || !rasterFlattenPage(ctx, pages[i], static_cast<int>(i))) {
+        bool keepPageText = true;
+        {
+          std::vector<QPDFObjectHandle> rasterFonts;
+          Visited rasterSeen;
+          collectFonts(ctx, pages[i].getAttribute("/Resources", false), rasterSeen, rasterFonts);
+          for (QPDFObjectHandle& pf : rasterFonts) {
+            if (!pf.isDictionary()) continue;
+            QPDFObjectHandle dfs = pf.getKey("/DescendantFonts");
+            if (nameIs(pf.getKey("/Subtype"), "/Type0") &&
+                (!dfs.isArray() || dfs.getArrayNItems() != 1 || !dfs.getArrayItem(0).isDictionary()))
+              keepPageText = false;
+            QPDFObjectHandle e = pf.getKey("/Encoding");
+            if (nameIs(pf.getKey("/Subtype"), "/Type0") && (e.isStream() || (e.isName() && e.getName() != "/Identity-H" &&
+                                                                               e.getName() != "/Identity-V")))
+              keepPageText = false;
+          }
+        }
+        if (!ctx.opt.rasterizePage || !rasterFlattenPage(ctx, pages[i], static_cast<int>(i), keepPageText)) {
           ctx.fatal("FONT_UNEMBEDDABLE",
                     "page " + std::to_string(i + 1) +
                         " uses a font that cannot be embedded or substituted (CID font "
@@ -2589,11 +3879,19 @@ void passFonts(Ctx& ctx) {
           arr.appendItem(QPDFObjectHandle::newName("/ICCBased"));
           arr.appendItem(icc);
           img.getDict().replaceKey("/ColorSpace", ctx.pdf.makeIndirectObject(arr));
+          if (ctx.opt.level == Level::X1A && !convertImageToProcess(ctx, img)) {
+            ctx.fatal("X1A_COLOR_UNCONVERTIBLE",
+                      "page " + std::to_string(i + 1) +
+                          " had to be rendered to an image, and that image could not be converted to CMYK");
+            return;
+          }
         }
         ctx.issue("FONT_PAGE_RASTERIZED",
                   "rasterized page " + std::to_string(i + 1) +
-                      " (a font could not be embedded or substituted; text on this page "
-                      "is no longer selectable)",
+                      (keepPageText ? " (a font could not be embedded or substituted; the original text is "
+                                  "kept as an invisible layer so it stays searchable)"
+                                : " (a font could not be embedded or substituted, and its character map "
+                                  "cannot be kept for an invisible text layer; text on this page is no longer selectable)"),
                   true);
       }
       if (!badAnnots.empty() && annots.isArray()) {

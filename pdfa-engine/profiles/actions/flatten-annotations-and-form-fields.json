@@ -1,0 +1,30 @@
+{
+  "kura-profile": 1,
+  "name": "Flatten annotations and form fields",
+  "description": "Draws comments and form fields into the page and removes them as interactive objects.",
+  "checks": [],
+  "fixes": [
+    {
+      "fix": "annotation.handle",
+      "action": "flatten",
+      "types": [
+        "Text",
+        "FreeText",
+        "Line",
+        "Square",
+        "Circle",
+        "Polygon",
+        "PolyLine",
+        "Highlight",
+        "Underline",
+        "Squiggly",
+        "StrikeOut",
+        "Stamp",
+        "Caret",
+        "Ink",
+        "FileAttachment",
+        "Widget"
+      ]
+    }
+  ]
+}

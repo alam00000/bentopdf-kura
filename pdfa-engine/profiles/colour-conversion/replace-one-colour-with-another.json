@@ -1,0 +1,27 @@
+{
+  "kura-profile": 1,
+  "name": "Replace one colour with another",
+  "description": "Replaces every use of the colour given in {from} with the colour in {to}, written like cmyk 0 100 100 0, rgb 255 0 0 or gray 50.",
+  "checks": [],
+  "fixes": [
+    {
+      "fix": "color.map",
+      "from": "{from}",
+      "to": "{to}"
+    }
+  ],
+  "variables": [
+    {
+      "name": "from",
+      "label": "Colour to replace",
+      "default": "cmyk 0 100 100 0",
+      "type": "text"
+    },
+    {
+      "name": "to",
+      "label": "Replacement colour",
+      "default": "cmyk 0 95 100 0",
+      "type": "text"
+    }
+  ]
+}

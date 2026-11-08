@@ -1,0 +1,13 @@
+{
+  "kura-profile": 1,
+  "name": "Reduce total ink to 240%",
+  "description": "Lowers total ink coverage to at most 240% (typical for newspapers) by taking cyan, magenta and yellow out first and keeping black; colour below the limit is left as it is and spot colours stay spot colours. RGB and other colour is converted to CMYK on the way. No standard is applied.",
+  "convert": {
+    "colors": {
+      "to": "cmyk",
+      "keep_spots": true,
+      "ink_limit": 240
+    }
+  },
+  "checks": []
+}

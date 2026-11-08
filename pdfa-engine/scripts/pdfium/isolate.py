@@ -20,6 +20,7 @@ ENGINE_LIBS = {
         "/opt/homebrew/opt/jpeg-turbo/lib/libjpeg.a",
         "/opt/homebrew/opt/little-cms2/lib/liblcms2.a",
         "/opt/homebrew/opt/openssl@3/lib/libcrypto.a",
+        "build*/core/libkura_harfbuzz.a",
     ],
     "linux": [
         "~/qpdf-install/lib/libqpdf.a", "~/deps-install/lib/libfreetype.a",

@@ -1,0 +1,12 @@
+{
+  "kura-profile": 1,
+  "name": "Convert all colours to GRACoL2013_CRPC6 (CMYK only)",
+  "description": "Converts every colour, spot colours included, to CMYK for US sheetfed coated paper, GRACoL 2013 (CGATS21-2 CRPC6). No standard is applied.",
+  "convert": {
+    "colors": {
+      "to": "GRACoL2013_CRPC6",
+      "keep_spots": false
+    }
+  },
+  "checks": []
+}

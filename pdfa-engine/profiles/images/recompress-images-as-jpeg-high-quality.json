@@ -1,0 +1,12 @@
+{
+  "kura-profile": 1,
+  "name": "Recompress images as JPEG (high quality)",
+  "description": "Re-encodes colour and grey images as high-quality JPEG to reduce file size.",
+  "checks": [],
+  "fixes": [
+    {
+      "fix": "image.recompress",
+      "quality": 90
+    }
+  ]
+}

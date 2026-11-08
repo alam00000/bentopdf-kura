@@ -1,0 +1,27 @@
+{
+  "kura-profile": 1,
+  "name": "Place a QR code",
+  "description": "Places a QR code with the content you give in the lower right corner of the first page.",
+  "checks": [],
+  "fixes": [
+    {
+      "fix": "place.barcode",
+      "symbology": "qr",
+      "data": "{qr}",
+      "width": "20mm",
+      "height": "20mm",
+      "anchor": "lower_right",
+      "x": "-10mm",
+      "y": "10mm",
+      "pages": "1"
+    }
+  ],
+  "variables": [
+    {
+      "name": "qr",
+      "label": "QR code content",
+      "type": "text",
+      "default": "https://example.com"
+    }
+  ]
+}

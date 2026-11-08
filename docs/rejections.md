@@ -11,6 +11,7 @@ Everything not listed here converts, with the changes recorded as issues in the 
 | `PARSE_ERROR` | the bytes are not a PDF, or are damaged beyond qpdf's recovery | check the file; if it opens elsewhere, please report it with the file |
 | `BAD_INPUT` | no input buffer was supplied | API misuse |
 | `BAD_LEVEL` | the level string is not one Kura knows | see [The standards](/standards) |
+| `ICC_PROFILE_MISSING` | the colour profile named for conversion was not found in any profile folder | check the name, or pass the profile file, or its folder with `--icc-folder` |
 | `IMAGE_INPUT_WRAPPED` | not an error: the input was a JPEG and was wrapped as a one-page PDF | nothing; reported as an issue |
 
 ## Encryption
@@ -28,11 +29,15 @@ Standard encryption, RC4 and AES with an empty or supplied password, is removed 
 | Code | Meaning | What to do |
 |---|---|---|
 | `TRANSPARENCY_P1` | the document uses transparency and the target is PDF/A-1 or PDF/X-1a/X-3, which forbid it; the engine had no way to flatten it | use `suggestedLevel`, usually `2b` or `x4`; or `--allow-visual-risk` to force transparency off; or a build with PDFium, which rasterizes the affected pages |
-| `JPX_IN_PDFA1` | a JPEG 2000 image could not be transcoded for PDF/A-1 | use a part 2 or later level |
+| `JPX_UNREADABLE` | a JPEG 2000 image could not be decoded, so it could not be re-encoded for a level that forbids JPEG 2000 or the form it is in | use a part 2 or later level, or `x4` or `x6` for print |
 | `CMYK_MIXED_P1` | PDF/A-1 with both RGB and CMYK content under a single output intent | use `suggestedLevel` |
 | `RGB_UNDER_CMYK_P1` | RGB content under a CMYK output intent at PDF/A-1 | use `suggestedLevel` |
 | `X1A_COLOR_UNCONVERTIBLE` | PDF/X-1a needs every colour in CMYK and something could not be converted, for example a mesh shading with per-vertex colour | the detail names the object; `suggestedLevel` is `x4`, which permits it |
 | `FACTURX_REQUIRES_PDFA3` | an e-invoice was requested at a level that cannot carry attachments | use `3b`, `3u`, `3a` or `4f` |
+| `FONT_FORMAT_NOT_ALLOWED` | an OpenType font cannot be stored at a PDF 1.4 based level (PDF/A-1, PDF/X-1a, PDF/X-3) | use a part 2 or later level, or `x4` |
+| `FONT_UNEMBEDDABLE` | a page uses a font that can be neither embedded nor substituted, and the page cannot be rasterized | install the font, or use a build with PDFium |
+| `IMAGE_DEPTH_UNSUPPORTED` | 16-bit image data could not be decoded for a level that needs it reduced | please report with the file |
+| `EMBED_SOURCE_UNSUPPORTED_LEVEL` | embedding the source document needs a level that allows attachments | use `3b`, `3u`, `3a`, `4f` or `e1` |
 
 ## E-invoice payloads
 
@@ -51,6 +56,11 @@ Standard encryption, RC4 and AES with an empty or supplied password, is removed 
 | `SERIALIZE_ERROR` | the converted document could not be written | please report with the file |
 | `INTERNAL_ERROR` | an unexpected failure was caught at the boundary | please report with the file |
 | `SIGN_NO_PAGES` | signing was requested on a document with no pages | |
+| `SIGN_FAILED` | the signature could not be created; the detail gives the reason | check the certificate and password |
+| `DEFAULT_PROFILE_MISMATCH` | the supplied default profile is not a valid ICC profile of the needed colour space | pass an RGB, CMYK or gray profile as asked |
+| `X_COLOR_ENGINE` | the colour transform could not be set up | check the supplied profiles; otherwise please report with the file |
+| `RASTERIZER_UNAVAILABLE` | page rasterization was requested but this build has no renderer | use a build with PDFium |
+| `RASTERIZE_FAILED` | some pages could not be rendered | please report with the file |
 
 ## Findings that are not rejections
 

@@ -1,0 +1,10 @@
+{
+  "kura-profile": 1,
+  "name": "Convert to PDF/X-6 for PSO Coated v3",
+  "description": "Converts to PDF/X-6 with the PSO Coated v3 profile as output intent (premium coated paper, FOGRA51). The profile is taken from Kura's bundled profiles or the computer's colour folders.",
+  "convert": {
+    "level": "pdfx-6",
+    "profile": "PSO Coated v3"
+  },
+  "checks": []
+}

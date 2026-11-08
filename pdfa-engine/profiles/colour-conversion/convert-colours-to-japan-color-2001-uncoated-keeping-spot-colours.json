@@ -1,0 +1,12 @@
+{
+  "kura-profile": 1,
+  "name": "Convert colours to Japan Color 2001 Uncoated, keeping spot colours",
+  "description": "Converts RGB, calibrated and Lab colour to CMYK for Japanese uncoated paper, Japan Color 2001 and sets it as the output intent; spot colours stay spot colours. No standard is applied.",
+  "convert": {
+    "colors": {
+      "to": "Japan Color 2001 Uncoated",
+      "keep_spots": true
+    }
+  },
+  "checks": []
+}

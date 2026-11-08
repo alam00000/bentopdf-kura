@@ -1,0 +1,12 @@
+{
+  "kura-profile": 1,
+  "name": "Convert colours to ISO Coated v2 (ECI), keeping spot colours",
+  "description": "Converts RGB, calibrated and Lab colour to CMYK for coated paper, FOGRA39 (ECI profile) and sets it as the output intent; spot colours stay spot colours. No standard is applied.",
+  "convert": {
+    "colors": {
+      "to": "ISO Coated v2 (ECI)",
+      "keep_spots": true
+    }
+  },
+  "checks": []
+}

@@ -1,0 +1,25 @@
+{
+  "kura-profile": 1,
+  "name": "Place the job number in the gutter",
+  "description": "Places a job number of your choice along the left edge of every page.",
+  "checks": [],
+  "fixes": [
+    {
+      "fix": "place.text",
+      "text": "Job {job}",
+      "size": "7pt",
+      "anchor": "left",
+      "x": "4mm",
+      "y": "0mm",
+      "rotation": "90"
+    }
+  ],
+  "variables": [
+    {
+      "name": "job",
+      "label": "Job number",
+      "type": "text",
+      "default": "0000"
+    }
+  ]
+}

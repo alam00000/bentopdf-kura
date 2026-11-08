@@ -1,0 +1,10 @@
+{
+  "kura-profile": 1,
+  "name": "Convert to PDF/X-4 for Coated GRACoL 2006 (ISO 12647-2:2004)",
+  "description": "Converts to PDF/X-4 with the Coated GRACoL 2006 (ISO 12647-2:2004) profile as output intent (US sheetfed coated paper, GRACoL 2006). The profile is taken from Kura's bundled profiles or the computer's colour folders.",
+  "convert": {
+    "level": "pdfx-4",
+    "profile": "Coated GRACoL 2006 (ISO 12647-2:2004)"
+  },
+  "checks": []
+}

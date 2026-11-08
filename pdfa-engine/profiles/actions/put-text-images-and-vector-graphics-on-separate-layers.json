@@ -1,0 +1,57 @@
+{
+  "kura-profile": 1,
+  "name": "Put text, images and vector graphics on separate layers",
+  "description": "Creates the layers Text, Images and Vector graphics and moves each object onto the matching layer.",
+  "checks": [
+    {
+      "name": "Text objects",
+      "severity": "info",
+      "all": [
+        {
+          "check": "content.kind",
+          "op": "==",
+          "value": "text"
+        }
+      ]
+    },
+    {
+      "name": "Image objects",
+      "severity": "info",
+      "all": [
+        {
+          "check": "content.kind",
+          "op": "==",
+          "value": "image"
+        }
+      ]
+    },
+    {
+      "name": "Vector objects",
+      "severity": "info",
+      "all": [
+        {
+          "check": "content.kind",
+          "op": "==",
+          "value": "path"
+        }
+      ]
+    }
+  ],
+  "fixes": [
+    {
+      "fix": "layer.move_objects",
+      "layer": "Text",
+      "objects": "Text objects"
+    },
+    {
+      "fix": "layer.move_objects",
+      "layer": "Images",
+      "objects": "Image objects"
+    },
+    {
+      "fix": "layer.move_objects",
+      "layer": "Vector graphics",
+      "objects": "Vector objects"
+    }
+  ]
+}

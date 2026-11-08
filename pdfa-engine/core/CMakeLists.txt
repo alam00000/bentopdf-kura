@@ -13,6 +13,18 @@ if(NOT EMSCRIPTEN)
   endif()
 endif()
 
+set(KURA_HB_DIR ${PDFA_TP}/harfbuzz/src CACHE PATH "HarfBuzz source directory (the src/ folder of a HarfBuzz checkout)")
+if(NOT EXISTS ${KURA_HB_DIR}/harfbuzz.cc)
+  message(FATAL_ERROR "HarfBuzz source not found at ${KURA_HB_DIR}; set KURA_HB_DIR")
+endif()
+add_library(kura_harfbuzz STATIC ${KURA_HB_DIR}/harfbuzz.cc)
+target_include_directories(kura_harfbuzz SYSTEM PUBLIC ${KURA_HB_DIR})
+target_compile_definitions(kura_harfbuzz PRIVATE HB_NO_MT HB_NO_PRAGMA_GCC_DIAGNOSTIC_ERROR)
+set_target_properties(kura_harfbuzz PROPERTIES CXX_STANDARD 17 POSITION_INDEPENDENT_CODE ON)
+if(EMSCRIPTEN)
+  target_compile_options(kura_harfbuzz PUBLIC -fwasm-exceptions)
+endif()
+
 add_library(pdfa_core STATIC
   src/engine.cpp
   src/analyze.cpp
@@ -48,10 +60,13 @@ add_library(pdfa_core STATIC
   src/pdffunc.cpp
   src/textextract.cpp
   src/uacheck.cpp
+  src/ua_table5.cpp
   src/barcode.cpp
   src/printx.cpp
   src/fonts.cpp
   src/fonts_glyph.cpp
+  src/cmap_predef.cpp
+  src/fontworld.cpp
   src/xmp.cpp
   src/limits.cpp
   src/tagging.cpp
@@ -63,12 +78,14 @@ add_library(pdfa_core STATIC
   assets/fonts_data.cpp
   assets/agl_names.cpp
   assets/cmyk_icc.cpp
+  assets/cjk_cmaps.cpp
 )
 
 target_include_directories(pdfa_core
   PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include
   PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}
 )
+target_link_libraries(pdfa_core PUBLIC kura_harfbuzz)
 
 if(WIN32)
   get_filename_component(PDFA_WIN_LIBDIR "${LCMS2_LIBRARY}" DIRECTORY)

@@ -1,0 +1,12 @@
+{
+  "kura-profile": 1,
+  "name": "Convert colours to Web Coated SWOP 2006 Grade 3 Paper, keeping spot colours",
+  "description": "Converts RGB, calibrated and Lab colour to CMYK for US web offset, SWOP 2006 grade 3 and sets it as the output intent; spot colours stay spot colours. No standard is applied.",
+  "convert": {
+    "colors": {
+      "to": "Web Coated SWOP 2006 Grade 3 Paper",
+      "keep_spots": true
+    }
+  },
+  "checks": []
+}

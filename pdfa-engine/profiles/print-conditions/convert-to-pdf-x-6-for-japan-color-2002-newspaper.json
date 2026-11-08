@@ -1,0 +1,10 @@
+{
+  "kura-profile": 1,
+  "name": "Convert to PDF/X-6 for Japan Color 2002 Newspaper",
+  "description": "Converts to PDF/X-6 with the Japan Color 2002 Newspaper profile as output intent (Japanese newsprint, Japan Color 2002). The profile is taken from Kura's bundled profiles or the computer's colour folders.",
+  "convert": {
+    "level": "pdfx-6",
+    "profile": "Japan Color 2002 Newspaper"
+  },
+  "checks": []
+}

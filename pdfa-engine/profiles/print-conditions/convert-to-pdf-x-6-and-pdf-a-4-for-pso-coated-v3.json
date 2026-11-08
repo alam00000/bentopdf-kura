@@ -1,0 +1,11 @@
+{
+  "kura-profile": 1,
+  "name": "Convert to PDF/X-6 and PDF/A-4 for PSO Coated v3",
+  "description": "Makes one file that is both PDF/X-6 and PDF/A-4, with the PSO Coated v3 profile (premium coated paper, FOGRA51).",
+  "convert": {
+    "level": "pdfa-4",
+    "also": "pdfx-6",
+    "profile": "PSO Coated v3"
+  },
+  "checks": []
+}

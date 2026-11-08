@@ -60,6 +60,7 @@ RawImage decodeDctData(const std::string& data, bool& cmykInverted) {
   JSAMPLE* rowPtr[1] = {nullptr};
   cinfo.err = jpeg_std_error(&jerr.mgr);
   jerr.mgr.error_exit = jpegErrorExit;
+  jerr.mgr.output_message = [](j_common_ptr) {};
   if (setjmp(jerr.jump)) {
     jpeg_destroy_decompress(&cinfo);
     RawImage failed;
@@ -93,6 +94,7 @@ RawImage decodeDctData(const std::string& data, bool& cmykInverted) {
     jpeg_read_scanlines(&cinfo, rowPtr, 1);
   }
   jpeg_finish_decompress(&cinfo);
+  out.damaged = jerr.mgr.num_warnings > 0;
   jpeg_destroy_decompress(&cinfo);
   out.width = width;
   out.height = height;

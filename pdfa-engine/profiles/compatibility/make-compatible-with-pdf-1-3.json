@@ -1,0 +1,21 @@
+{
+  "kura-profile": 1,
+  "name": "Make compatible with PDF 1.3",
+  "description": "Removes what PDF 1.3 does not support and writes the file as PDF 1.3: flattens transparency, merges layers, reduces 16-bit images and re-encodes JPEG 2000 as JPEG. No standard is applied.",
+  "convert": {
+    "pdf_version": "1.3"
+  },
+  "checks": [
+    {
+      "name": "Newer than PDF 1.3",
+      "severity": "info",
+      "all": [
+        {
+          "check": "document.pdf_version",
+          "op": ">",
+          "value": "1.3"
+        }
+      ]
+    }
+  ]
+}

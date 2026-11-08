@@ -1,4 +1,7 @@
+#include <lcms2.h>
 #include <qpdf/QPDF.hh>
+#include <qpdf/QPDFWriter.hh>
+#include <qpdf/QPDFPageDocumentHelper.hh>
 #include <qpdf/QPDFObjectHandle.hh>
 #include <qpdf/QPDFPageObjectHelper.hh>
 
@@ -12,8 +15,11 @@
 #include <string>
 #include <vector>
 
+#include "assets/cmyk_icc.hh"
+#include "assets/srgb_icc.hh"
 #include "colorconv.hh"
 #include "ctx.hh"
+#include "images.hh"
 #include "passes.hh"
 #include "pdffunc.hh"
 #include "util.hh"
@@ -44,6 +50,7 @@ class Collect : public QPDFObjectHandle::ParserCallbacks {
 };
 
 using Mat = std::array<double, 6>;
+using Pt = std::array<double, 2>;
 const Mat kId{1, 0, 0, 1, 0, 0};
 
 Mat mul(const Mat& a, const Mat& b) {
@@ -123,6 +130,10 @@ struct State {
   double ca = 1, CA = 1, gA = 1;
   int bm = 0;
   bool smask = false;
+  QPDFObjectHandle smaskObj;
+  Mat smaskCtm = kId;
+  bool op = false, OP = false;
+  int opm = 0;
   double lw = 1, ml = 10;
   int cap = 0, join = 0;
   std::string dash = "[] 0";
@@ -161,6 +172,10 @@ struct Piece {
   std::vector<int> clips;
   int painter = -1;
   int shade = -1;
+  int image = -1;
+  bool stencil = false;
+  std::string xobj;
+  Mat xm = kId;
   Colour colour;
   double alpha = 1;
   bool flat = false;
@@ -171,6 +186,8 @@ struct Layer {
   Colour src;
   double a = 1;
   int bm = 0;
+  bool ovp = false;
+  int opm = 0;
 };
 
 struct Shade {
@@ -663,6 +680,487 @@ std::optional<Piece> over(const Piece& back, Colour src, double a, int bm, Env& 
   return r;
 }
 
+bool inksUnder(const Piece& back, Colour& src, Colour& bc, Env& env) {
+  if (src.kind >= 0 || src.names.size() != src.v.size()) return false;
+  bc = back.colour;
+  for (double& x : bc.v) x = bc.kind > 0 ? back.alpha * x + (1 - back.alpha) : back.alpha * x;
+  if (bc.kind == 0 && bc.fam == "/Separation" && bc.space.isArray() && nameOf(bc.space.getArrayItem(1)) == "/All") {
+    bc = device(std::vector<double>(4, bc.v.empty() ? 1 : bc.v[0]));
+  }
+  if ((bc.kind >= 0 || bc.names.empty()) && !toProcess(bc, 4)) return false;
+  return mergeInks(bc, src, env) && bc.v.size() == src.v.size();
+}
+
+QPDFObjectHandle sampledFunction(Ctx& ctx, const std::string& data, double d0, double d1, size_t on) {
+  QPDFObjectHandle f = QPDFObjectHandle::newStream(&ctx.pdf, data);
+  QPDFObjectHandle fd = f.getDict();
+  fd.replaceKey("/FunctionType", QPDFObjectHandle::newInteger(0));
+  QPDFObjectHandle da = QPDFObjectHandle::newArray(), ra = QPDFObjectHandle::newArray(), sz = QPDFObjectHandle::newArray();
+  da.appendItem(QPDFObjectHandle::newReal(d0, 6));
+  da.appendItem(QPDFObjectHandle::newReal(d1, 6));
+  for (size_t i = 0; i < on; ++i) {
+    ra.appendItem(QPDFObjectHandle::newInteger(0));
+    ra.appendItem(QPDFObjectHandle::newInteger(1));
+  }
+  sz.appendItem(QPDFObjectHandle::newInteger(256));
+  fd.replaceKey("/Domain", da);
+  fd.replaceKey("/Range", ra);
+  fd.replaceKey("/Size", sz);
+  fd.replaceKey("/BitsPerSample", QPDFObjectHandle::newInteger(8));
+  return ctx.pdf.makeIndirectObject(f);
+}
+
+bool hasForeignInk(const Colour& under, const std::vector<std::string>& over) {
+  for (size_t k = 0; k < under.names.size() && k < under.v.size(); ++k) {
+    if (under.v[k] > 0 && std::find(over.begin(), over.end(), under.names[k]) == over.end()) return true;
+  }
+  return false;
+}
+
+struct ShadeGeo {
+  int type = 0;
+  std::array<double, 6> c{};
+  bool e0 = false, e1 = false;
+  double d0 = 0, d1 = 1;
+  std::unique_ptr<PdfFunction> fn;
+  Mat inv = kId;
+};
+
+bool loadGeo(QPDFObjectHandle sd, const Mat& ctm, ShadeGeo& g) {
+  g.type = static_cast<int>(numOf(sd.getKey("/ShadingType"), 0));
+  QPDFObjectHandle co = sd.getKey("/Coords"), ex = sd.getKey("/Extend"), dom = sd.getKey("/Domain");
+  size_t want = g.type == 2 ? 4 : 6;
+  if ((g.type != 2 && g.type != 3) || !co.isArray() || static_cast<size_t>(co.getArrayNItems()) != want || !invert(ctm, g.inv)) {
+    return false;
+  }
+  for (size_t k = 0; k < want; ++k) g.c[k] = num(co.getArrayItem(static_cast<int>(k)));
+  if (ex.isArray() && ex.getArrayNItems() == 2) {
+    g.e0 = ex.getArrayItem(0).isBool() && ex.getArrayItem(0).getBoolValue();
+    g.e1 = ex.getArrayItem(1).isBool() && ex.getArrayItem(1).getBoolValue();
+  }
+  if (dom.isArray() && dom.getArrayNItems() == 2) {
+    g.d0 = num(dom.getArrayItem(0));
+    g.d1 = num(dom.getArrayItem(1));
+  }
+  g.fn = PdfFunction::loadArray(sd.getKey("/Function"));
+  return g.fn && g.fn->inputs() == 1;
+}
+
+bool shadeAt(const ShadeGeo& g, double x, double y, double* out) {
+  auto p = apply(g.inv, x, y);
+  double s = 0;
+  auto fits = [&](double v) { return (v >= 0 || g.e0) && (v <= 1 || g.e1); };
+  if (g.type == 2) {
+    double dx = g.c[2] - g.c[0], dy = g.c[3] - g.c[1], den = dx * dx + dy * dy;
+    s = den > 0 ? ((p[0] - g.c[0]) * dx + (p[1] - g.c[1]) * dy) / den : 0;
+    if (!fits(s)) return false;
+  } else {
+    double cx = g.c[3] - g.c[0], cy = g.c[4] - g.c[1], dr = g.c[5] - g.c[2];
+    double px = p[0] - g.c[0], py = p[1] - g.c[1];
+    double a = cx * cx + cy * cy - dr * dr, b = px * cx + py * cy + g.c[2] * dr, c = px * px + py * py - g.c[2] * g.c[2];
+    std::vector<double> cand;
+    if (std::fabs(a) < 1e-12) {
+      if (std::fabs(b) < 1e-12) return false;
+      cand.push_back(c / (2 * b));
+    } else {
+      double disc = b * b - a * c;
+      if (disc < 0) return false;
+      double r = std::sqrt(disc);
+      cand = {std::max((b + r) / a, (b - r) / a), std::min((b + r) / a, (b - r) / a)};
+    }
+    bool found = false;
+    for (double v : cand) {
+      if (fits(v) && g.c[2] + v * dr >= 0) {
+        s = v;
+        found = true;
+        break;
+      }
+    }
+    if (!found) return false;
+  }
+  double t = g.d0 + std::clamp(s, 0.0, 1.0) * (g.d1 - g.d0);
+  return g.fn->compute(&t, out);
+}
+
+struct CidWidths {
+  double dw = 1000;
+  std::map<unsigned, double> w;
+};
+
+std::shared_ptr<CidWidths> cidWidths(QPDFObjectHandle font) {
+  if (!nameIs(font.getKey("/Encoding"), "/Identity-H")) return nullptr;
+  QPDFObjectHandle df = font.getKey("/DescendantFonts");
+  QPDFObjectHandle cf = df.isArray() && df.getArrayNItems() > 0 ? df.getArrayItem(0) : QPDFObjectHandle::newNull();
+  if (!cf.isDictionary()) return nullptr;
+  auto r = std::make_shared<CidWidths>();
+  r->dw = numOf(cf.getKey("/DW"), 1000);
+  QPDFObjectHandle wa = cf.getKey("/W");
+  if (!wa.isArray()) return r;
+  std::vector<QPDFObjectHandle> v = wa.getArrayAsVector();
+  for (size_t i = 0; i + 1 < v.size();) {
+    if (!v[i].isNumber()) return nullptr;
+    unsigned c0 = static_cast<unsigned>(num(v[i]));
+    if (v[i + 1].isArray()) {
+      unsigned k = 0;
+      for (const auto& x : v[i + 1].aitems()) r->w[c0 + k++] = num(x);
+      i += 2;
+    } else if (i + 2 < v.size() && v[i + 1].isNumber()) {
+      unsigned c1 = static_cast<unsigned>(num(v[i + 1]));
+      if (c1 < c0 || c1 - c0 > 65535) return nullptr;
+      for (unsigned c = c0; c <= c1; ++c) r->w[c] = num(v[i + 2]);
+      i += 3;
+    } else {
+      return nullptr;
+    }
+  }
+  return r;
+}
+
+bool type3Outline(QPDFObjectHandle font, const std::vector<std::pair<unsigned char, double>>& codes, const Mat& text,
+                  std::vector<Op>& out) {
+  QPDFObjectHandle procs = font.getKey("/CharProcs"), fm = font.getKey("/FontMatrix"), enc = font.getKey("/Encoding");
+  if (!procs.isDictionary() || !fm.isArray() || fm.getArrayNItems() != 6) return false;
+  Mat fmat;
+  for (int k = 0; k < 6; ++k) fmat[k] = num(fm.getArrayItem(k));
+  std::map<int, std::string> names;
+  QPDFObjectHandle diff = enc.isDictionary() ? enc.getKey("/Differences") : QPDFObjectHandle::newNull();
+  if (diff.isArray()) {
+    int code = 0;
+    for (const auto& x : diff.aitems()) {
+      if (x.isNumber()) code = static_cast<int>(num(x));
+      else if (x.isName()) names[code++] = x.getName();
+    }
+  }
+  for (const auto& [ch, gx0] : codes) {
+    auto nm = names.find(ch);
+    if (nm == names.end()) return false;
+    QPDFObjectHandle proc = procs.getKey(nm->second);
+    if (!proc.isStream()) return false;
+    Collect c;
+    try {
+      QPDFObjectHandle::parseContentStream(proc, &c);
+    } catch (...) {
+      return false;
+    }
+    Mat base = mul(fmat, mul({1, 0, 0, 1, gx0, 0}, text));
+    std::vector<Mat> stack;
+    Mat m = base;
+    std::vector<Op> path;
+    std::map<std::string, QPDFObjectHandle> inl;
+    Pt cur{0, 0};
+    auto pt = [&](const Op& o, size_t k) { return Pt{num(o.args[k]), num(o.args[k + 1])}; };
+    auto put = [&](const char* name, std::initializer_list<Pt> pts) {
+      std::vector<double> v;
+      for (const Pt& q : pts) {
+        auto t = apply(m, q[0], q[1]);
+        v.push_back(t[0]);
+        v.push_back(t[1]);
+      }
+      Op o;
+      o.op = name;
+      for (double x : v) o.args.push_back(QPDFObjectHandle::newReal(x, 4));
+      path.push_back(o);
+    };
+    for (const Op& o : c.ops) {
+      const std::string& op = o.op;
+      size_t na = o.args.size();
+      if (op == "q") {
+        stack.push_back(m);
+      } else if (op == "Q") {
+        if (!stack.empty()) {
+          m = stack.back();
+          stack.pop_back();
+        }
+      } else if (op == "cm" && na == 6) {
+        m = mul({num(o.args[0]), num(o.args[1]), num(o.args[2]), num(o.args[3]), num(o.args[4]), num(o.args[5])}, m);
+      } else if (op == "m" && na == 2) {
+        cur = pt(o, 0);
+        put("m", {cur});
+      } else if (op == "l" && na == 2) {
+        cur = pt(o, 0);
+        put("l", {cur});
+      } else if (op == "c" && na == 6) {
+        put("c", {pt(o, 0), pt(o, 2), pt(o, 4)});
+        cur = pt(o, 4);
+      } else if (op == "v" && na == 4) {
+        put("c", {cur, pt(o, 0), pt(o, 2)});
+        cur = pt(o, 2);
+      } else if (op == "y" && na == 4) {
+        put("c", {pt(o, 0), pt(o, 2), pt(o, 2)});
+        cur = pt(o, 2);
+      } else if (op == "h") {
+        path.push_back(Op{{}, "h"});
+      } else if (op == "re" && na == 4) {
+        double x = num(o.args[0]), y = num(o.args[1]), w = num(o.args[2]), hh = num(o.args[3]);
+        put("m", {{x, y}});
+        put("l", {{x + w, y}});
+        put("l", {{x + w, y + hh}});
+        put("l", {{x, y + hh}});
+        path.push_back(Op{{}, "h"});
+        cur = {x, y};
+      } else if (op == "f" || op == "F" || op == "f*" || op == "b" || op == "b*" || op == "B" || op == "B*") {
+        out.insert(out.end(), path.begin(), path.end());
+        path.clear();
+      } else if (op == "n" || op == "W" || op == "W*") {
+        if (op == "n") path.clear();
+      } else if (op == "ID") {
+        inl.clear();
+        for (size_t k = 0; k + 1 < na; k += 2) {
+          if (o.args[k].isName()) inl[o.args[k].getName()] = o.args[k + 1];
+        }
+      } else if (op == "EI" && na == 1 && o.args[0].isInlineImage()) {
+        auto key = [&](const char* a, const char* b) {
+          return inl.count(a) ? inl[a] : inl.count(b) ? inl[b] : QPDFObjectHandle::newNull();
+        };
+        QPDFObjectHandle im = key("/IM", "/ImageMask"), dec = key("/D", "/Decode");
+        int w = static_cast<int>(numOf(key("/W", "/Width"), 0)), h = static_cast<int>(numOf(key("/H", "/Height"), 0));
+        if (!im.isBool() || !im.getBoolValue() || !key("/F", "/Filter").isNull() || w <= 0 || h <= 0 || w * h > 1 << 20) {
+          return false;
+        }
+        bool paintOne = dec.isArray() && dec.getArrayNItems() == 2 && num(dec.getArrayItem(0)) == 1;
+        std::string bits = o.args[0].getInlineImageValue();
+        size_t row = (static_cast<size_t>(w) + 7) / 8;
+        if (bits.size() < row * h) return false;
+        std::map<std::pair<int, int>, int> open;
+        auto flush = [&](int x0, int x1, int top, int bottom) {
+          double fx0 = static_cast<double>(x0) / w, fx1 = static_cast<double>(x1) / w;
+          double fy0 = 1 - static_cast<double>(bottom) / h, fy1 = 1 - static_cast<double>(top) / h;
+          put("m", {{fx0, fy0}});
+          put("l", {{fx1, fy0}});
+          put("l", {{fx1, fy1}});
+          put("l", {{fx0, fy1}});
+          out.insert(out.end(), path.begin(), path.end());
+          out.push_back(Op{{}, "h"});
+          path.clear();
+        };
+        for (int y = 0; y <= h; ++y) {
+          std::map<std::pair<int, int>, int> next;
+          for (int x = 0; y < h && x < w;) {
+            auto on = [&](int xx) {
+              bool b = (static_cast<unsigned char>(bits[y * row + xx / 8]) >> (7 - xx % 8)) & 1;
+              return b == paintOne;
+            };
+            if (!on(x)) {
+              ++x;
+              continue;
+            }
+            int x0 = x;
+            while (x < w && on(x)) ++x;
+            auto it = open.find({x0, x});
+            next[{x0, x}] = it != open.end() ? it->second : y;
+          }
+          for (const auto& [run, top] : open) {
+            if (!next.count(run) || next[run] != top) flush(run.first, run.second, top, y);
+          }
+          open.swap(next);
+        }
+      } else if (op == "S" || op == "s" || op == "Do" || op == "EI" || op == "sh" || op == "BT" || op == "Tj" ||
+                 op == "TJ") {
+        return false;
+      }
+    }
+  }
+  return true;
+}
+
+bool coveredBy(const Colour& c, const std::vector<std::string>& inks) {
+  auto has = [&](const std::string& n) { return std::find(inks.begin(), inks.end(), n) != inks.end(); };
+  if (c.kind < 0) return std::all_of(c.names.begin(), c.names.end(), has);
+  if (c.kind == 1 && c.v.size() == 1) return has("/Black");
+  return c.kind == 1 && std::all_of(kProc.begin(), kProc.end(), has);
+}
+
+bool paintedInks(Colour& src, int opm, std::set<std::string>& painted) {
+  if (src.kind == 1) {
+    if (!toProcess(src, 4)) return false;
+    opm = 0;
+  }
+  if (src.kind >= 0) return false;
+  bool cmyk = src.names == kProc && src.fam != "/DeviceN";
+  for (size_t i = 0; i < src.names.size() && i < src.v.size(); ++i) {
+    if (!(opm == 1 && cmyk && src.v[i] == 0)) painted.insert(src.names[i]);
+  }
+  return true;
+}
+
+bool imageSamples(QPDFObjectHandle x, QPDFObjectHandle res, Colour& cs, int& w, int& h, std::string& data, bool soft = false,
+                  std::string* alphaOut = nullptr);
+
+bool softAlpha(QPDFObjectHandle sm, int w, int h, std::string& alpha) {
+  if (!sm.isStream() || sm.getDict().hasKey("/Matte")) return false;
+  Colour cs;
+  int sw, sh;
+  std::string g;
+  if (!imageSamples(sm, QPDFObjectHandle::newDictionary(), cs, sw, sh, g) || cs.names != kProc) return false;
+  alpha.resize(static_cast<size_t>(w) * h);
+  for (int y = 0; y < h; ++y) {
+    for (int x = 0; x < w; ++x) {
+      size_t q = static_cast<size_t>(y * sh / h) * sw + static_cast<size_t>(x) * sw / w;
+      alpha[static_cast<size_t>(y) * w + x] = static_cast<char>(255 - static_cast<unsigned char>(g[q * 4 + 3]));
+    }
+  }
+  return true;
+}
+
+bool imageSamplesRaw(QPDFObjectHandle x, QPDFObjectHandle res, Colour& cs, int& w, int& h, std::string& data, bool soft);
+
+bool imageSamples(QPDFObjectHandle x, QPDFObjectHandle res, Colour& cs, int& w, int& h, std::string& data, bool soft,
+                  std::string* alphaOut) {
+  if (!imageSamplesRaw(x, res, cs, w, h, data, soft)) return false;
+  QPDFObjectHandle sm = x.getDict().getKey("/SMask");
+  if (!soft || !sm.isStream()) return true;
+  std::string alpha;
+  if (!softAlpha(sm, w, h, alpha)) return false;
+  size_t n = cs.names.size(), px = static_cast<size_t>(w) * h;
+  for (size_t q = 0; q < px; ++q) {
+    unsigned a = static_cast<unsigned char>(alpha[q]);
+    for (size_t k = 0; k < n; ++k) {
+      data[q * n + k] = static_cast<char>(static_cast<unsigned char>(data[q * n + k]) * a / 255);
+    }
+  }
+  if (alphaOut) alphaOut->swap(alpha);
+  return true;
+}
+
+bool imageSamplesRaw(QPDFObjectHandle x, QPDFObjectHandle res, Colour& cs, int& w, int& h, std::string& data, bool soft) {
+  QPDFObjectHandle d = x.getDict();
+  cs = colourOf(d.getKey("/ColorSpace"), res);
+  w = static_cast<int>(numOf(d.getKey("/Width"), 0));
+  h = static_cast<int>(numOf(d.getKey("/Height"), 0));
+  int bpc = static_cast<int>(numOf(d.getKey("/BitsPerComponent"), 0));
+  bool plainDecode = true;
+  QPDFObjectHandle dec = d.getKey("/Decode");
+  if (dec.isArray()) {
+    Colour probe = colourOf(d.getKey("/ColorSpace"), res);
+    for (int k = 0; k < dec.getArrayNItems(); ++k) {
+      double want = k % 2 == 0 ? 0 : probe.kind == 2 ? (1 << bpc) - 1 : 1;
+      if (std::fabs(num(dec.getArrayItem(k)) - want) > 1e-6) plainDecode = false;
+    }
+  } else if (!dec.isNull()) {
+    plainDecode = false;
+  }
+  if ((d.hasKey("/SMask") && !soft) || d.hasKey("/Mask") || !plainDecode || (bpc != 1 && bpc != 2 && bpc != 4 && bpc != 8) ||
+      w <= 0 || h <= 0 || static_cast<double>(w) * h > 4e7) {
+    return false;
+  }
+  std::string lookup;
+  if (cs.kind == 2 && cs.space.isArray()) {
+    QPDFObjectHandle lk = cs.space.getArrayItem(3);
+    try {
+      if (lk.isString()) {
+        lookup = lk.getStringValue();
+      } else if (lk.isStream()) {
+        auto b = lk.getStreamData(qpdf_dl_generalized);
+        lookup.assign(reinterpret_cast<const char*>(b->getBuffer()), b->getSize());
+      }
+    } catch (...) {
+      return false;
+    }
+    cs = colourOf(cs.space.getArrayItem(1), res);
+    if (lookup.empty()) return false;
+  }
+  bool gray = cs.kind == 1 && cs.v.size() == 1 && cs.cs.empty() && cs.fam == "/DeviceGray";
+  bool rgb = cs.kind == 1 && cs.v.size() == 3;
+  if (cs.kind == 0 && cs.fam == "/DeviceN" && !cs.names.empty() &&
+      std::find(cs.names.begin(), cs.names.end(), "/All") == cs.names.end()) {
+    cs.kind = -1;
+  }
+  size_t n = gray ? 1 : rgb ? 3 : cs.names.size();
+  if ((cs.kind >= 0 && !gray && !rgb) || n == 0 || (!lookup.empty() && lookup.size() < n)) return false;
+  size_t px = static_cast<size_t>(w) * h, per = lookup.empty() ? n : 1;
+  std::string unpacked;
+  const unsigned char* sp = nullptr;
+  std::shared_ptr<Buffer> buf;
+  try {
+    buf = x.getStreamData(qpdf_dl_all);
+    sp = buf->getBuffer();
+  } catch (...) {
+    RawImage ri = decodeImage(x);
+    if (!ri.ok || ri.width != w || ri.height != h || static_cast<size_t>(ri.comps) != per || ri.samples.size() < px * per) {
+      return false;
+    }
+    unpacked.swap(ri.samples);
+    sp = reinterpret_cast<const unsigned char*>(unpacked.data());
+    bpc = 8;
+  }
+  if (!buf) {
+  } else if (bpc != 8) {
+    size_t row = (static_cast<size_t>(w) * per * bpc + 7) / 8;
+    if (buf->getSize() < row * h) return false;
+    unpacked.resize(px * per);
+    int mx = (1 << bpc) - 1;
+    for (size_t y = 0; y < static_cast<size_t>(h); ++y) {
+      for (size_t k = 0; k < static_cast<size_t>(w) * per; ++k) {
+        size_t bit = k * bpc;
+        int v = (sp[y * row + bit / 8] >> (8 - bpc - bit % 8)) & mx;
+        unpacked[y * w * per + k] = static_cast<char>(lookup.empty() ? v * 255 / mx : v);
+      }
+    }
+    sp = reinterpret_cast<const unsigned char*>(unpacked.data());
+  } else if (buf->getSize() < px * per) {
+    return false;
+  }
+  if (gray) {
+    data.assign(px * 4, '\0');
+    for (size_t q = 0; q < px; ++q) {
+      unsigned char g = lookup.empty() ? sp[q] : static_cast<unsigned char>(lookup[std::min<size_t>(sp[q], lookup.size() - 1)]);
+      data[q * 4 + 3] = static_cast<char>(255 - g);
+    }
+    cs = device({0, 0, 0, 0});
+    return true;
+  }
+  if (lookup.empty()) {
+    data.assign(reinterpret_cast<const char*>(sp), px * n);
+  } else {
+    size_t entries = lookup.size() / n;
+    data.resize(px * n);
+    for (size_t q = 0; q < px; ++q) std::copy_n(lookup.data() + std::min<size_t>(sp[q], entries - 1) * n, n, &data[q * n]);
+  }
+  if (rgb) {
+    std::string icc;
+    if (cs.fam == "/ICCBased" && cs.space.isArray() && cs.space.getArrayItem(1).isStream()) {
+      try {
+        auto b = cs.space.getArrayItem(1).getStreamData(qpdf_dl_generalized);
+        icc.assign(reinterpret_cast<const char*>(b->getBuffer()), b->getSize());
+      } catch (...) {
+        icc.clear();
+      }
+    }
+    cmsHPROFILE in = icc.empty() ? cmsOpenProfileFromMem(kSrgbIcc, kSrgbIccLen)
+                                 : cmsOpenProfileFromMem(icc.data(), static_cast<cmsUInt32Number>(icc.size()));
+    if (!in) in = cmsOpenProfileFromMem(kSrgbIcc, kSrgbIccLen);
+    cmsHPROFILE out = cmsOpenProfileFromMem(kCmykIcc, kCmykIccLen);
+    cmsHTRANSFORM xf = in && out ? cmsCreateTransform(in, TYPE_RGB_8, out, TYPE_CMYK_8, INTENT_RELATIVE_COLORIMETRIC, 0) : nullptr;
+    if (in) cmsCloseProfile(in);
+    if (out) cmsCloseProfile(out);
+    if (!xf) return false;
+    std::string cmyk(px * 4, '\0');
+    cmsDoTransform(xf, data.data(), cmyk.data(), static_cast<cmsUInt32Number>(px));
+    cmsDeleteTransform(xf);
+    data.swap(cmyk);
+    cs = device({0, 0, 0, 0});
+    return true;
+  }
+  cs.v.assign(n, 0);
+  return true;
+}
+
+std::optional<Piece> overprintOn(const Piece& back, Colour src, int opm, Env& env, double a = 1, int bm = 0) {
+  if (bm < 0 || bm >= 12) return std::nullopt;
+  std::set<std::string> painted;
+  if (!paintedInks(src, opm, painted)) return std::nullopt;
+  Colour bc;
+  if (!inksUnder(back, src, bc, env)) return std::nullopt;
+  Piece r;
+  r.colour = src;
+  for (size_t i = 0; i < src.names.size(); ++i) {
+    if (!painted.count(src.names[i])) r.colour.v[i] = bc.v[i];
+    else if (bm) r.colour.v[i] = 1 - blendF(bm, 1 - bc.v[i], 1 - r.colour.v[i]);
+    r.colour.v[i] = a * r.colour.v[i] + (1 - a) * bc.v[i];
+  }
+  return r;
+}
+
 Colour onPaper(const Piece& p) {
   Colour c = p.colour;
   for (double& x : c.v) x = c.kind > 0 ? p.alpha * x + (1 - p.alpha) : p.alpha * x;
@@ -718,7 +1216,6 @@ std::string emitPaint(const Shape& s, const Colour& c, const Mat& ci) {
   return "q " + matStr(m) + "cm " + setColour(c, s.kind == 3) + textStr(s, s.tm, s.kind == 2 ? 0 : 1) + "Q\n";
 }
 
-using Pt = std::array<double, 2>;
 
 Op mkOp(const std::string& name, std::initializer_list<double> v) {
   Op o;
@@ -751,10 +1248,11 @@ void addCircle(std::vector<Op>& out, Pt c, double r) {
   out.push_back(mkOp("h", {}));
 }
 
-std::vector<Op> strokeOutline(const std::vector<Op>& ops, const Mat& ctm, double lw, int cap, int join, double ml) {
+std::vector<Op> strokeOutline(const std::vector<Op>& ops, const Mat& ctm, double lw, int cap, int join, double ml,
+                              double minWidth = 1) {
   double scale = std::sqrt(std::fabs(ctm[0] * ctm[3] - ctm[1] * ctm[2]));
   std::vector<Op> out;
-  if (lw * scale < 1) return out;
+  if (lw * scale < minWidth || lw <= 0) return out;
   double hw = lw / 2;
   std::vector<std::pair<std::vector<Pt>, bool>> subs;
   Pt cur{0, 0}, start{0, 0};
@@ -946,6 +1444,7 @@ struct Inliner {
 
   bool inlinable(QPDFObjectHandle x, int depth) {
     if (depth >= 6 || !x.isStream()) return false;
+    if (x.isIndirect() && env.ctx.keepWholeForms.count(x.getObjGen())) return false;
     QPDFObjectHandle d = x.getDict();
     if (!nameIs(d.getKey("/Subtype"), "/Form")) return false;
     for (const char* k : {"/StructParents", "/StructParent", "/OC", "/Ref", "/OPI"}) {
@@ -954,6 +1453,13 @@ struct Inliner {
     QPDFObjectHandle bb = d.getKey("/BBox");
     if (!bb.isArray() || bb.getArrayNItems() != 4) return false;
     QPDFObjectHandle g = d.getKey("/Group");
+    if (env.ctx.flattenOverprint && !g.isNull()) {
+      std::set<QPDFObjGen> seen;
+      bool isolated = g.isDictionary() && g.getKey("/I").isBool() && g.getKey("/I").getBoolValue();
+      if (isolated || !resourcesOverprint(d.getKey("/Resources"), seen)) {
+        return false;
+      }
+    }
     if (g.isDictionary() && nameIs(g.getKey("/S"), "/Transparency")) {
       if (g.getKey("/K").isBool() && g.getKey("/K").getBoolValue()) return false;
       if (g.getKey("/I").isBool() && g.getKey("/I").getBoolValue() && usesBlend(d.getKey("/Resources"))) return false;
@@ -970,6 +1476,18 @@ struct Inliner {
         QPDFObjectHandle xod = env.res.getKey("/XObject");
         QPDFObjectHandle x = xod.isDictionary() ? xod.getKey(o.args[0].getName()) : QPDFObjectHandle::newNull();
         if (inlinable(x, depth) && expand(x, ren, depth, out)) continue;
+        std::set<QPDFObjGen> seen;
+        if (env.ctx.flattenOverprint && depth < 6 && x.isStream() && nameIs(x.getDict().getKey("/Subtype"), "/Form") &&
+            x.getDict().getKey("/BBox").isArray() && x.getDict().getKey("/BBox").getArrayNItems() == 4 &&
+            !resourcesOverprint(x.getDict().getKey("/Resources"), seen)) {
+          size_t mark = out.size();
+          out.push_back(Op{{o.args[0]}, "KuraFB"});
+          if (expand(x, ren, depth, out)) {
+            out.push_back(Op{{}, "KuraFE"});
+            continue;
+          }
+          out.resize(mark);
+        }
       }
       out.push_back(o);
     }
@@ -1056,6 +1574,158 @@ bool type3Coloured(QPDFObjectHandle font) {
 }
 }
 
+bool renderSoftMask(Ctx& ctx, QPDFObjectHandle sm, const Mat& ctm, const Rect& bb, int& w, int& h, std::string& alpha) {
+  if (!ctx.opt.renderPdf || !sm.isDictionary() || !bb.valid()) return false;
+  QPDFObjectHandle g = sm.getKey("/G"), tr = sm.getKey("/TR");
+  bool lum = nameIs(sm.getKey("/S"), "/Luminosity");
+  if (!g.isStream() || (!lum && !nameIs(sm.getKey("/S"), "/Alpha")) || (!tr.isNull() && !nameIs(tr, "/Identity"))) return false;
+  double area = (bb.x1 - bb.x0) * (bb.y1 - bb.y0);
+  if (area <= 0) return false;
+  double dpi = std::min(300.0, 72.0 * std::sqrt(4e6 / area));
+  auto render = [&](const std::string& backdrop, std::string& rgb) {
+    try {
+      QPDF one;
+      one.emptyPDF();
+      QPDFObjectHandle page = QPDFObjectHandle::newDictionary();
+      page.replaceKey("/Type", QPDFObjectHandle::newName("/Page"));
+      QPDFObjectHandle mb = QPDFObjectHandle::newArray();
+      for (double v : {bb.x0, bb.y0, bb.x1, bb.y1}) mb.appendItem(QPDFObjectHandle::newReal(v, 4));
+      page.replaceKey("/MediaBox", mb);
+      QPDFObjectHandle res = QPDFObjectHandle::newDictionary(), xo = QPDFObjectHandle::newDictionary();
+      xo.replaceKey("/M", one.copyForeignObject(g));
+      res.replaceKey("/XObject", xo);
+      QPDFObjectHandle grp = g.getDict().getKey("/Group");
+      QPDFObjectHandle gcs = grp.isDictionary() ? grp.getKey("/CS") : QPDFObjectHandle();
+      if (!gcs.isNull() && gcs.isInitialized()) {
+        QPDFObjectHandle csd = QPDFObjectHandle::newDictionary();
+        csd.replaceKey("/B", gcs.isIndirect() ? one.copyForeignObject(gcs) : gcs.unsafeShallowCopy());
+        res.replaceKey("/ColorSpace", csd);
+      }
+      page.replaceKey("/Resources", res);
+      std::string c = "q " + backdrop + f4(bb.x0) + " " + f4(bb.y0) + " " + f4(bb.x1 - bb.x0) + " " + f4(bb.y1 - bb.y0) +
+                      " re f Q q " + matStr(ctm) + "cm /M Do Q\n";
+      page.replaceKey("/Contents", one.makeIndirectObject(QPDFObjectHandle::newStream(&one, c)));
+      QPDFPageDocumentHelper(one).addPage(QPDFPageObjectHelper(one.makeIndirectObject(page)), false);
+      QPDFWriter wr(one);
+      wr.setOutputMemory();
+      wr.write();
+      auto buf = wr.getBufferSharedPointer();
+      std::string bytes(reinterpret_cast<const char*>(buf->getBuffer()), buf->getSize());
+      return ctx.opt.renderPdf(bytes, dpi, w, h, rgb);
+    } catch (...) {
+      return false;
+    }
+  };
+  std::string a, b;
+  if (lum) {
+    QPDFObjectHandle bc = sm.getKey("/BC");
+    std::string back = "0 g ";
+    if (bc.isArray() && bc.getArrayNItems() > 0 && sm.getKey("/G").getDict().getKey("/Group").isDictionary()) {
+      back = "/B cs ";
+      for (const auto& v : bc.aitems()) back += f4(num(v)) + " ";
+      back += "sc ";
+    }
+    if (!render(back, a)) return false;
+    alpha.resize(static_cast<size_t>(w) * h);
+    for (size_t q = 0; q < alpha.size(); ++q) {
+      const unsigned char* p = reinterpret_cast<const unsigned char*>(a.data()) + q * 3;
+      alpha[q] = static_cast<char>(std::clamp(static_cast<int>(std::lround(0.3 * p[0] + 0.59 * p[1] + 0.11 * p[2])), 0, 255));
+    }
+    return true;
+  }
+  int w2 = 0, h2 = 0;
+  if (!render("1 g ", a)) return false;
+  w2 = w;
+  h2 = h;
+  if (!render("0 g ", b) || w != w2 || h != h2) return false;
+  alpha.resize(static_cast<size_t>(w) * h);
+  for (size_t q = 0; q < alpha.size(); ++q) {
+    int d = 0;
+    for (int k = 0; k < 3; ++k) d += static_cast<unsigned char>(a[q * 3 + k]) - static_cast<unsigned char>(b[q * 3 + k]);
+    alpha[q] = static_cast<char>(std::clamp(255 - d / 3, 0, 255));
+  }
+  return true;
+}
+
+bool renderCurrentPage(Ctx& ctx, QPDFPageObjectHelper& ph, double dpi, int& w, int& h, std::string& rgb) {
+  try {
+    QPDFObjectHandle copy = ph.getObjectHandle().shallowCopy();
+    for (const char* k : {"/MediaBox", "/CropBox", "/Rotate", "/Resources"}) {
+      QPDFObjectHandle v = ph.getAttribute(k, false);
+      if (!v.isNull()) copy.replaceKey(k, v);
+    }
+    copy.removeKey("/Annots");
+    copy.removeKey("/Parent");
+    copy.removeKey("/StructParents");
+    QPDF one;
+    one.emptyPDF();
+    QPDFPageDocumentHelper(one).addPage(QPDFPageObjectHelper(one.copyForeignObject(ctx.pdf.makeIndirectObject(copy))), false);
+    QPDFWriter wr(one);
+    wr.setOutputMemory();
+    wr.write();
+    auto buf = wr.getBufferSharedPointer();
+    std::string bytes(reinterpret_cast<const char*>(buf->getBuffer()), buf->getSize());
+    return ctx.opt.renderPdf(bytes, dpi, w, h, rgb);
+  } catch (...) {
+    return false;
+  }
+}
+
+bool resourcesOverprint(QPDFObjectHandle res, std::set<QPDFObjGen>& seen, int depth) {
+  if (!res.isDictionary() || depth > 12) return false;
+  if (res.isIndirect() && !seen.insert(res.getObjGen()).second) return false;
+  QPDFObjectHandle egs = res.getKey("/ExtGState");
+  if (egs.isDictionary()) {
+    for (const std::string& k : egs.getKeys()) {
+      QPDFObjectHandle g = egs.getKey(k);
+      if (!g.isDictionary()) continue;
+      for (const char* key : {"/OP", "/op"}) {
+        if (g.getKey(key).isBool() && g.getKey(key).getBoolValue()) return true;
+      }
+    }
+  }
+  for (const char* cat : {"/XObject", "/Pattern"}) {
+    QPDFObjectHandle d = res.getKey(cat);
+    if (!d.isDictionary()) continue;
+    for (const std::string& k : d.getKeys()) {
+      QPDFObjectHandle x = d.getKey(k);
+      if (x.isStream() && resourcesOverprint(x.getDict().getKey("/Resources"), seen, depth + 1)) return true;
+    }
+  }
+  return false;
+}
+
+bool flattenFormOverprint(Ctx& ctx, QPDFObjectHandle form) {
+  static thread_local int depth = 0;
+  QPDFObjectHandle d = form.getDict();
+  QPDFObjectHandle bb = d.getKey("/BBox");
+  if (depth >= 12 || !bb.isArray()) return false;
+  QPDFObjectHandle res = d.getKey("/Resources");
+  QPDFObjectHandle page = QPDFObjectHandle::newDictionary();
+  page.replaceKey("/Type", QPDFObjectHandle::newName("/Page"));
+  page.replaceKey("/MediaBox", bb);
+  page.replaceKey("/Contents", form);
+  page.replaceKey("/Resources", res.isDictionary() ? res : QPDFObjectHandle::newDictionary());
+  QPDFPageObjectHelper ph(page);
+  ++depth;
+  bool ok = false;
+  try {
+    ok = vectorFlattenPage(ctx, ph, -1, nullptr, 0);
+  } catch (...) {
+    ok = false;
+  }
+  --depth;
+  if (!ok) return false;
+  QPDFObjectHandle nc = page.getKey("/Contents");
+  if (!nc.isStream()) return false;
+  auto buf = nc.getStreamData(qpdf_dl_generalized);
+  form.replaceStreamData(std::string(reinterpret_cast<const char*>(buf->getBuffer()), buf->getSize()), QPDFObjectHandle::newNull(),
+                         QPDFObjectHandle::newNull());
+  d.replaceKey("/Resources", page.getKey("/Resources"));
+  std::set<QPDFObjGen> seen;
+  return !resourcesOverprint(d.getKey("/Resources"), seen);
+}
+
 bool vectorFlattenPage(Ctx& ctx, QPDFPageObjectHelper& ph, int pageIndex, int* regionsOut, double dpiWanted) {
   QPDFObjectHandle page = ph.getObjectHandle();
   QPDFObjectHandle res0 = ph.getAttribute("/Resources", true);
@@ -1074,10 +1744,13 @@ bool vectorFlattenPage(Ctx& ctx, QPDFPageObjectHelper& ph, int pageIndex, int* r
   }
   Env env{ctx, res, groupN, ctx.isX(), 0, {}, {}};
   std::vector<Op> ops;
-  Inliner inl{env, 300000};
+  Inliner inl{env, ctx.flattenOverprint ? size_t{3000000} : size_t{300000}};
   inl.run(col.ops, Ren(), 0, ops);
 
   std::vector<State> stack;
+  std::string opqName;
+  int silent = 0;
+  std::vector<char> mute(ops.size());
   State st;
   std::vector<Shape> shapes;
   std::vector<Piece> pieces;
@@ -1086,12 +1759,13 @@ bool vectorFlattenPage(Ctx& ctx, QPDFPageObjectHelper& ph, int pageIndex, int* r
   std::vector<Rect> pendingVec;
   size_t pathStart = 0;
   bool inPath = false, inText = false, pendingW = false, pendingEo = false, tmExact = true;
-  std::string pendingText;
+  std::string pendingText, pendingKey;
   size_t emitted = 0;
   int regions = 0;
   std::map<size_t, std::string> before, after, replace;
   std::vector<int> textClips;
   std::map<std::string, std::shared_ptr<std::vector<double>>> advCache;
+  std::map<std::string, std::shared_ptr<CidWidths>> cidCache;
   std::map<std::string, bool> t3Cache;
 
   struct Render {
@@ -1104,9 +1778,13 @@ bool vectorFlattenPage(Ctx& ctx, QPDFPageObjectHelper& ph, int pageIndex, int* r
   auto ensureRender = [&]() -> bool {
     if (rnd.tried) return rnd.ok;
     rnd.tried = true;
-    if (!ctx.opt.rasterizePage) return false;
     double dpi = dpiWanted > 0 ? dpiWanted : ctx.opt.rasterDpi > 0 ? ctx.opt.rasterDpi : 300;
-    if (!ctx.opt.rasterizePage(pageIndex, dpi, rnd.w, rnd.h, rnd.rgb)) return false;
+    if (ctx.redrawnPages.count(page.getObjGen()) && ctx.opt.renderPdf) {
+      if (!renderCurrentPage(ctx, ph, dpi, rnd.w, rnd.h, rnd.rgb)) return false;
+    } else {
+      if (!ctx.opt.rasterizePage) return false;
+      if (!ctx.opt.rasterizePage(pageIndex, dpi, rnd.w, rnd.h, rnd.rgb)) return false;
+    }
     if (rnd.w <= 0 || rnd.h <= 0 || rnd.rgb.size() < static_cast<size_t>(rnd.w) * rnd.h * 3) return false;
     auto boxOf = [&](const char* key, Rect& r) {
       QPDFObjectHandle b = ph.getAttribute(key, false);
@@ -1152,6 +1830,7 @@ bool vectorFlattenPage(Ctx& ctx, QPDFPageObjectHelper& ph, int pageIndex, int* r
   };
   std::vector<Covered> opaqueImages;
   auto region = [&](const std::string& clip, Rect box, size_t at, bool rect = false) -> bool {
+    if (ctx.flattenOverprint) return false;
     box = meet(box, st.clipBox);
     if (rect) {
       for (const Covered& c : opaqueImages) {
@@ -1221,7 +1900,7 @@ bool vectorFlattenPage(Ctx& ctx, QPDFPageObjectHelper& ph, int pageIndex, int* r
       q.colour.v.assign(out, out + n);
       q.alpha = 1;
       for (const Layer& l : sh.layers) {
-        auto r = over(q, l.src, l.a, l.bm, env);
+        auto r = l.ovp ? overprintOn(q, l.src, l.opm, env, l.a, l.bm) : over(q, l.src, l.a, l.bm, env);
         if (!r) return "";
         q = *r;
       }
@@ -1234,26 +1913,68 @@ bool vectorFlattenPage(Ctx& ctx, QPDFPageObjectHelper& ph, int pageIndex, int* r
                                 : outFrame.cs == sh.frame.cs ? sh.dict.getKey("/ColorSpace")
                                                              : outFrame.space;
     if (!outSpace.isInitialized() || outSpace.isNull()) return "";
-    QPDFObjectHandle f = QPDFObjectHandle::newStream(&ctx.pdf, data);
-    QPDFObjectHandle fd = f.getDict();
-    fd.replaceKey("/FunctionType", QPDFObjectHandle::newInteger(0));
-    QPDFObjectHandle da = QPDFObjectHandle::newArray(), ra = QPDFObjectHandle::newArray(), sz = QPDFObjectHandle::newArray();
-    da.appendItem(QPDFObjectHandle::newReal(d0, 6));
-    da.appendItem(QPDFObjectHandle::newReal(d1, 6));
-    for (size_t i = 0; i < on; ++i) {
-      ra.appendItem(QPDFObjectHandle::newInteger(0));
-      ra.appendItem(QPDFObjectHandle::newInteger(1));
-    }
-    sz.appendItem(QPDFObjectHandle::newInteger(256));
-    fd.replaceKey("/Domain", da);
-    fd.replaceKey("/Range", ra);
-    fd.replaceKey("/Size", sz);
-    fd.replaceKey("/BitsPerSample", QPDFObjectHandle::newInteger(8));
     QPDFObjectHandle nd = sh.dict.shallowCopy();
-    nd.replaceKey("/Function", ctx.pdf.makeIndirectObject(f));
+    nd.replaceKey("/Function", sampledFunction(ctx, data, d0, d1, on));
     nd.replaceKey("/ColorSpace", outSpace);
     return env.add("/Shading", "KuraSh", ctx.pdf.makeIndirectObject(nd));
   };
+  struct Samples {
+    Colour cs;
+    int w = 0, h = 0;
+    std::string data;
+    QPDFObjectHandle x;
+    bool soft = false;
+    std::string alpha;
+  };
+  auto mergedImage = [&](const Samples& sm, Colour other, const std::set<std::string>& painted, bool imageOnTop,
+                         Samples* out = nullptr) -> std::string {
+    const Colour& ic = sm.cs;
+    int w = sm.w, h = sm.h;
+    const std::string& smp = sm.data;
+    size_t n = ic.names.size(), px = static_cast<size_t>(w) * h;
+    Colour frame = ic;
+    if (!mergeInks(frame, other, env) || frame.v.size() != other.v.size()) return "";
+    size_t u = other.names.size();
+    if (px * u > (size_t{96} << 20)) return "";
+    std::vector<int> from(u, -1);
+    std::vector<char> useConst(u);
+    std::vector<unsigned char> cv(u);
+    for (size_t k = 0; k < u; ++k) {
+      auto it = std::find(ic.names.begin(), ic.names.end(), other.names[k]);
+      if (it != ic.names.end()) from[k] = static_cast<int>(it - ic.names.begin());
+      useConst[k] = imageOnTop ? from[k] < 0 : painted.count(other.names[k]) > 0;
+      cv[k] = static_cast<unsigned char>(std::clamp(static_cast<int>(std::lround(other.v[k] * 255)), 0, 255));
+    }
+    std::string data(px * u, '\0');
+    bool mix = imageOnTop && !sm.alpha.empty();
+    for (size_t q = 0; q < px; ++q) {
+      unsigned a = mix ? static_cast<unsigned char>(sm.alpha[q]) : 255;
+      for (size_t k = 0; k < u; ++k) {
+        unsigned img = from[k] >= 0 ? static_cast<unsigned char>(smp[q * n + from[k]]) : 0;
+        data[q * u + k] = static_cast<char>(mix ? img + (255 - a) * cv[k] / 255 : useConst[k] ? cv[k] : img);
+      }
+    }
+    QPDFObjectHandle d = sm.x.getDict();
+    QPDFObjectHandle img = QPDFObjectHandle::newStream(&ctx.pdf, data);
+    QPDFObjectHandle id = img.getDict();
+    id.replaceKey("/Type", QPDFObjectHandle::newName("/XObject"));
+    id.replaceKey("/Subtype", QPDFObjectHandle::newName("/Image"));
+    id.replaceKey("/Width", QPDFObjectHandle::newInteger(w));
+    id.replaceKey("/Height", QPDFObjectHandle::newInteger(h));
+    id.replaceKey("/BitsPerComponent", QPDFObjectHandle::newInteger(8));
+    id.replaceKey("/ColorSpace", other.space.isInitialized() && !other.space.isNull() ? other.space : QPDFObjectHandle::newName(other.fam));
+    if (d.hasKey("/Interpolate")) id.replaceKey("/Interpolate", d.getKey("/Interpolate"));
+    img = ctx.pdf.makeIndirectObject(img);
+    if (out) {
+      out->cs = other;
+      out->w = w;
+      out->h = h;
+      out->data = data;
+      out->x = img;
+    }
+    return env.add("/XObject", "KuraOpI", img);
+  };
+  std::vector<Samples> imgSm;
   auto paintShape = [&](int si, const Colour& c, double alpha, bool strokeSide, size_t limit, std::string& pre,
                         std::string& post, std::string& extra, bool reemit) -> int {
     const Shape s = shapes[si];
@@ -1264,9 +1985,72 @@ bool vectorFlattenPage(Ctx& ctx, QPDFPageObjectHelper& ph, int pageIndex, int* r
     base.flat = (c.kind == 1 || c.kind == -1) && s.exact;
     base.box = meet(s.box, st.clipBox);
     if (c.kind == 0 && !c.pattern.empty() && patternTransparent(c.pattern)) return 0;
-    bool transparent = alpha < 1 || st.bm != 0 || st.smask;
+    bool ovp = ctx.flattenOverprint && (strokeSide ? st.OP : st.op) && (c.kind == 1 || c.kind == -1);
+    if (ovp && (st.bm < 0 || st.bm >= 12)) return 0;
+    if (ovp && st.smask) {
+      Mat ci;
+      if (!invert(st.ctm, ci) || reemit || s.clipCost() >= 9) return 0;
+      int mw = 0, mh = 0;
+      std::string ma;
+      if (!renderSoftMask(ctx, st.smaskObj, st.smaskCtm, base.box, mw, mh, ma)) return 0;
+      if (opqName.empty()) {
+        QPDFObjectHandle g = QPDFObjectHandle::parse("<< /Type /ExtGState /ca 1 /CA 1 /BM /Normal /SMask /None >>");
+        opqName = env.add("/ExtGState", "KuraOpq", ctx.pdf.makeIndirectObject(g));
+      }
+      std::set<int> active(st.clips.begin(), st.clips.end());
+      std::string myExtra;
+      const Rect& bb = base.box;
+      for (size_t j = 0; j < limit; ++j) {
+        const Piece& p = pieces[j];
+        if (!p.box.hits(bb)) continue;
+        if (!p.flat || p.painter < 0 || shapes[p.painter].clipCost() >= 9) return 0;
+        auto full = overprintOn(p, c, st.opm, env, alpha, st.bm), none = overprintOn(p, c, st.opm, env, 0, 0);
+        if (!full || !none || full->colour.v.size() != none->colour.v.size()) return 0;
+        size_t u = full->colour.v.size(), px = static_cast<size_t>(mw) * mh;
+        if (px * u > (size_t{96} << 20)) return 0;
+        std::string data(px * u, '\0');
+        for (size_t q = 0; q < px; ++q) {
+          double a = static_cast<unsigned char>(ma[q]) / 255.0;
+          for (size_t k = 0; k < u; ++k) {
+            double v = none->colour.v[k] + a * (full->colour.v[k] - none->colour.v[k]);
+            data[q * u + k] = static_cast<char>(std::clamp(static_cast<int>(std::lround(v * 255)), 0, 255));
+          }
+        }
+        const Colour& fr = full->colour;
+        QPDFObjectHandle img = QPDFObjectHandle::newStream(&ctx.pdf, data);
+        QPDFObjectHandle id = img.getDict();
+        id.replaceKey("/Type", QPDFObjectHandle::newName("/XObject"));
+        id.replaceKey("/Subtype", QPDFObjectHandle::newName("/Image"));
+        id.replaceKey("/Width", QPDFObjectHandle::newInteger(mw));
+        id.replaceKey("/Height", QPDFObjectHandle::newInteger(mh));
+        id.replaceKey("/BitsPerComponent", QPDFObjectHandle::newInteger(8));
+        id.replaceKey("/ColorSpace", fr.space.isInitialized() && !fr.space.isNull() ? fr.space : QPDFObjectHandle::newName(fr.fam));
+        std::string nm = env.add("/XObject", "KuraOpI", ctx.pdf.makeIndirectObject(img));
+        myExtra += "q\n" + opqName + " gs\n";
+        for (int k : p.clips) {
+          if (!active.count(k)) myExtra += emitClip(shapes, shapes[k], ci);
+        }
+        myExtra += emitClip(shapes, shapes[p.painter], ci) + emitClip(shapes, s, ci) +
+                   matStr(mul({bb.x1 - bb.x0, 0, 0, bb.y1 - bb.y0, bb.x0, bb.y0}, ci)) + "cm " + nm + " Do\nQ\n";
+      }
+      if (emitted + myExtra.size() > (size_t{16} << 20)) return 0;
+      emitted += myExtra.size();
+      extra += myExtra;
+      base.flat = false;
+      base.painter = -1;
+      pieces.push_back(base);
+      return 1;
+    }
+    bool transparent = ovp || alpha < 1 || st.bm != 0 || st.smask;
     Mat ci;
     bool inv = invert(st.ctm, ci);
+    if (ctx.flattenOverprint && transparent && !ovp && (s.kind > 1 || pendingW)) {
+      if (reemit) return 0;
+      base.flat = false;
+      base.painter = -1;
+      pieces.push_back(base);
+      return 1;
+    }
     if (!transparent) {
       if (reemit) {
         if (!inv || !base.flat) return 0;
@@ -1276,11 +2060,28 @@ bool vectorFlattenPage(Ctx& ctx, QPDFPageObjectHelper& ph, int pageIndex, int* r
       return 1;
     }
     if (st.bm < 0 || st.smask || !base.flat || !inv) return 0;
-    if (env.x && !env.groupN && base.colour.kind > 0 && !toProcess(base.colour, 4)) return 0;
+    if (!ovp && env.x && !env.groupN && base.colour.kind > 0 && !toProcess(base.colour, 4)) return 0;
     base.alpha = alpha;
-    std::string myPre = setColour(onPaper(base), strokeSide), myExtra;
-    if (reemit) myExtra += "q\n" + emitPaint(s, onPaper(base), ci) + "Q\n";
+    bool vecT = ctx.flattenOverprint && !ovp && s.kind <= 1 && !pendingW;
+    std::string opq;
+    if ((ovp && (alpha < 1 || st.bm != 0)) || vecT) {
+      if (opqName.empty()) {
+        QPDFObjectHandle g = QPDFObjectHandle::parse("<< /Type /ExtGState /ca 1 /CA 1 /BM /Normal /SMask /None >>");
+        opqName = env.add("/ExtGState", "KuraOpq", ctx.pdf.makeIndirectObject(g));
+      }
+      opq = opqName + " gs\n";
+    }
+    Piece paper;
+    paper.colour = device({0, 0, 0, 0});
+    std::optional<Piece> onWhite = ovp ? overprintOn(paper, c, st.opm, env, alpha, st.bm) : std::nullopt;
+    if (ovp && !onWhite) return 0;
+    std::string myPre = ovp ? "" : vecT ? "q\n" + opq + setColour(onPaper(base), strokeSide) : setColour(onPaper(base), strokeSide), myExtra;
+    if (reemit) myExtra += "q\n" + opq + emitPaint(s, ovp ? onWhite->colour : onPaper(base), ci) + "Q\n";
     std::vector<Piece> add{base};
+    if (ovp) {
+      add[0].colour = onWhite->colour;
+      add[0].alpha = 1;
+    }
     for (size_t j = 0; j < limit; ++j) {
       const Piece& p = pieces[j];
       if (!p.box.hits(base.box)) continue;
@@ -1293,9 +2094,9 @@ bool vectorFlattenPage(Ctx& ctx, QPDFPageObjectHelper& ph, int pageIndex, int* r
       if (p.shade >= 0) {
         if (s.clipCost() >= 9) return 0;
         Colour tmpl = shades[p.shade].frame;
-        if (!sameSpace(tmpl, c)) return 0;
+        if (!ovp && !sameSpace(tmpl, c)) return 0;
         Shade ns = shades[p.shade];
-        ns.layers.push_back({c, alpha, st.bm});
+        ns.layers.push_back({c, alpha, st.bm, ovp, st.opm});
         ns.name = buildShading(ns);
         if (ns.name.empty()) return 0;
         shades.push_back(ns);
@@ -1304,8 +2105,38 @@ bool vectorFlattenPage(Ctx& ctx, QPDFPageObjectHelper& ph, int pageIndex, int* r
         add.push_back(n);
         continue;
       }
-      if (!p.flat) return 0;
-      std::optional<Piece> r = over(p, c, alpha, st.bm, env);
+      if (ovp && p.stencil) {
+        auto r = overprintOn(p, c, st.opm, env, alpha, st.bm);
+        if (!r || s.clipCost() >= 9) return 0;
+        n.colour = r->colour;
+        n.clips.push_back(si);
+        n.xobj = p.xobj;
+        n.xm = p.xm;
+        n.stencil = true;
+        add.push_back(n);
+        continue;
+      }
+      if (ovp && p.image >= 0) {
+        Samples& sm = imgSm[p.image];
+        if (alpha < 1 || st.bm != 0 || s.clipCost() >= 9 || (sm.w == 0 && !imageSamples(sm.x, res, sm.cs, sm.w, sm.h, sm.data, sm.soft))) return 0;
+        Colour pc = c, frame = sm.cs;
+        std::set<std::string> painted;
+        if (!paintedInks(pc, st.opm, painted) || !mergeInks(frame, pc, env)) return 0;
+        Samples mixed;
+        n.xobj = mergedImage(sm, pc, painted, false, &mixed);
+        if (n.xobj.empty()) return 0;
+        n.clips.push_back(si);
+        n.xm = p.xm;
+        n.image = static_cast<int>(imgSm.size());
+        imgSm.push_back(std::move(mixed));
+        add.push_back(n);
+        continue;
+      }
+      bool sepAll = ovp && p.painter >= 0 && shapes[p.painter].exact && p.colour.kind == 0 && p.colour.fam == "/Separation" &&
+                    p.colour.space.isArray();
+      if (sepAll && nameOf(p.colour.space.getArrayItem(1)) == "/None") continue;
+      if (!p.flat && !sepAll) return 0;
+      std::optional<Piece> r = ovp ? overprintOn(p, c, st.opm, env, alpha, st.bm) : over(p, c, alpha, st.bm, env);
       if (!r) return 0;
       int pc = shapes[p.painter].clipCost(), tc = s.clipCost();
       if (std::min(pc, tc) >= 9) return 0;
@@ -1321,14 +2152,29 @@ bool vectorFlattenPage(Ctx& ctx, QPDFPageObjectHelper& ph, int pageIndex, int* r
       n.flat = true;
       add.push_back(n);
     }
-    if (pieces.size() + add.size() > 4000) return 0;
+    if (pieces.size() + add.size() > (ctx.flattenOverprint ? 40000u : 4000u)) return 0;
     std::set<int> active(st.clips.begin(), st.clips.end());
+    bool group = s.kind == 0 && s.ops.size() > 200 && add.size() > 2 &&
+                 std::all_of(add.begin() + 1, add.end(), [&](const Piece& q) {
+                   return q.painter == si || std::find(q.clips.begin(), q.clips.end(), si) != q.clips.end();
+                 });
+    if (group) {
+      myExtra += "q\n" + emitClip(shapes, s, ci);
+      active.insert(si);
+    }
     for (size_t k = 1; k < add.size(); ++k) {
-      myExtra += "q\n";
+      myExtra += "q\n" + opq;
       for (int cidx : add[k].clips) {
         if (!active.count(cidx)) myExtra += emitClip(shapes, shapes[cidx], ci);
       }
-      if (add[k].shade >= 0) {
+      if (group && add[k].painter == si && add[k].xobj.empty() && add[k].shade < 0) {
+        const Rect& b = add[k].box;
+        myExtra += setColour(onPaper(add[k]), false) + matStr(ci) + "cm " + f4(b.x0) + " " + f4(b.y0) + " " +
+                   f4(b.x1 - b.x0) + " " + f4(b.y1 - b.y0) + " re f\n";
+      } else if (!add[k].xobj.empty()) {
+        myExtra += "q " + matStr(mul(add[k].xm, ci)) + "cm " + (add[k].stencil ? setColour(add[k].colour, false) : "") +
+                   add[k].xobj + " Do Q\n";
+      } else if (add[k].shade >= 0) {
         const Shade& sh = shades[add[k].shade];
         myExtra += "q " + matStr(mul(sh.ctm, ci)) + "cm " + sh.name + " sh Q\n";
       } else {
@@ -1336,10 +2182,11 @@ bool vectorFlattenPage(Ctx& ctx, QPDFPageObjectHelper& ph, int pageIndex, int* r
       }
       myExtra += "Q\n";
     }
-    if (emitted + myExtra.size() > (size_t{16} << 20)) return 0;
+    if (group) myExtra += "Q\n";
+    if (emitted + myExtra.size() > (ctx.flattenOverprint ? size_t{64} << 20 : size_t{16} << 20)) return 0;
     emitted += myExtra.size();
     pre += myPre;
-    post += c.restore;
+    post += vecT ? "Q\n" : c.restore;
     extra += myExtra;
     pieces.insert(pieces.end(), add.begin(), add.end());
     return 1;
@@ -1351,6 +2198,305 @@ bool vectorFlattenPage(Ctx& ctx, QPDFPageObjectHelper& ph, int pageIndex, int* r
       }
     }
     return false;
+  };
+  auto backdropUsable = [&](const Piece& p, bool& skip, const std::vector<std::string>& inks) {
+    skip = (p.shade >= 0 && coveredBy(shades[p.shade].frame, inks)) ||
+           (p.image >= 0 && coveredBy(colourOf(imgSm[p.image].x.getDict().getKey("/ColorSpace"), res), inks));
+    if (skip) return true;
+    if (p.shade >= 0 || p.painter < 0 || shapes[p.painter].clipCost() >= 9) return false;
+    if (p.flat) return true;
+    if (!shapes[p.painter].exact || p.colour.kind != 0 || p.colour.fam != "/Separation" || !p.colour.space.isArray()) return false;
+    skip = nameOf(p.colour.space.getArrayItem(1)) == "/None";
+    return true;
+  };
+  auto overprintImage = [&](QPDFObjectHandle x, const Rect& box, size_t at, std::vector<Piece>& made, bool soft = false) -> bool {
+    Mat ci;
+    if (!invert(st.ctm, ci)) return false;
+    Samples sm;
+    sm.x = x;
+    bool decoded = imageSamples(x, res, sm.cs, sm.w, sm.h, sm.data, soft, &sm.alpha);
+    if (soft && !decoded) return false;
+    std::set<int> active(st.clips.begin(), st.clips.end());
+    std::string extra;
+    for (size_t pi = 0, pn = pieces.size(); pi < pn; ++pi) {
+      const Piece p = pieces[pi];
+      if (!p.box.hits(box)) continue;
+      bool skip;
+      if (p.shade >= 0 || p.image >= 0) {
+        const std::vector<std::string>& mine = decoded ? sm.cs.names : kProc;
+        Colour bf;
+        ShadeGeo bg;
+        Mat binv = kId;
+        bool bgray = false;
+        if (p.shade >= 0) {
+          const Shade& bs = shades[p.shade];
+          if (!soft && coveredBy(bs.frame, mine)) continue;
+          bf = bs.frame;
+          bgray = bf.kind == 1 && bf.v.size() == 1;
+          if (bgray) bf = device({0, 0, 0, 0});
+          if (!bs.layers.empty() || !loadGeo(bs.dict, bs.ctm, bg)) return false;
+        } else {
+          Samples& bsm = imgSm[p.image];
+          if (bsm.w == 0 && !imageSamples(bsm.x, res, bsm.cs, bsm.w, bsm.h, bsm.data, bsm.soft, &bsm.alpha)) return false;
+          if (!soft && coveredBy(bsm.cs, mine)) continue;
+          if (!invert(p.xm, binv)) return false;
+          bf = bsm.cs;
+        }
+        if (!decoded || bf.kind >= 0) return false;
+        std::vector<std::string> bnames = p.shade >= 0 && bgray ? std::vector<std::string>{"/Black"} : bf.names;
+        Colour sf = sm.cs;
+        if (!mergeInks(bf, sf, env)) return false;
+        size_t u = sf.names.size(), n = sm.cs.names.size(), px = static_cast<size_t>(sm.w) * sm.h;
+        if (px * u > (size_t{96} << 20)) return false;
+        std::vector<int> fromI(u, -1), fromB(u, -1);
+        for (size_t k = 0; k < u; ++k) {
+          auto a = std::find(sm.cs.names.begin(), sm.cs.names.end(), sf.names[k]);
+          if (a != sm.cs.names.end()) fromI[k] = static_cast<int>(a - sm.cs.names.begin());
+          auto b = std::find(bnames.begin(), bnames.end(), sf.names[k]);
+          if (b != bnames.end()) fromB[k] = static_cast<int>(b - bnames.begin());
+        }
+        Samples mixed;
+        mixed.cs = sf;
+        mixed.w = sm.w;
+        mixed.h = sm.h;
+        mixed.data.assign(px * u, '\0');
+        double bo[32];
+        for (int y = 0; y < sm.h; ++y) {
+          for (int xx = 0; xx < sm.w; ++xx) {
+            auto pg = apply(st.ctm, (xx + 0.5) / sm.w, 1 - (y + 0.5) / sm.h);
+            bool have = false;
+            const unsigned char* bpx = nullptr;
+            if (p.shade >= 0) {
+              have = shadeAt(bg, pg[0], pg[1], bo);
+            } else {
+              const Samples& bsm = imgSm[p.image];
+              auto uv = apply(binv, pg[0], pg[1]);
+              if (uv[0] >= 0 && uv[0] < 1 && uv[1] > 0 && uv[1] <= 1) {
+                size_t bx = static_cast<size_t>(uv[0] * bsm.w), by = static_cast<size_t>((1 - uv[1]) * bsm.h);
+                bpx = reinterpret_cast<const unsigned char*>(bsm.data.data()) + (by * bsm.w + bx) * bsm.cs.names.size();
+              }
+            }
+            size_t q = static_cast<size_t>(y) * sm.w + xx;
+            unsigned a = sm.alpha.empty() ? 255 : static_cast<unsigned char>(sm.alpha[q]);
+            for (size_t k = 0; k < u; ++k) {
+              unsigned bv = 0;
+              if (fromB[k] >= 0) {
+                if (p.shade >= 0 && have) bv = static_cast<unsigned>(std::clamp(static_cast<int>(std::lround((bgray ? 1 - bo[0] : bo[fromB[k]]) * 255)), 0, 255));
+                if (p.image >= 0 && bpx) bv = bpx[fromB[k]];
+              }
+              unsigned iv = fromI[k] >= 0 ? static_cast<unsigned char>(sm.data[q * n + fromI[k]]) : 0;
+              mixed.data[q * u + k] = static_cast<char>(soft ? iv + (255 - a) * bv / 255 : fromI[k] >= 0 ? iv : bv);
+            }
+          }
+        }
+        QPDFObjectHandle img = QPDFObjectHandle::newStream(&ctx.pdf, mixed.data);
+        QPDFObjectHandle id = img.getDict();
+        id.replaceKey("/Type", QPDFObjectHandle::newName("/XObject"));
+        id.replaceKey("/Subtype", QPDFObjectHandle::newName("/Image"));
+        id.replaceKey("/Width", QPDFObjectHandle::newInteger(sm.w));
+        id.replaceKey("/Height", QPDFObjectHandle::newInteger(sm.h));
+        id.replaceKey("/BitsPerComponent", QPDFObjectHandle::newInteger(8));
+        id.replaceKey("/ColorSpace", sf.space.isInitialized() && !sf.space.isNull() ? sf.space : QPDFObjectHandle::newName(sf.fam));
+        mixed.x = ctx.pdf.makeIndirectObject(img);
+        std::string nm = env.add("/XObject", "KuraOpI", mixed.x);
+        extra += "q\n";
+        for (int k : p.clips) {
+          if (!active.count(k)) extra += emitClip(shapes, shapes[k], ci);
+        }
+        if (p.image >= 0) {
+          Mat bm = mul(p.xm, ci);
+          auto c0 = apply(bm, 0, 0), c1 = apply(bm, 1, 0), c2 = apply(bm, 1, 1), c3 = apply(bm, 0, 1);
+          extra += f4(c0[0]) + " " + f4(c0[1]) + " m " + f4(c1[0]) + " " + f4(c1[1]) + " l " + f4(c2[0]) + " " + f4(c2[1]) +
+                   " l " + f4(c3[0]) + " " + f4(c3[1]) + " l h W n\n";
+        }
+        extra += nm + " Do\nQ\n";
+        Piece m;
+        m.clips = st.clips;
+        for (int k : p.clips) m.clips.push_back(k);
+        m.box = meet(p.box, box);
+        m.image = static_cast<int>(imgSm.size());
+        m.xm = st.ctm;
+        imgSm.push_back(std::move(mixed));
+        made.push_back(m);
+        continue;
+      }
+      if (!backdropUsable(p, skip, decoded ? sm.cs.names : kProc)) return false;
+      if (skip) continue;
+      Colour probe = decoded ? sm.cs : device({0, 0, 0, 0}), bc;
+      if (!inksUnder(p, probe, bc, env)) return false;
+      if (!soft && !hasForeignInk(bc, decoded ? sm.cs.names : kProc)) continue;
+      if (!decoded) return false;
+      Samples mixed;
+      std::string nm = mergedImage(sm, bc, {}, true, &mixed);
+      if (nm.empty()) return false;
+      extra += "q\n";
+      for (int k : p.clips) {
+        if (!active.count(k)) extra += emitClip(shapes, shapes[k], ci);
+      }
+      extra += emitClip(shapes, shapes[p.painter], ci) + nm + " Do\nQ\n";
+      Piece m;
+      m.clips = st.clips;
+      for (int k : p.clips) m.clips.push_back(k);
+      m.clips.push_back(p.painter);
+      m.box = meet(p.box, box);
+      m.image = static_cast<int>(imgSm.size());
+      m.xm = st.ctm;
+      imgSm.push_back(std::move(mixed));
+      made.push_back(m);
+    }
+    after[at] += extra;
+    return true;
+  };
+  auto overprintShading = [&](QPDFObjectHandle sh, size_t at) -> bool {
+    QPDFObjectHandle sd = sh.isStream() ? sh.getDict() : sh;
+    if (!sd.isDictionary()) return false;
+    Colour sc = colourOf(sd.getKey("/ColorSpace"), res);
+    bool gray = sc.kind == 1 && sc.v.size() == 1 && sc.cs.empty() && sc.fam == "/DeviceGray";
+    if (sc.kind == 0 && sc.fam == "/DeviceN" && !sc.names.empty() &&
+        std::find(sc.names.begin(), sc.names.end(), "/All") == sc.names.end()) {
+      sc.kind = -1;
+    }
+    std::vector<std::string> inks = gray ? std::vector<std::string>{"/Black"} : sc.names;
+    if (gray) sc = device({0, 0, 0, 0});
+    int type = static_cast<int>(numOf(sd.getKey("/ShadingType"), 0));
+    auto fn = PdfFunction::loadArray(sd.getKey("/Function"));
+    bool usable = sc.kind < 0 && (type == 2 || type == 3) && fn && fn->inputs() == 1 &&
+                  static_cast<size_t>(fn->outputs()) == (gray ? 1 : inks.size()) && !sh.isStream();
+    Mat ci;
+    if (!invert(st.ctm, ci)) return false;
+    double d0 = 0, d1 = 1;
+    QPDFObjectHandle dom = sd.getKey("/Domain");
+    if (dom.isArray() && dom.getArrayNItems() == 2) {
+      d0 = num(dom.getArrayItem(0));
+      d1 = num(dom.getArrayItem(1));
+    }
+    std::set<int> active(st.clips.begin(), st.clips.end());
+    std::string extra;
+    for (const Piece& p : pieces) {
+      if (!p.box.hits(st.clipBox)) continue;
+      bool skip;
+      const std::vector<std::string>& cover = sc.kind < 0 ? inks : kProc;
+      if (p.shade >= 0 && !coveredBy(shades[p.shade].frame, cover)) {
+        const Shade& bs = shades[p.shade];
+        ShadeGeo sg, bg;
+        Colour bf = bs.frame, sf = sc;
+        bool bgray = bf.kind == 1 && bf.v.size() == 1;
+        std::vector<std::string> bnames = bgray ? std::vector<std::string>{"/Black"} : bf.names;
+        if (bgray) bf = device({0, 0, 0, 0});
+        if (!usable || !bs.layers.empty() || bf.kind >= 0 || !loadGeo(sd, st.ctm, sg) || !loadGeo(bs.dict, bs.ctm, bg) ||
+            !mergeInks(bf, sf, env)) {
+          return false;
+        }
+        Rect b = meet(p.box, st.clipBox);
+        if (!b.valid() || b.x1 <= b.x0 || b.y1 <= b.y0) continue;
+        double scale = 300.0 / 72;
+        double area = (b.x1 - b.x0) * (b.y1 - b.y0) * scale * scale;
+        if (area > 4e6) scale *= std::sqrt(4e6 / area);
+        int W = std::max(1, static_cast<int>(std::ceil((b.x1 - b.x0) * scale)));
+        int H = std::max(1, static_cast<int>(std::ceil((b.y1 - b.y0) * scale)));
+        size_t u = sf.names.size();
+        std::vector<int> fromS(u, -1), fromB(u, -1);
+        for (size_t k = 0; k < u; ++k) {
+          auto i1 = std::find(inks.begin(), inks.end(), sf.names[k]);
+          if (i1 != inks.end()) fromS[k] = static_cast<int>(i1 - inks.begin());
+          auto i2 = std::find(bnames.begin(), bnames.end(), sf.names[k]);
+          if (i2 != bnames.end()) fromB[k] = static_cast<int>(i2 - bnames.begin());
+        }
+        std::string data(static_cast<size_t>(W) * H * u, '\0');
+        double so[32], bo[32];
+        for (int y = 0; y < H; ++y) {
+          for (int x = 0; x < W; ++x) {
+            double px = b.x0 + (x + 0.5) / W * (b.x1 - b.x0), py = b.y1 - (y + 0.5) / H * (b.y1 - b.y0);
+            if (!shadeAt(bg, px, py, bo)) return false;
+            bool painted = shadeAt(sg, px, py, so);
+            for (size_t k = 0; k < u; ++k) {
+              double v = painted && fromS[k] >= 0 ? (gray ? 1 - so[0] : so[fromS[k]])
+                         : fromB[k] >= 0         ? (bgray ? 1 - bo[0] : bo[fromB[k]])
+                                                 : 0;
+              data[(static_cast<size_t>(y) * W + x) * u + k] = static_cast<char>(std::clamp(static_cast<int>(std::lround(v * 255)), 0, 255));
+            }
+          }
+        }
+        QPDFObjectHandle img = QPDFObjectHandle::newStream(&ctx.pdf, data);
+        QPDFObjectHandle id = img.getDict();
+        id.replaceKey("/Type", QPDFObjectHandle::newName("/XObject"));
+        id.replaceKey("/Subtype", QPDFObjectHandle::newName("/Image"));
+        id.replaceKey("/Width", QPDFObjectHandle::newInteger(W));
+        id.replaceKey("/Height", QPDFObjectHandle::newInteger(H));
+        id.replaceKey("/BitsPerComponent", QPDFObjectHandle::newInteger(8));
+        id.replaceKey("/ColorSpace", sf.space.isInitialized() && !sf.space.isNull() ? sf.space : QPDFObjectHandle::newName(sf.fam));
+        std::string nm = env.add("/XObject", "KuraOpI", ctx.pdf.makeIndirectObject(img));
+        extra += "q\n";
+        for (int k : p.clips) {
+          if (!active.count(k)) extra += emitClip(shapes, shapes[k], ci);
+        }
+        extra += matStr(mul({b.x1 - b.x0, 0, 0, b.y1 - b.y0, b.x0, b.y0}, ci)) + "cm " + nm + " Do\nQ\n";
+        continue;
+      }
+      if (!backdropUsable(p, skip, cover)) return false;
+      if (skip) continue;
+      Colour src = usable ? sc : device({0, 0, 0, 0}), bc;
+      if (!inksUnder(p, src, bc, env)) return false;
+      if (!hasForeignInk(bc, cover)) continue;
+      if (!usable) return false;
+      size_t u = src.names.size();
+      std::string data;
+      for (int k = 0; k < 256; ++k) {
+        double t = d0 + (d1 - d0) * k / 255.0, out[32] = {0};
+        if (!fn->compute(&t, out)) return false;
+        for (size_t c = 0; c < u; ++c) {
+          auto it = std::find(inks.begin(), inks.end(), src.names[c]);
+          double x = it == inks.end() ? bc.v[c] : gray ? 1 - out[0] : out[it - inks.begin()];
+          data += static_cast<char>(std::clamp(static_cast<int>(std::lround(x * 255)), 0, 255));
+        }
+      }
+      QPDFObjectHandle nd = sd.shallowCopy();
+      nd.replaceKey("/Function", sampledFunction(ctx, data, d0, d1, u));
+      nd.replaceKey("/ColorSpace", src.space.isInitialized() && !src.space.isNull() ? src.space : QPDFObjectHandle::newName(src.fam));
+      std::string nm = env.add("/Shading", "KuraSh", ctx.pdf.makeIndirectObject(nd));
+      extra += "q\n";
+      for (int k : p.clips) {
+        if (!active.count(k)) extra += emitClip(shapes, shapes[k], ci);
+      }
+      extra += emitClip(shapes, shapes[p.painter], ci) + nm + " sh\nQ\n";
+    }
+    after[at] += extra;
+    return true;
+  };
+  auto overprintStencil = [&](const std::string& name, const Rect& box, size_t at, std::vector<Piece>& made) -> bool {
+    Mat ci;
+    if (!invert(st.ctm, ci)) return false;
+    Colour fc = st.fill;
+    std::set<std::string> painted;
+    if (!paintedInks(fc, st.opm, painted)) return false;
+    std::vector<std::string> inks(painted.begin(), painted.end());
+    std::set<int> active(st.clips.begin(), st.clips.end());
+    std::string extra;
+    for (const Piece& p : pieces) {
+      if (!p.box.hits(box)) continue;
+      bool skip;
+      if (!backdropUsable(p, skip, inks)) return false;
+      if (skip) continue;
+      auto r = overprintOn(p, st.fill, st.opm, env);
+      if (!r) return false;
+      extra += "q\n";
+      for (int k : p.clips) {
+        if (!active.count(k)) extra += emitClip(shapes, shapes[k], ci);
+      }
+      extra += emitClip(shapes, shapes[p.painter], ci) + setColour(r->colour, false) + name + " Do\nQ\n";
+      Piece m;
+      m.clips = st.clips;
+      for (int k : p.clips) m.clips.push_back(k);
+      m.clips.push_back(p.painter);
+      m.box = meet(p.box, box);
+      m.stencil = true;
+      m.colour = r->colour;
+      m.xobj = name;
+      m.xm = st.ctm;
+      made.push_back(m);
+    }
+    after[at] += extra;
+    return true;
   };
   auto addBlock = [&](const Rect& box) {
     Piece p;
@@ -1432,6 +2578,15 @@ bool vectorFlattenPage(Ctx& ctx, QPDFPageObjectHelper& ph, int pageIndex, int* r
     auto n = [&](size_t k) { return k < a.size() ? num(a[k]) : 0.0; };
     QPDFObjectHandle gsd = res.getKey("/ExtGState");
     QPDFObjectHandle xod = res.getKey("/XObject");
+    if (op == "KuraFB") {
+      if (silent++ == 0) replace[i] = a[0].getName() + " Do\n";
+      continue;
+    }
+    if (op == "KuraFE") {
+      --silent;
+      continue;
+    }
+    if (silent) mute[i] = 1;
     if (op == "q") {
       stack.push_back(st);
     } else if (op == "Q") {
@@ -1439,6 +2594,7 @@ bool vectorFlattenPage(Ctx& ctx, QPDFPageObjectHelper& ph, int pageIndex, int* r
         st = stack.back();
         stack.pop_back();
       }
+    } else if (op == "KuraGB" && silent) {
     } else if (op == "KuraGB") {
       int depth = 0, paints = 0;
       size_t j = i;
@@ -1481,7 +2637,7 @@ bool vectorFlattenPage(Ctx& ctx, QPDFPageObjectHelper& ph, int pageIndex, int* r
     } else if (op == "M") {
       st.ml = n(0);
     } else if (op == "d" && a.size() == 2) {
-      st.dash = a[0].unparseResolved() + " " + a[1].unparseResolved();
+      st.dash = (a[0].isArray() && a[0].getArrayNItems() == 0 ? "[]" : a[0].unparseResolved()) + " " + a[1].unparseResolved();
     } else if (op == "gs" && !a.empty() && a[0].isName()) {
       QPDFObjectHandle g = gsd.isDictionary() ? gsd.getKey(a[0].getName()) : QPDFObjectHandle::newNull();
       if (!g.isDictionary()) continue;
@@ -1493,7 +2649,8 @@ bool vectorFlattenPage(Ctx& ctx, QPDFPageObjectHelper& ph, int pageIndex, int* r
       if (g.hasKey("/ML")) st.ml = numOf(g.getKey("/ML"), st.ml);
       QPDFObjectHandle dd = g.getKey("/D");
       if (dd.isArray() && dd.getArrayNItems() == 2) {
-        st.dash = dd.getArrayItem(0).unparseResolved() + " " + dd.getArrayItem(1).unparseResolved();
+        QPDFObjectHandle da = dd.getArrayItem(0);
+        st.dash = (da.isArray() && da.getArrayNItems() == 0 ? "[]" : da.unparseResolved()) + " " + dd.getArrayItem(1).unparseResolved();
       }
       if (g.hasKey("/BM")) {
         QPDFObjectHandle bm = g.getKey("/BM");
@@ -1510,7 +2667,14 @@ bool vectorFlattenPage(Ctx& ctx, QPDFPageObjectHelper& ph, int pageIndex, int* r
           st.bm = blendMode(nameOf(bm));
         }
       }
-      if (g.hasKey("/SMask")) st.smask = !nameIs(g.getKey("/SMask"), "/None");
+      if (g.hasKey("/SMask")) {
+        st.smask = !nameIs(g.getKey("/SMask"), "/None");
+        st.smaskObj = st.smask ? g.getKey("/SMask") : QPDFObjectHandle();
+        st.smaskCtm = st.ctm;
+      }
+      if (g.hasKey("/OP")) st.OP = st.op = g.getKey("/OP").isBool() && g.getKey("/OP").getBoolValue();
+      if (g.hasKey("/op")) st.op = g.getKey("/op").isBool() && g.getKey("/op").getBoolValue();
+      if (g.hasKey("/OPM")) st.opm = static_cast<int>(numOf(g.getKey("/OPM"), 0));
     } else if (op == "g" || op == "G") {
       Colour& c = op == "g" ? st.fill : st.stroke;
       c = Colour();
@@ -1578,7 +2742,7 @@ bool vectorFlattenPage(Ctx& ctx, QPDFPageObjectHelper& ph, int pageIndex, int* r
         ss.ops = pops;
         ss.ctm = st.ctm;
         ss.setup = strokeSetup(st);
-        if (st.dash.rfind("[]", 0) == 0) ss.outline = strokeOutline(pops, st.ctm, st.lw, st.cap, st.join, st.ml);
+        if (st.dash.rfind("[]", 0) == 0) ss.outline = strokeOutline(pops, st.ctm, st.lw, st.cap, st.join, st.ml, ctx.flattenOverprint ? 0.01 : 1);
         ss.box = path;
         double scale = std::sqrt(std::fabs(st.ctm[0] * st.ctm[3] - st.ctm[1] * st.ctm[2]));
         ss.box.grow(st.lw * scale * (st.join == 0 ? std::max(1.0, st.ml / 2) : 1.0) + 1);
@@ -1592,7 +2756,12 @@ bool vectorFlattenPage(Ctx& ctx, QPDFPageObjectHelper& ph, int pageIndex, int* r
                           !extra.empty());
         }
         if (ok && !extra.empty() && (pendingW || inText)) ok = 0;
-        if (!ok) {
+        if (!ok && ctx.flattenOverprint && !(fill && st.op) && !(stroke && st.OP)) {
+          pieces.resize(base);
+          Piece blk;
+          blk.box = meet(stroke ? ss.box : fs.box, st.clipBox);
+          pieces.push_back(blk);
+        } else if (!ok) {
           pieces.resize(base);
           if (pendingW && stroke) return false;
           std::string clip;
@@ -1628,6 +2797,7 @@ bool vectorFlattenPage(Ctx& ctx, QPDFPageObjectHelper& ph, int pageIndex, int* r
       after[i] += pendingText;
       pendingText.clear();
       pendingVec.clear();
+      pendingKey.clear();
       if (!textClips.empty()) {
         Shape u;
         u.kind = 4;
@@ -1675,6 +2845,7 @@ bool vectorFlattenPage(Ctx& ctx, QPDFPageObjectHelper& ph, int pageIndex, int* r
     } else if (op == "Tj" || op == "TJ" || op == "'" || op == "\"") {
       if (!inText || a.empty() || st.tr < 0 || st.tr > 7) return false;
       Op show = o;
+      Mat tlmBefore = st.tlm;
       if (op == "'" || op == "\"") {
         if (op == "\"") {
           if (a.size() != 3) return false;
@@ -1698,15 +2869,33 @@ bool vectorFlattenPage(Ctx& ctx, QPDFPageObjectHelper& ph, int pageIndex, int* r
       }
       std::shared_ptr<std::vector<double>> adv;
       if (fontOk && simple && !type3 && !widths.isArray()) adv = advances(st.font);
-      bool known = fontOk && simple && (widths.isArray() || adv);
+      std::shared_ptr<CidWidths> cw;
+      if (fontOk && !simple) {
+        std::string ck = "cid" + (st.font.isIndirect() ? spaceKey(st.font) : st.font.unparse());
+        auto it = cidCache.find(ck);
+        cw = it != cidCache.end() ? it->second : (cidCache[ck] = cidWidths(st.font));
+      }
+      bool known = fontOk && ((simple && (widths.isArray() || adv)) || cw);
       int firstChar = fontOk ? static_cast<int>(numOf(st.font.getKey("/FirstChar"), 0)) : 0;
       QPDFObjectHandle desc = fontOk ? st.font.getKey("/FontDescriptor") : QPDFObjectHandle::newNull();
       double missing = desc.isDictionary() && !type3 ? numOf(desc.getKey("/MissingWidth"), 0) : 0;
       double fs = st.fontSize, tx = 0;
       std::vector<std::pair<double, double>> gx;
+      std::vector<std::pair<unsigned char, double>> t3codes;
       auto glyphs = [&](const std::string& str) {
+        if (cw) {
+          for (size_t q = 0; q + 1 < str.size(); q += 2) {
+            unsigned cid = static_cast<unsigned char>(str[q]) << 8 | static_cast<unsigned char>(str[q + 1]);
+            auto f = cw->w.find(cid);
+            double w = (f != cw->w.end() ? f->second : cw->dw) / 1000.0, gx0 = tx;
+            tx += (w * fs + st.tc) * st.tz;
+            gx.push_back({std::min(gx0, gx0 + w * fs * st.tz), std::max(gx0, gx0 + w * fs * st.tz)});
+          }
+          return;
+        }
         for (unsigned char ch : str) {
           double gx0 = tx;
+          if (type3) t3codes.push_back({ch, gx0});
           int k = ch - firstChar;
           double w;
           if (simple && widths.isArray()) {
@@ -1766,12 +2955,48 @@ bool vectorFlattenPage(Ctx& ctx, QPDFPageObjectHelper& ph, int pageIndex, int* r
       s.tm = st.tm;
       s.setup = textSetup(st);
       s.box = box;
+      std::vector<Op> t3path;
+      if (type3 && ctx.flattenOverprint && mode == 0 && !clipMode && tmExact && known &&
+          type3Outline(st.font, t3codes, mul({fs * st.tz, 0, 0, fs, 0, st.rise}, trm), t3path)) {
+        s.kind = 0;
+        s.ops = t3path;
+        s.ctm = kId;
+        s.noClip = false;
+        s.exact = true;
+      }
       if (clipMode) {
         shapes.push_back(s);
         textClips.push_back(static_cast<int>(shapes.size()) - 1);
       }
+      std::string paintKey = ctx.flattenOverprint ? setColour(st.fill, false) + setColour(st.stroke, true) +
+                                                        std::to_string(st.op) + std::to_string(st.OP) +
+                                                        std::to_string(st.opm) + std::to_string(mode)
+                                                  : "";
       if (mode != 3) {
-        if (pendingHits(gboxes)) return false;
+        if (pendingHits(gboxes) && (paintKey.empty() || paintKey != pendingKey)) {
+          if (!ctx.flattenOverprint || st.tr >= 4 || !tmExact) return false;
+          std::string restore;
+          if (op == "'" || op == "\"") {
+            restore = matStr(tlmBefore) + "Tm\n";
+          } else {
+            Mat il;
+            if (!invert(st.tlm, il)) return false;
+            Mat dm = mul(st.tm, il);
+            if (std::fabs(dm[0] - 1) > 1e-6 || std::fabs(dm[1]) > 1e-6 || std::fabs(dm[2]) > 1e-6 ||
+                std::fabs(dm[3] - 1) > 1e-6 || std::fabs(dm[5]) > 1e-6) {
+              return false;
+            }
+            restore = matStr(st.tlm) + "Tm\n";
+            if (std::fabs(dm[4]) > 1e-9) {
+              if (st.fontSize == 0 || st.tz == 0) return false;
+              restore += "[" + f4(-dm[4] * 1000 / (st.fontSize * st.tz)) + "] TJ\n";
+            }
+          }
+          before[i] += "ET\n" + pendingText + "BT\n" + restore;
+          pendingText.clear();
+          pendingVec.clear();
+          pendingKey.clear();
+        }
         size_t base = pieces.size();
         std::string pre, post, extra;
         Colour fc = st.fill, sc = st.stroke;
@@ -1812,6 +3037,7 @@ bool vectorFlattenPage(Ctx& ctx, QPDFPageObjectHelper& ph, int pageIndex, int* r
           after[i] += post;
           if (!extra.empty()) {
             pendingText += extra;
+            pendingKey = pendingVec.empty() || pendingKey == paintKey ? paintKey : "#";
             if (pendingVec.size() + gboxes.size() > 20000) return false;
             pendingVec.insert(pendingVec.end(), gboxes.begin(), gboxes.end());
           }
@@ -1824,6 +3050,43 @@ bool vectorFlattenPage(Ctx& ctx, QPDFPageObjectHelper& ph, int pageIndex, int* r
       if (!x.isStream()) continue;
       QPDFObjectHandle d = x.getDict();
       bool form = nameIs(d.getKey("/Subtype"), "/Form");
+      bool stencil = d.getKey("/ImageMask").isBool() && d.getKey("/ImageMask").getBoolValue();
+      bool opImage = ctx.flattenOverprint && st.op && !form && !stencil;
+      if (ctx.flattenOverprint && form) {
+        std::set<QPDFObjGen> seen;
+        if (st.op || st.OP || inText) return false;
+        if (resourcesOverprint(d.getKey("/Resources"), seen)) {
+          QPDFObjectHandle g = d.getKey("/Group");
+          bool isolated = g.isDictionary() && g.getKey("/I").isBool() && g.getKey("/I").getBoolValue();
+          Rect under = st.clipBox;
+          bool covered = std::any_of(pieces.begin(), pieces.end(), [&](const Piece& q) { return q.box.hits(under); });
+          if (!isolated && covered) return false;
+          QPDFObjectHandle copy = QPDFObjectHandle::newStream(&ctx.pdf);
+          copy.replaceStreamData(x.getRawStreamData(), d.getKey("/Filter"), d.getKey("/DecodeParms"));
+          for (const std::string& k : d.getKeys()) {
+            if (k != "/Length" && k != "/Filter" && k != "/DecodeParms") copy.getDict().replaceKey(k, d.getKey(k));
+          }
+          if (!flattenFormOverprint(ctx, copy)) return false;
+          replace[i] = env.add("/XObject", "KuraOpF", ctx.pdf.makeIndirectObject(copy)) + " Do\n";
+        }
+        Piece p;
+        p.box = meet(everywhere(), st.clipBox);
+        QPDFObjectHandle bb = d.getKey("/BBox");
+        if (bb.isArray() && bb.getArrayNItems() == 4) {
+          Mat fm = kId;
+          QPDFObjectHandle mm = d.getKey("/Matrix");
+          if (mm.isArray() && mm.getArrayNItems() == 6) {
+            for (int k = 0; k < 6; ++k) fm[k] = num(mm.getArrayItem(k));
+          }
+          Rect fb;
+          for (int cx : {0, 2}) {
+            for (int cy : {1, 3}) fb.add(mul(fm, st.ctm), num(bb.getArrayItem(cx)), num(bb.getArrayItem(cy)));
+          }
+          p.box = meet(fb, st.clipBox);
+        }
+        pieces.push_back(p);
+        continue;
+      }
       Rect box;
       std::string clip;
       bool selfT;
@@ -1860,27 +3123,83 @@ bool vectorFlattenPage(Ctx& ctx, QPDFPageObjectHelper& ph, int pageIndex, int* r
         selfT = (!sm.isNull() && !nameIs(sm, "/None")) || numOf(d.getKey("/SMaskInData"), 0) > 0;
       }
       bool axis = std::fabs(st.ctm[1]) < 1e-9 && std::fabs(st.ctm[2]) < 1e-9;
+      if ((selfT || st.ca < 1 || st.bm != 0 || st.smask) && ctx.flattenOverprint) {
+        if (st.op || st.OP || inText) return false;
+        Rect vis = meet(box, st.clipBox);
+        bool softImage = !form && d.getKey("/SMask").isStream() && st.ca >= 1 && st.bm == 0 && !st.smask;
+        std::vector<Piece> made;
+        std::string keep = after[i];
+        bool clear = softImage && overprintImage(x, vis, i, made, true);
+        if (!clear) after[i] = keep;
+        if (!addBlock(box)) return false;
+        if (clear) {
+          pieces.back().clips = st.clips;
+          pieces.back().image = static_cast<int>(imgSm.size());
+          pieces.back().xm = st.ctm;
+          imgSm.emplace_back();
+          imgSm.back().x = x;
+          imgSm.back().soft = true;
+          pieces.insert(pieces.end(), made.begin(), made.end());
+        }
+        continue;
+      }
       if (selfT || st.ca < 1 || st.bm != 0 || st.smask) {
         if (inText || !region(clip, box, i, !form && axis)) return false;
         QPDFObjectHandle fr = d.getKey("/Resources");
         if (!form || !(fr.isDictionary() && fr.getKey("/Font").isDictionary())) replace[i] = "";
         continue;
       }
+      std::vector<Piece> made;
+      if (opImage && (inText || !overprintImage(x, meet(box, st.clipBox), i, made))) return false;
+      if (ctx.flattenOverprint && st.op && stencil &&
+          (inText || !overprintStencil(a[0].getName(), meet(box, st.clipBox), i, made))) {
+        return false;
+      }
       if (!addBlock(box)) return false;
+      if (ctx.flattenOverprint && stencil && (st.fill.kind == 1 || st.fill.kind == -1)) {
+        pieces.back().clips = st.clips;
+        pieces.back().stencil = true;
+        pieces.back().colour = st.fill;
+        pieces.back().xobj = a[0].getName();
+        pieces.back().xm = st.ctm;
+        pieces.insert(pieces.end(), made.begin(), made.end());
+      } else if (ctx.flattenOverprint && !form && !stencil) {
+        pieces.back().clips = st.clips;
+        pieces.back().image = static_cast<int>(imgSm.size());
+        pieces.back().xm = st.ctm;
+        imgSm.emplace_back();
+        imgSm.back().x = x;
+        pieces.insert(pieces.end(), made.begin(), made.end());
+      }
       if (!form) opaqueImages.push_back({i, meet(box, st.clipBox), st.clips});
     } else if (op == "EI") {
+      if (ctx.flattenOverprint && st.op) return false;
       Rect box;
       for (double cx : {0.0, 1.0}) {
         for (double cy : {0.0, 1.0}) box.add(st.ctm, cx, cy);
       }
       if (st.ca < 1 || st.bm != 0 || st.smask) {
+        if (ctx.flattenOverprint) {
+          if (!addBlock(box)) return false;
+          continue;
+        }
         if (inText || !region("0 0 m 1 0 l 1 1 l 0 1 l h W n\n", box, i)) return false;
         continue;
       }
       if (!addBlock(box)) return false;
     } else if (op == "sh" && !a.empty() && a[0].isName()) {
       if (inText) return false;
+      if (ctx.flattenOverprint && st.op) {
+        QPDFObjectHandle shd = res.getKey("/Shading");
+        if (!shd.isDictionary() || !overprintShading(shd.getKey(a[0].getName()), i)) return false;
+      }
       if (st.ca < 1 || st.bm != 0 || st.smask) {
+        if (ctx.flattenOverprint && !st.op) {
+          Piece p;
+          p.box = st.clipBox;
+          pieces.push_back(p);
+          continue;
+        }
         if (!region("", everywhere(), i)) return false;
         replace[i] = "";
         continue;
@@ -1912,6 +3231,7 @@ bool vectorFlattenPage(Ctx& ctx, QPDFPageObjectHelper& ph, int pageIndex, int* r
   {
     std::set<std::string> used;
     for (size_t i = 0; i < ops.size(); ++i) {
+      if (ops[i].op == "KuraFB") used.insert(ops[i].args[0].getName());
       if (ops[i].op != "Do" || ops[i].args.empty() || !ops[i].args[0].isName()) continue;
       auto r = replace.find(i);
       if (r == replace.end() || !r->second.empty()) used.insert(ops[i].args[0].getName());
@@ -1919,15 +3239,28 @@ bool vectorFlattenPage(Ctx& ctx, QPDFPageObjectHelper& ph, int pageIndex, int* r
     QPDFObjectHandle xd = res.getKey("/XObject");
     if (xd.isDictionary()) {
       for (const std::string& nm : xd.getKeys()) {
-        if (!used.count(nm)) xd.removeKey(nm);
+        if (!used.count(nm) && nm.rfind("/Kura", 0) != 0) xd.removeKey(nm);
       }
     }
   }
-  neutraliseTransparency(ctx, res);
+  if (!ctx.flattenOverprint) neutraliseTransparency(ctx, res);
+  QPDFObjectHandle egs = res.getKey("/ExtGState");
+  if (ctx.flattenOverprint && egs.isDictionary()) {
+    for (const std::string& k : egs.getKeys()) {
+      QPDFObjectHandle g = egs.getKey(k);
+      if (!g.isDictionary() || !(g.hasKey("/OP") || g.hasKey("/op") || g.hasKey("/OPM"))) continue;
+      g = g.shallowCopy();
+      g.removeKey("/OP");
+      g.removeKey("/op");
+      g.removeKey("/OPM");
+      egs.replaceKey(k, ctx.pdf.makeIndirectObject(g));
+    }
+  }
   QPDFObjectHandle origRes = page.getKey("/Resources");
   QPDFObjectHandle origContents = page.getKey("/Contents");
   std::string out;
   for (size_t i = 0; i < ops.size(); ++i) {
+    if (mute[i]) continue;
     auto b = before.find(i);
     if (b != before.end()) out += b->second;
     auto r = replace.find(i);
@@ -1985,7 +3318,7 @@ bool vectorFlattenPage(Ctx& ctx, QPDFPageObjectHelper& ph, int pageIndex, int* r
   }
   page.replaceKey("/Resources", res);
   page.replaceKey("/Contents", ctx.pdf.makeIndirectObject(QPDFObjectHandle::newStream(&ctx.pdf, out)));
-  if (resourcesHaveTransparency(page.getKey("/Resources"))) {
+  if (!ctx.flattenOverprint && resourcesHaveTransparency(page.getKey("/Resources"))) {
     page.replaceKey("/Resources", origRes);
     page.replaceKey("/Contents", origContents);
     return false;

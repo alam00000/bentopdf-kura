@@ -1,0 +1,13 @@
+{
+  "kura-profile": 1,
+  "name": "Convert CMYK from Japan Color 2001 Coated to PSO Coated v3",
+  "description": "Re-separates CMYK made for Japan Color 2001 Coated so it prints the same on PSO Coated v3, through both profiles; spot colours stay spot colours and the new profile becomes the output intent.",
+  "convert": {
+    "colors": {
+      "from": "Japan Color 2001 Coated",
+      "to": "PSO Coated v3",
+      "keep_spots": true
+    }
+  },
+  "checks": []
+}

@@ -15,7 +15,7 @@ PDF/A (ISO 19005) is the standard for documents that must still open and read co
 
 The letter is the conformance level: **b** means the file is visually reproducible, **u** adds that all text has a Unicode mapping so it is searchable and copyable, and **a** adds full structural tagging for accessibility. Part 4 has no letters; `4` is roughly the old `2u`, `4f` requires an embedded file, and `4e` is the engineering variant.
 
-What conversion does: strips encryption, scripting, forbidden actions and annotations; embeds metric-compatible substitutes for missing fonts and repairs width tables, encodings and Unicode maps on embedded ones; adds an output intent and default colour spaces; rebuilds the XMP metadata from the document information; and, at part 1, flattens transparency and transcodes JPEG 2000, since PDF 1.4 has neither.
+What conversion does: strips encryption, scripting, forbidden actions and annotations; embeds metric-compatible substitutes for missing fonts, and for embedded fonts whose licence (the OS/2 fsType flags) allows only restricted embedding, since every PDF/A part requires fonts that can be legally embedded; repairs width tables, encodings and Unicode maps on embedded ones; adds an output intent and default colour spaces; rebuilds the XMP metadata from the document information; and, at part 1, flattens transparency and transcodes JPEG 2000, since PDF 1.4 has neither.
 
 **Which to pick.** `2b` for almost everything. `2u` when you need searchable text guaranteed. `3b` when the document must carry a source file, spreadsheet or XML alongside the pages. `1b` only when a recipient demands it, because part 1 forbids transparency and Kura has to rasterize any page that uses it. `4` when your workflow is on PDF 2.0.
 
@@ -41,6 +41,8 @@ PDF/X (ISO 15930) is what printers ask for: a file whose colour is fully specifi
 | `x6` | colour-managed, PDF 2.0 | allowed | |
 
 What conversion does: adds the output intent and, for X-1a, converts images, vector operators, shadings, patterns, indexed lookups and separation alternates to CMYK through Little CMS; synthesizes TrimBox and BleedBox and repairs boxes that fall outside their parent; declares trapping; strips actions, forms and annotations that a press cannot honour.
+
+At `x3`, `x4` and `x6`, colour is kept as it is under the output intent; add `--convert-colors cmyk` to convert it to CMYK as well ([converting colour](/cli#converting-colour)).
 
 The output intent defaults to a bundled CMYK profile with the identifier `Custom`. For production work, supply your press characterization with `--output-condition`, `--output-condition-info` and `--registry`, and the profile itself with `--dest-profile`.
 

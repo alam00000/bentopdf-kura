@@ -1,0 +1,574 @@
+{
+  "kura-profile": 1,
+  "name": "GWG 2022 coldset web offset (CMYK + RGB): check and fix",
+  "description": "The Ghent Workgroup 2022 checks for this workflow, with the safe repairs applied, converted to PDF/X-4. Colour-managed RGB (with an ICC profile) is accepted; uncalibrated RGB is not.",
+  "convert": {
+    "level": "pdfx-4"
+  },
+  "checks": [
+    {
+      "name": "Not PDF/X-4",
+      "severity": "error",
+      "all": [
+        {
+          "check": "conformance.meets",
+          "op": "is",
+          "value": false,
+          "standard": "pdfx-4"
+        }
+      ]
+    },
+    {
+      "name": "Stroke thinner than 0.125 pt",
+      "severity": "error",
+      "all": [
+        {
+          "check": "content.stroke_width",
+          "op": "<=",
+          "value": 0.125
+        }
+      ]
+    },
+    {
+      "name": "Stroke between 0.125 and 0.25 pt",
+      "severity": "warning",
+      "all": [
+        {
+          "check": "content.stroke_width",
+          "op": "<=",
+          "value": 0.25
+        },
+        {
+          "check": "content.stroke_width",
+          "op": ">",
+          "value": 0.125
+        }
+      ]
+    },
+    {
+      "name": "Thin stroke below 0.25 pt in more than one ink",
+      "severity": "error",
+      "all": [
+        {
+          "check": "content.stroke_width",
+          "op": "<=",
+          "value": 0.25
+        },
+        {
+          "check": "color.inks_used",
+          "op": ">",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "name": "Text smaller than 6 pt",
+      "severity": "warning",
+      "all": [
+        {
+          "check": "text.size",
+          "op": "<",
+          "value": 6
+        },
+        {
+          "check": "text.size",
+          "op": ">",
+          "value": 0.01
+        }
+      ]
+    },
+    {
+      "name": "Text smaller than 9 pt in more than one ink",
+      "severity": "warning",
+      "all": [
+        {
+          "check": "text.size",
+          "op": "<",
+          "value": 9
+        },
+        {
+          "check": "text.size",
+          "op": ">",
+          "value": 0.01
+        },
+        {
+          "check": "color.inks_used",
+          "op": ">",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "name": "White text smaller than 9 pt",
+      "severity": "warning",
+      "all": [
+        {
+          "check": "text.size",
+          "op": "<",
+          "value": 9
+        },
+        {
+          "check": "text.size",
+          "op": ">",
+          "value": 0.01
+        },
+        {
+          "check": "color.ink_mix",
+          "op": "==",
+          "value": "none"
+        }
+      ]
+    },
+    {
+      "name": "Total ink above 240% in fills",
+      "severity": "error",
+      "all": [
+        {
+          "check": "color.total_ink",
+          "op": ">",
+          "value": 240,
+          "paint": "fill"
+        }
+      ]
+    },
+    {
+      "name": "Total ink above 240% in strokes",
+      "severity": "error",
+      "all": [
+        {
+          "check": "color.total_ink",
+          "op": ">",
+          "value": 240,
+          "paint": "stroke"
+        }
+      ]
+    },
+    {
+      "name": "Rich black on text smaller than 12 pt",
+      "severity": "warning",
+      "all": [
+        {
+          "check": "content.kind",
+          "op": "==",
+          "value": "text"
+        },
+        {
+          "check": "text.size",
+          "op": "<",
+          "value": 12
+        },
+        {
+          "check": "color.ink",
+          "op": ">=",
+          "value": 100,
+          "ink": "black"
+        },
+        {
+          "check": "color.ink",
+          "op": ">",
+          "value": 0,
+          "ink": "cmy_max"
+        }
+      ]
+    },
+    {
+      "name": "White object set to overprint",
+      "severity": "error",
+      "all": [
+        {
+          "check": "color.ink_mix",
+          "op": "==",
+          "value": "none"
+        },
+        {
+          "check": "color.overprint",
+          "op": "in",
+          "value": [
+            "on",
+            "on_nonzero_mode"
+          ],
+          "paint": "fill"
+        }
+      ]
+    },
+    {
+      "name": "Black text not set to overprint",
+      "severity": "warning",
+      "all": [
+        {
+          "check": "content.kind",
+          "op": "==",
+          "value": "text"
+        },
+        {
+          "check": "color.ink_mix",
+          "op": "==",
+          "value": "solid_black"
+        },
+        {
+          "check": "color.overprint",
+          "op": "==",
+          "value": "off",
+          "paint": "fill"
+        }
+      ]
+    },
+    {
+      "name": "Transparency in use",
+      "severity": "info",
+      "all": [
+        {
+          "check": "transparency.used",
+          "op": "is",
+          "value": true
+        }
+      ]
+    },
+    {
+      "name": "Blend mode other than Normal",
+      "severity": "info",
+      "all": [
+        {
+          "check": "transparency.blend_mode",
+          "op": "not_in",
+          "value": [
+            "Normal",
+            "Compatible"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Image below 200 ppi",
+      "severity": "error",
+      "all": [
+        {
+          "check": "image.resolution",
+          "op": "<",
+          "value": 200,
+          "kind": "colour_or_grey"
+        }
+      ]
+    },
+    {
+      "name": "Bitmap below 600 ppi",
+      "severity": "warning",
+      "all": [
+        {
+          "check": "image.resolution",
+          "op": "<",
+          "value": 600,
+          "kind": "bitmap"
+        }
+      ]
+    },
+    {
+      "name": "Image above 300 ppi",
+      "severity": "info",
+      "all": [
+        {
+          "check": "image.resolution",
+          "op": ">",
+          "value": 300,
+          "kind": "colour_or_grey"
+        }
+      ]
+    },
+    {
+      "name": "Document is encrypted",
+      "severity": "error",
+      "all": [
+        {
+          "check": "security.encryption",
+          "op": "!=",
+          "value": "none"
+        }
+      ]
+    },
+    {
+      "name": "Document is damaged",
+      "severity": "error",
+      "all": [
+        {
+          "check": "document.damaged",
+          "op": "is",
+          "value": true
+        }
+      ]
+    },
+    {
+      "name": "Syntax problem",
+      "severity": "error",
+      "any": [
+        {
+          "all": [
+            {
+              "check": "syntax.content_stream_error",
+              "op": "count",
+              "value": 0,
+              "compare": ">"
+            }
+          ]
+        },
+        {
+          "all": [
+            {
+              "check": "syntax.xref_layout",
+              "op": "count",
+              "value": 0,
+              "compare": ">"
+            }
+          ]
+        },
+        {
+          "all": [
+            {
+              "check": "syntax.object_layout",
+              "op": "count",
+              "value": 0,
+              "compare": ">"
+            }
+          ]
+        },
+        {
+          "all": [
+            {
+              "check": "syntax.broken_reference",
+              "op": "in",
+              "value": [
+                "object",
+                "external_file"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "PDF version below 1.6",
+      "severity": "warning",
+      "all": [
+        {
+          "check": "document.pdf_version",
+          "op": "<",
+          "value": 1.6
+        }
+      ]
+    },
+    {
+      "name": "Registration colour used for content",
+      "severity": "error",
+      "all": [
+        {
+          "check": "color.ink_mix",
+          "op": "==",
+          "value": "registration"
+        }
+      ]
+    },
+    {
+      "name": "Uncalibrated RGB colour",
+      "severity": "error",
+      "any": [
+        {
+          "all": [
+            {
+              "check": "color.space",
+              "op": "in",
+              "value": [
+                "DeviceRGB",
+                "CalRGB"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Device-independent colour",
+      "severity": "warning",
+      "all": [
+        {
+          "check": "color.space",
+          "op": "in",
+          "value": [
+            "device_independent"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "More than 0 spot colours on a page",
+      "severity": "error",
+      "all": [
+        {
+          "check": "print.plates",
+          "op": "count",
+          "value": 0,
+          "compare": ">",
+          "kind": "spot"
+        }
+      ]
+    },
+    {
+      "name": "Font not embedded",
+      "severity": "error",
+      "all": [
+        {
+          "check": "font.embedding",
+          "op": "==",
+          "value": "not_embedded"
+        }
+      ]
+    },
+    {
+      "name": "Type 3 font in use",
+      "severity": "warning",
+      "all": [
+        {
+          "check": "font.type",
+          "op": "==",
+          "value": "type3"
+        }
+      ]
+    },
+    {
+      "name": "Glyph falls back to .notdef",
+      "severity": "error",
+      "all": [
+        {
+          "check": "text.glyph",
+          "op": "==",
+          "value": "notdef"
+        }
+      ]
+    },
+    {
+      "name": "Font program is not valid",
+      "severity": "error",
+      "all": [
+        {
+          "check": "font.problem",
+          "op": "includes",
+          "value": "invalid_program"
+        }
+      ]
+    },
+    {
+      "name": "Pages differ in size or orientation",
+      "severity": "warning",
+      "all": [
+        {
+          "check": "document.pages_uniform",
+          "op": "is",
+          "value": false
+        }
+      ]
+    },
+    {
+      "name": "Empty page",
+      "severity": "warning",
+      "all": [
+        {
+          "check": "page.empty",
+          "op": "is",
+          "value": true
+        }
+      ]
+    },
+    {
+      "name": "Page scaling in use",
+      "severity": "error",
+      "all": [
+        {
+          "check": "page.user_unit",
+          "op": "!=",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "name": "Object within 3 mm of the trim edge",
+      "severity": "info",
+      "all": [
+        {
+          "check": "content.distance_to_box",
+          "op": "<",
+          "value": 3,
+          "box": "trim",
+          "side": "inside",
+          "unit": "mm"
+        }
+      ],
+      "scope": "trim"
+    },
+    {
+      "name": "Annotation that prints",
+      "severity": "warning",
+      "all": [
+        {
+          "check": "annotation.flags",
+          "op": "includes",
+          "value": "print"
+        }
+      ]
+    },
+    {
+      "name": "Content on a layer",
+      "severity": "info",
+      "all": [
+        {
+          "check": "layer.membership",
+          "op": "count",
+          "value": 0,
+          "compare": ">"
+        }
+      ]
+    }
+  ],
+  "fixes": [
+    {
+      "fix": "page.set_box",
+      "box": "trim",
+      "from": "crop",
+      "when": "missing"
+    },
+    {
+      "fix": "bleed.generate",
+      "amount": "3mm"
+    },
+    {
+      "fix": "page.remove_user_unit"
+    },
+    {
+      "fix": "ink.min_line_width",
+      "width": "0.25pt"
+    },
+    {
+      "fix": "ink.overprint_black",
+      "objects": "text"
+    },
+    {
+      "fix": "ink.knockout_white"
+    },
+    {
+      "fix": "document.set_info",
+      "key": "Trapped",
+      "value": "False"
+    },
+    {
+      "fix": "graphics.remove",
+      "settings": [
+        "flatness",
+        "smoothness"
+      ]
+    },
+    {
+      "fix": "transparency.remove_unneeded_groups"
+    },
+    {
+      "fix": "transparency.set_blend_space",
+      "space": "CMYK"
+    }
+  ]
+}

@@ -72,4 +72,9 @@ Rasterizer makeRasterizer(const void* data, std::size_t size, const std::string&
     return renderPage(*d, pageIndex, dpi, w, h, rgb);
   };
 }
+
+bool renderFirstPage(const std::string& pdf, double dpi, int& width, int& height, std::string& rgb) {
+  Rasterizer r = makeRasterizer(pdf.data(), pdf.size(), "");
+  return r && r(0, dpi, width, height, rgb);
+}
 }

@@ -1,0 +1,30 @@
+{
+  "kura-profile": 1,
+  "name": "Overprinting spot colours that change when converted to CMYK",
+  "description": "Lists objects in a spot colour that are set to overprint; their look changes when the spot colour becomes CMYK.",
+  "checks": [
+    {
+      "name": "Overprinting spot colour",
+      "severity": "warning",
+      "all": [
+        {
+          "check": "color.overprint",
+          "op": "in",
+          "value": [
+            "on",
+            "on_nonzero_mode"
+          ]
+        },
+        {
+          "check": "color.ink_mix",
+          "op": "in",
+          "value": [
+            "spot_only",
+            "spot_and_black",
+            "process_and_spot"
+          ]
+        }
+      ]
+    }
+  ]
+}

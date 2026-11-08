@@ -1,0 +1,12 @@
+{
+  "kura-profile": 1,
+  "name": "Convert colours to GRACoL2013_CRPC6, keeping spot colours",
+  "description": "Converts RGB, calibrated and Lab colour to CMYK for US sheetfed coated paper, GRACoL 2013 (CGATS21-2 CRPC6) and sets it as the output intent; spot colours stay spot colours. No standard is applied.",
+  "convert": {
+    "colors": {
+      "to": "GRACoL2013_CRPC6",
+      "keep_spots": true
+    }
+  },
+  "checks": []
+}

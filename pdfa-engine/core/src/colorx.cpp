@@ -359,6 +359,10 @@ QPDFObjectHandle labAlternateFunction(Ctx& ctx, const Xform& xf, QPDFObjectHandl
   });
 }
 
+bool convertSpaceObject(Ctx& ctx, ConvertState& st, QPDFObjectHandle holder,
+                        const std::string& key, QPDFObjectHandle cs,
+                        std::map<std::string, int>* opFix);
+
 void convertImage(Ctx& ctx, ConvertState& st, QPDFObjectHandle image) {
   if (!st.imagesDone.enter(image)) return;
   QPDFObjectHandle d = image.getDict();
@@ -371,6 +375,12 @@ void convertImage(Ctx& ctx, ConvertState& st, QPDFObjectHandle image) {
     base = cs.getArrayItem(1);
   }
   QPDFObjectHandle effective = indexed ? base : cs;
+  std::string effFamily = effective.isArray() && effective.getArrayNItems() >= 1 ? nameOf(effective.getArrayItem(0)) : "";
+  if (effFamily == "/Separation" || effFamily == "/DeviceN") {
+    QPDFObjectHandle scratch = QPDFObjectHandle::newDictionary();
+    convertSpaceObject(ctx, st, scratch, "/ColorSpace", effective, nullptr);
+    return;
+  }
   bool rgbLike = spaceIsRgbLike(effective);
   bool grayIcc = false;
   bool cmykIcc = false;
@@ -483,10 +493,6 @@ void convertIndexedLookup(Ctx&, ConvertState& st, QPDFObjectHandle cs) {
   ++st.spaces;
 }
 
-bool convertSpaceObject(Ctx& ctx, ConvertState& st, QPDFObjectHandle holder,
-                        const std::string& key, QPDFObjectHandle cs,
-                        std::map<std::string, int>* opFix);
-
 void convertShading(Ctx& ctx, ConvertState& st, QPDFObjectHandle sh) {
   X1aGuard g_;
   if (g_.over) { st.failed = true; st.failReason = "shading nesting too deep"; return; }
@@ -497,6 +503,12 @@ void convertShading(Ctx& ctx, ConvertState& st, QPDFObjectHandle sh) {
                  (nameOf(cs.getArrayItem(0)) == "/Indexed" || nameOf(cs.getArrayItem(0)) == "/I");
   if (indexed) {
     convertIndexedLookup(ctx, st, cs);
+    return;
+  }
+  std::string shFamily = cs.isArray() && cs.getArrayNItems() >= 1 ? nameOf(cs.getArrayItem(0)) : "";
+  if (shFamily == "/Separation" || shFamily == "/DeviceN") {
+    QPDFObjectHandle scratch = QPDFObjectHandle::newDictionary();
+    convertSpaceObject(ctx, st, scratch, "/ColorSpace", cs, nullptr);
     return;
   }
   bool labSpace = spaceIsLab(cs);
@@ -600,6 +612,12 @@ bool convertSpaceObject(Ctx& ctx, ConvertState& st, QPDFObjectHandle holder,
   }
   if (family == "/Indexed" || family == "/I") {
     if (cs.getArrayNItems() >= 4) convertIndexedLookup(ctx, st, cs);
+    QPDFObjectHandle base = cs.getArrayNItems() >= 2 ? cs.getArrayItem(1) : QPDFObjectHandle::newNull();
+    std::string baseFamily = base.isArray() && base.getArrayNItems() >= 1 ? nameOf(base.getArrayItem(0)) : "";
+    if (baseFamily == "/Separation" || baseFamily == "/DeviceN") {
+      QPDFObjectHandle scratch = QPDFObjectHandle::newDictionary();
+      return convertSpaceObject(ctx, st, scratch, "/Base", base, nullptr);
+    }
     return true;
   }
   if ((family == "/Separation" || family == "/DeviceN") && cs.getArrayNItems() >= 3) {
@@ -929,8 +947,12 @@ void processResources(Ctx& ctx, ConvertState& st, QPDFObjectHandle res, Visited&
       if (cp.isDictionary() && visited.enter(cp)) {
         std::map<std::string, int> inner;
         QPDFObjectHandle fres = fnt.getKey("/Resources");
-        processResources(ctx, st, fres.isDictionary() ? fres : res, visited, inner, depth + 1);
-        if (st.failed) return;
+        if (fres.isDictionary()) {
+          processResources(ctx, st, fres, visited, inner, depth + 1);
+          if (st.failed) return;
+        } else {
+          inner = fixNames;
+        }
         for (const std::string& g : cp.getKeys()) {
           QPDFObjectHandle glyph = cp.getKey(g);
           if (glyph.isStream() && visited.enter(glyph)) {
@@ -942,6 +964,13 @@ void processResources(Ctx& ctx, ConvertState& st, QPDFObjectHandle res, Visited&
     }
   }
 }
+}
+
+bool convertImageToProcess(Ctx& ctx, QPDFObjectHandle image) {
+  ConvertState st(ctx.opt.destProfile);
+  if (!st.xf.ok()) return false;
+  convertImage(ctx, st, image);
+  return !st.failed;
 }
 
 void convertColorsX1a(Ctx& ctx) {
@@ -984,6 +1013,10 @@ void convertColorsX1a(Ctx& ctx) {
     }
     if (st.failed) break;
   }
+  if (st.failed && ctx.opt.verifyOnly) {
+    ctx.issue("X1A_COLOR_UNCONVERTIBLE", "colour that PDF/X-1a does not allow is used (" + st.failReason + ")", true);
+    return;
+  }
   if (st.failed) {
     ctx.fatal("X1A_COLOR_UNCONVERTIBLE",
               "RGB content could not be fully converted to CMYK (" + st.failReason +
@@ -1004,5 +1037,38 @@ void convertColorsX1a(Ctx& ctx) {
               "RGB->CMYK approximation rather than ICC transform",
               true);
   }
+}
+
+int convertSpotRgbAlternates(Ctx& ctx) {
+  std::vector<QPDFObjectHandle> spots;
+  Visited seen;
+  std::function<void(QPDFObjectHandle, int)> collect = [&](QPDFObjectHandle o, int depth) {
+    if (depth > kMaxColorSpaceNest * 4) return;
+    if (o.isIndirect() && !seen.enter(o)) return;
+    if (o.isStream()) {
+      collect(o.getDict(), depth + 1);
+      return;
+    }
+    if (o.isArray()) {
+      std::string family = o.getArrayNItems() >= 3 ? nameOf(o.getArrayItem(0)) : "";
+      if ((family == "/Separation" || family == "/DeviceN") && spaceIsRgbLike(o.getArrayItem(2))) spots.push_back(o);
+      for (int i = 0; i < o.getArrayNItems(); ++i) collect(o.getArrayItem(i), depth + 1);
+      return;
+    }
+    if (o.isDictionary()) {
+      for (const std::string& k : o.getKeys()) collect(o.getKey(k), depth + 1);
+    }
+  };
+  for (QPDFObjectHandle obj : ctx.pdf.getAllObjects()) collect(obj, 0);
+  if (spots.empty()) return 0;
+  ConvertState st(ctx.opt.destProfile);
+  if (!st.xf.ok()) return 0;
+  int done = 0;
+  for (QPDFObjectHandle cs : spots) {
+    QPDFObjectHandle scratch = QPDFObjectHandle::newDictionary();
+    st.failed = false;
+    if (convertSpaceObject(ctx, st, scratch, "/CS", cs, nullptr) && !st.failed) ++done;
+  }
+  return done;
 }
 }

@@ -1,0 +1,13 @@
+{
+  "kura-profile": 1,
+  "name": "Convert CMYK from SWOP v2 to PSO Coated v3",
+  "description": "Re-separates CMYK made for U.S. Web Coated (SWOP) v2 so it prints the same on PSO Coated v3, through both profiles; spot colours stay spot colours and the new profile becomes the output intent.",
+  "convert": {
+    "colors": {
+      "from": "U.S. Web Coated (SWOP) v2",
+      "to": "PSO Coated v3",
+      "keep_spots": true
+    }
+  },
+  "checks": []
+}

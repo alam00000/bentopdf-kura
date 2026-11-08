@@ -1,0 +1,11 @@
+{
+  "kura-profile": 1,
+  "name": "Convert all colours to grey",
+  "description": "Converts every colour to greyscale (Dot Gain 15%). No standard is applied.",
+  "convert": {
+    "colors": {
+      "to": "gray"
+    }
+  },
+  "checks": []
+}

@@ -1,0 +1,84 @@
+{
+  "kura-profile": 1,
+  "name": "Check processing steps",
+  "description": "Checks processing-step layers in packaging and label files against ISO 19593-1.",
+  "checks": [
+    {
+      "name": "Structural or Positions step without a type",
+      "severity": "error",
+      "all": [
+        {
+          "check": "layer.processing_step_problem",
+          "op": "includes",
+          "value": "missing_type"
+        }
+      ]
+    },
+    {
+      "name": "Custom step key is not a second-class name",
+      "severity": "error",
+      "all": [
+        {
+          "check": "layer.processing_step_problem",
+          "op": "includes",
+          "value": "custom_key_not_second_class"
+        }
+      ]
+    },
+    {
+      "name": "The same step is used on several layers",
+      "severity": "error",
+      "all": [
+        {
+          "check": "layer.processing_step_problem",
+          "op": "includes",
+          "value": "same_step_in_several_layers"
+        }
+      ]
+    },
+    {
+      "name": "One spot colour used by several steps",
+      "severity": "error",
+      "all": [
+        {
+          "check": "layer.processing_step_problem",
+          "op": "includes",
+          "value": "spot_used_by_several_steps"
+        }
+      ]
+    },
+    {
+      "name": "A step's spot colour is also used for print content",
+      "severity": "error",
+      "all": [
+        {
+          "check": "layer.processing_step_problem",
+          "op": "includes",
+          "value": "spot_used_by_print_content"
+        }
+      ]
+    },
+    {
+      "name": "One step uses several spot colours",
+      "severity": "error",
+      "all": [
+        {
+          "check": "layer.processing_step_problem",
+          "op": "includes",
+          "value": "step_uses_several_spots"
+        }
+      ]
+    },
+    {
+      "name": "Step layers missing on a page",
+      "severity": "error",
+      "all": [
+        {
+          "check": "layer.processing_step_problem",
+          "op": "includes",
+          "value": "layers_missing_on_page"
+        }
+      ]
+    }
+  ]
+}

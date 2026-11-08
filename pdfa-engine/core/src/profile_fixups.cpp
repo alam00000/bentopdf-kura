@@ -2400,9 +2400,28 @@ QPDFObjectHandle findOrAddLayer(Ctx& ctx, const std::string& label, const std::s
   ocg.replaceKey("/Type", QPDFObjectHandle::newName("/OCG"));
   ocg.replaceKey("/Name", QPDFObjectHandle::newUnicodeString(label));
   if (!procStep.empty()) {
+    static const std::set<std::string> kStructural = {
+        "Cutting", "PartialCutting", "ReversePartialCutting", "Creasing", "ReverseCreasing", "CuttingCreasing",
+        "ReverseCuttingCreasing", "PartialCuttingCreasing", "ReversePartialCuttingCreasing", "Drilling", "Gluing",
+        "FoilStamping", "ColdFoilStamping", "Embossing", "Debossing", "Perforating", "Bleed", "VarnishFree", "InkFree",
+        "InkVarnishFree", "Folding", "Punching", "Stapling"};
+    static const std::set<std::string> kPositions = {"Hologram", "Barcode", "ContentArea", "CodingMarking", "Imprinting"};
+    std::string group = procStep, type;
+    size_t slash = procStep.find('/');
+    if (slash != std::string::npos) {
+      group = procStep.substr(0, slash);
+      type = procStep.substr(slash + 1);
+    } else if (kStructural.count(procStep)) {
+      group = "Structural";
+      type = procStep;
+    } else if (kPositions.count(procStep)) {
+      group = "Positions";
+      type = procStep;
+    }
     QPDFObjectHandle md = QPDFObjectHandle::newDictionary();
     md.replaceKey("/Type", QPDFObjectHandle::newName("/GTS_ProcSteps"));
-    md.replaceKey("/GTS_ProcStepsGroup", QPDFObjectHandle::newName("/" + procStep));
+    md.replaceKey("/GTS_ProcStepsGroup", QPDFObjectHandle::newName("/" + group));
+    if (!type.empty()) md.replaceKey("/GTS_ProcStepsType", QPDFObjectHandle::newName("/" + type));
     ocg.replaceKey("/GTS_Metadata", md);
   }
   QPDFObjectHandle ref = ctx.pdf.makeIndirectObject(ocg);
@@ -4381,8 +4400,11 @@ bool fixPlaceText(const FixupCtx& f) {
   if (date.rfind("D:", 0) == 0 && date.size() >= 10) date = date.substr(2, 4) + "-" + date.substr(6, 2) + "-" + date.substr(8, 2);
   int n = placeStamp(f, [&](int pageNo, double& w, double& h) {
     std::string text = f.str("text");
+    std::string fileName = f.ctx.opt.inputName.empty() ? f.ctx.opt.inputPath : f.ctx.opt.inputName;
+    size_t cut = fileName.find_last_of("/\\");
+    if (cut != std::string::npos) fileName = fileName.substr(cut + 1);
     for (const auto& [key, val] : {std::pair<std::string, std::string>{"{page}", std::to_string(pageNo)},
-                                  {"{pages}", std::to_string(f.pageCount)}, {"{date}", date}}) {
+                                  {"{pages}", std::to_string(f.pageCount)}, {"{date}", date}, {"{file}", fileName}}) {
       for (size_t p = text.find(key); p != std::string::npos; p = text.find(key, p + val.size())) text.replace(p, key.size(), val);
     }
     std::string esc;
@@ -4462,14 +4484,79 @@ bool fixAnnotationHandle(const FixupCtx& f) {
   return true;
 }
 
+bool fixLayerAddView(const FixupCtx& f) {
+  QPDFObjectHandle ocp = f.ctx.pdf.getRoot().getKey("/OCProperties");
+  if (!ocp.isDictionary() || !ocp.getKey("/OCGs").isArray()) {
+    f.fail("the document has no layers");
+    return true;
+  }
+  std::string name = f.str("name");
+  std::regex hide, show;
+  try {
+    if (f.has("hide")) hide = std::regex(f.str("hide"), std::regex::icase);
+    if (f.has("show")) show = std::regex(f.str("show"), std::regex::icase);
+  } catch (const std::regex_error&) {
+    f.fail("invalid layer name pattern");
+    return true;
+  }
+  QPDFObjectHandle off = QPDFObjectHandle::newArray();
+  int hidden = 0;
+  for (auto& g : ocp.getKey("/OCGs").aitems()) {
+    if (!g.isDictionary() || !g.isIndirect()) continue;
+    std::string ln = g.getKey("/Name").isString() ? g.getKey("/Name").getUTF8Value() : std::string();
+    bool keep = f.has("show") && std::regex_search(ln, show);
+    if (!keep && f.has("hide") && std::regex_search(ln, hide)) {
+      off.appendItem(g);
+      ++hidden;
+    }
+  }
+  QPDFObjectHandle cfg = QPDFObjectHandle::newDictionary();
+  cfg.replaceKey("/Name", QPDFObjectHandle::newUnicodeString(name));
+  if (f.has("creator")) cfg.replaceKey("/Creator", QPDFObjectHandle::newUnicodeString(f.str("creator")));
+  cfg.replaceKey("/BaseState", QPDFObjectHandle::newName("/ON"));
+  cfg.replaceKey("/OFF", off);
+  QPDFObjectHandle d = ocp.getKey("/D");
+  if (d.isDictionary() && d.getKey("/Order").isArray()) cfg.replaceKey("/Order", d.getKey("/Order"));
+  QPDFObjectHandle configs = ocp.getKey("/Configs");
+  if (!configs.isArray()) {
+    configs = QPDFObjectHandle::newArray();
+    ocp.replaceKey("/Configs", configs);
+  }
+  for (int i = configs.getArrayNItems() - 1; i >= 0; --i) {
+    QPDFObjectHandle c = configs.getArrayItem(i);
+    if (c.isDictionary() && c.getKey("/Name").isString() && c.getKey("/Name").getUTF8Value() == name) configs.eraseItem(i);
+  }
+  configs.appendItem(cfg);
+  if (d.isDictionary() && !d.getKey("/Name").isString()) d.replaceKey("/Name", QPDFObjectHandle::newUnicodeString("Default"));
+  f.note("added layer view \"" + name + "\" hiding " + std::to_string(hidden) + " layer(s)");
+  return true;
+}
+
 bool fixLayerMoveObjects(const FixupCtx& f) {
   std::string step = f.str("processing_step");
   std::string label = f.has("layer") ? f.str("layer") : (step.empty() ? std::string("Layer") : step);
+  QPDFObjectHandle ocgsBefore = f.ctx.pdf.getRoot().getKey("/OCProperties").isDictionary()
+                                    ? f.ctx.pdf.getRoot().getKey("/OCProperties").getKey("/OCGs")
+                                    : QPDFObjectHandle::newNull();
+  int countBefore = ocgsBefore.isArray() ? ocgsBefore.getArrayNItems() : 0;
   QPDFObjectHandle ocgRef = findOrAddLayer(f.ctx, label, step);
   if (f.has("objects")) {
     std::vector<std::string> rules = ruleIdsFor(f.ctx, f.str("objects"));
     int stuck = 0;
     int objs = rules.empty() ? -1 : layerObjectsByRules(f.ctx, f.pages, rules, ocgRef, stuck);
+    if (objs == 0) {
+      QPDFObjectHandle ocp = f.ctx.pdf.getRoot().getKey("/OCProperties");
+      QPDFObjectHandle ocgs = ocp.isDictionary() ? ocp.getKey("/OCGs") : QPDFObjectHandle::newNull();
+      if (ocgs.isArray() && ocgs.getArrayNItems() > countBefore) {
+        for (QPDFObjectHandle arr : {ocgs, ocp.getKey("/D").isDictionary() ? ocp.getKey("/D").getKey("/Order") : QPDFObjectHandle::newNull()}) {
+          for (int i = arr.isArray() ? arr.getArrayNItems() - 1 : -1; i >= 0; --i)
+            if (arr.getArrayItem(i).isIndirect() && arr.getArrayItem(i).getObjGen() == ocgRef.getObjGen()) arr.eraseItem(i);
+        }
+        if (ocgs.getArrayNItems() == 0 && countBefore == 0) f.ctx.pdf.getRoot().removeKey("/OCProperties");
+      }
+      f.fail("no objects matched the check, so no layer " + label + " was added");
+      return true;
+    }
     if (objs >= 0) {
       if (stuck) f.fail(std::to_string(stuck) + " matching object(s) inside patterns, Type 3 glyphs or annotation appearances were left in place");
       f.note("moved " + std::to_string(objs) + " object(s) selected by the check onto layer " + label);
@@ -4493,13 +4580,15 @@ bool fixLayerMoveObjects(const FixupCtx& f) {
   return true;
 }
 
-bool fixLayerFlatten(const FixupCtx& f) {
-  QPDFObjectHandle root = f.ctx.pdf.getRoot();
+}
+
+void flattenOptionalContent(Ctx& ctx, std::vector<QPDFPageObjectHelper>& pages, bool keepHidden, long long& droppedMarks, long long& droppedObjects) {
+  QPDFObjectHandle root = ctx.pdf.getRoot();
   QPDFObjectHandle ocp = root.getKey("/OCProperties");
   if (ocp.isDictionary()) {
     std::set<QPDFObjGen> hiddenOcgs;
     QPDFObjectHandle dflt = ocp.getKey("/D");
-    if (dflt.isDictionary() && !f.flag("keep_hidden")) {
+    if (dflt.isDictionary() && !keepHidden) {
       if (nameOf(dflt.getKey("/BaseState")) == "/OFF") {
         QPDFObjectHandle all = ocp.getKey("/OCGs");
         std::set<QPDFObjGen> on;
@@ -4528,6 +4617,23 @@ bool fixLayerFlatten(const FixupCtx& f) {
       if (!oc.isDictionary()) return false;
       if (oc.isIndirect() && hiddenOcgs.count(oc.getObjGen())) return true;
       if (nameOf(oc.getKey("/Type")) != "/OCMD") return false;
+      if (oc.getKey("/VE").isArray()) {
+        std::function<bool(QPDFObjectHandle, int)> visible = [&](QPDFObjectHandle e, int depth) -> bool {
+          if (depth > 32) return true;
+          if (e.isDictionary()) return !(e.isIndirect() && hiddenOcgs.count(e.getObjGen()));
+          if (!e.isArray() || e.getArrayNItems() == 0) return true;
+          std::string op = nameOf(e.getArrayItem(0));
+          if (op == "/Not") return e.getArrayNItems() < 2 || !visible(e.getArrayItem(1), depth + 1);
+          bool isAnd = op == "/And";
+          bool acc = isAnd;
+          for (int i = 1; i < e.getArrayNItems(); ++i) {
+            bool v = visible(e.getArrayItem(i), depth + 1);
+            acc = isAnd ? (acc && v) : (acc || v);
+          }
+          return acc;
+        };
+        return !visible(oc.getKey("/VE"), 0);
+      }
       QPDFObjectHandle gs = oc.getKey("/OCGs");
       if (gs.isIndirect() && gs.isDictionary()) return hiddenOcgs.count(gs.getObjGen()) > 0;
       if (!gs.isArray() || gs.getArrayNItems() == 0) return false;
@@ -4545,8 +4651,7 @@ bool fixLayerFlatten(const FixupCtx& f) {
       if (policy == "/AllOff") return hiddenCount < total;
       return hiddenCount == total;
     };
-    long long droppedMarks = 0, droppedObjects = 0;
-    for (auto& ph : f.pages) {
+    for (auto& ph : pages) {
       QPDFObjectHandle pg = ph.getObjectHandle();
       std::set<std::string> hiddenTags;
       QPDFObjectHandle res = ph.getAttribute("/Resources", true);
@@ -4598,13 +4703,22 @@ bool fixLayerFlatten(const FixupCtx& f) {
           pg.replaceKey(
               "/Contents",
               QPDFObjectHandle::newStream(
-                  &f.ctx.pdf, std::string(reinterpret_cast<const char*>(out->getBuffer()),
+                  &ctx.pdf, std::string(reinterpret_cast<const char*>(out->getBuffer()),
                                         out->getSize())));
         }
       } catch (const std::exception&) {
       }
     }
-    root.removeKey("/OCProperties");
+    ctx.pdf.getRoot().removeKey("/OCProperties");
+  }
+}
+
+namespace {
+bool fixLayerFlatten(const FixupCtx& f) {
+  if (f.ctx.pdf.getRoot().getKey("/OCProperties").isDictionary()) {
+    long long droppedMarks = 0, droppedObjects = 0;
+    std::vector<QPDFPageObjectHelper> pages = f.pages;
+    flattenOptionalContent(f.ctx, pages, f.flag("keep_hidden"), droppedMarks, droppedObjects);
     f.note("flattened layers (removed " + std::to_string(droppedMarks) +
          " hidden content region(s) and " + std::to_string(droppedObjects) +
          " hidden object(s); layer switching removed)");
@@ -4668,6 +4782,26 @@ bool fixTransparencyFlatten(const FixupCtx& f) {
   return true;
 }
 
+bool fixOverprintFlatten(const FixupCtx& f) {
+  int done = 0, left = 0;
+  for (size_t slot = 0; slot < f.pages.size(); ++slot) {
+    QPDFPageObjectHelper& ph = f.pages[slot];
+    std::set<QPDFObjGen> seen;
+    if (!resourcesOverprint(ph.getAttribute("/Resources", false), seen)) continue;
+    f.ctx.flattenOverprint = true;
+    bool ok = false;
+    try {
+      ok = vectorFlattenPage(f.ctx, ph, f.indexOf(slot), nullptr, 300);
+    } catch (...) {
+    }
+    f.ctx.flattenOverprint = false;
+    ok ? ++done : ++left;
+  }
+  if (done) f.note("flattened overprint on " + std::to_string(done) + " page(s)");
+  if (left) f.note("overprint kept on " + std::to_string(left) + " page(s) that need image or form handling");
+  return true;
+}
+
 bool fixSpotNormalise(const FixupCtx& f) {
   fixSpotNormaliseNames(f);
   if (f.str("system") == "any") fixSpotRenameByMap(f);
@@ -4712,6 +4846,7 @@ const std::map<std::string, FixFn>& fixTable() {
       {"ink.min_line_width", fixInkFilter},
       {"ink.overprint_black", fixInkFilter},
       {"ink.white_plate", fixInkWhitePlate},
+      {"layer.add_view", fixLayerAddView},
       {"layer.flatten", fixLayerFlatten},
       {"layer.move_objects", fixLayerMoveObjects},
       {"layer.set", fixLayerSet},
@@ -4746,6 +4881,7 @@ const std::map<std::string, FixFn>& fixTable() {
       {"structure.resolve_role_map", fixStructureResolveRoleMap},
       {"text.add_invisible_copy", fixTextAddInvisibleCopy},
       {"text.set_render_mode", fixInkFilter},
+      {"ink.flatten_overprint", fixOverprintFlatten},
       {"transparency.flatten", fixTransparencyFlatten},
       {"transparency.remove_unneeded_groups", fixTransparencyRemoveUnneededGroups},
       {"transparency.set_blend_space", fixTransparencySetBlendSpace},

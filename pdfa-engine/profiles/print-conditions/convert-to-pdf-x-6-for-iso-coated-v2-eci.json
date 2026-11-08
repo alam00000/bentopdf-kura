@@ -1,0 +1,10 @@
+{
+  "kura-profile": 1,
+  "name": "Convert to PDF/X-6 for ISO Coated v2 (ECI)",
+  "description": "Converts to PDF/X-6 with the ISO Coated v2 (ECI) profile as output intent (coated paper, FOGRA39 (ECI profile)). The profile is taken from Kura's bundled profiles or the computer's colour folders.",
+  "convert": {
+    "level": "pdfx-6",
+    "profile": "ISO Coated v2 (ECI)"
+  },
+  "checks": []
+}

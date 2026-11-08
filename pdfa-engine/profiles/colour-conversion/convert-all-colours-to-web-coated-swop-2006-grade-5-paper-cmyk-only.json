@@ -1,0 +1,12 @@
+{
+  "kura-profile": 1,
+  "name": "Convert all colours to Web Coated SWOP 2006 Grade 5 Paper (CMYK only)",
+  "description": "Converts every colour, spot colours included, to CMYK for US web offset, SWOP 2006 grade 5. No standard is applied.",
+  "convert": {
+    "colors": {
+      "to": "Web Coated SWOP 2006 Grade 5 Paper",
+      "keep_spots": false
+    }
+  },
+  "checks": []
+}

@@ -1,0 +1,27 @@
+{
+  "kura-profile": 1,
+  "name": "Place an EAN-13 barcode",
+  "description": "Places an EAN-13 barcode with the number you give in the lower right corner of the first page.",
+  "checks": [],
+  "fixes": [
+    {
+      "fix": "place.barcode",
+      "symbology": "ean13",
+      "data": "{barcode}",
+      "width": "37.29mm",
+      "height": "25.93mm",
+      "anchor": "lower_right",
+      "x": "-10mm",
+      "y": "10mm",
+      "pages": "1"
+    }
+  ],
+  "variables": [
+    {
+      "name": "barcode",
+      "label": "EAN-13 number",
+      "type": "text",
+      "default": "4006381333931"
+    }
+  ]
+}

@@ -1,6 +1,7 @@
 #include <algorithm>
 #include <cctype>
 #include <cstdlib>
+#include <ctime>
 #include <iterator>
 #include <map>
 #include <regex>
@@ -49,7 +50,7 @@ const std::string kXapG = "http://ns.adobe.com/xap/1.0/g/";
 const std::string kXapGImg = "http://ns.adobe.com/xap/1.0/g/img/";
 
 struct XAttr {
-  std::string ns, local, value;
+  std::string ns, local, value, prefix;
 };
 
 struct XNode {
@@ -239,8 +240,7 @@ class XmlParser {
     for (const auto& r : raw) {
       if (r.first == "xmlns" || r.first.rfind("xmlns:", 0) == 0) continue;
       XAttr at;
-      std::string pre;
-      if (!resolve(r.first, true, at.ns, at.local, pre)) return false;
+      if (!resolve(r.first, true, at.ns, at.local, at.prefix)) return false;
       at.value = r.second;
       n.attrs.push_back(at);
     }
@@ -326,6 +326,7 @@ bool plainAttr(const XAttr& a) { return !a.ns.empty() && a.ns != kRdf && a.ns !=
 XProp fromAttr(const XAttr& a) {
   XProp p;
   p.ns = a.ns;
+  p.prefix = a.prefix;
   p.name = a.local;
   p.value = a.value;
   return p;
@@ -339,6 +340,17 @@ void fillStruct(XProp& p, const XNode& holder) {
     if (plainAttr(a)) p.kids.push_back(fromAttr(a));
   }
   for (const XNode& k : holder.kids) p.kids.push_back(parseProp(k));
+  for (const XProp& f : p.kids) {
+    if (f.ns != kRdf || f.name != "value") continue;
+    XProp v = f;
+    v.ns = p.ns;
+    v.prefix = p.prefix;
+    v.name = p.name;
+    v.hasLang = v.hasLang || p.hasLang;
+    v.lang = v.hasLang && !f.hasLang ? p.lang : v.lang;
+    p = v;
+    return;
+  }
 }
 
 XProp parseProp(const XNode& e) {
@@ -371,15 +383,6 @@ XProp parseProp(const XNode& e) {
     }
     if (e.kids.size() == 1 && isRdf(c, "Description")) {
       fillStruct(p, c);
-      for (const XProp& f : p.kids) {
-        if (f.ns == kRdf && f.name == "value") {
-          XProp v = f;
-          v.ns = p.ns;
-          v.prefix = p.prefix;
-          v.name = p.name;
-          return v;
-        }
-      }
       return p;
     }
     fillStruct(p, e);
@@ -404,6 +407,34 @@ const XNode* findRdf(const XNode& n, int depth = 0) {
   return nullptr;
 }
 
+bool rdfShapeOk(const XNode& n, int depth) {
+  if (depth > 200) return false;
+  const XAttr* pt = attrOf(n, kRdf, "parseType");
+  if (pt && pt->value != "Resource") return false;
+  if (isRdf(n, "Description")) {
+    int ids = 0;
+    for (const char* k : {"about", "ID", "nodeID"}) ids += attrOf(n, kRdf, k) ? 1 : 0;
+    if (ids > 1) return false;
+  }
+  for (const XNode& k : n.kids) {
+    if (!rdfShapeOk(k, depth + 1)) return false;
+  }
+  return true;
+}
+
+bool noDuplicateFields(const std::vector<XProp>& props, int depth) {
+  if (depth > 64) return false;
+  std::set<std::pair<std::string, std::string>> seen;
+  for (const XProp& p : props) {
+    if (!seen.insert({p.ns, p.name}).second) return false;
+    if (p.kind == 1 && !noDuplicateFields(p.kids, depth + 1)) return false;
+    for (const XProp& k : p.kind == 2 ? p.kids : std::vector<XProp>()) {
+      if (k.kind == 1 && !noDuplicateFields(k.kids, depth + 1)) return false;
+    }
+  }
+  return true;
+}
+
 void collectDecls(const XNode& n, std::vector<std::pair<std::string, std::string>>& out) {
   for (const auto& d : n.decls) out.push_back(d);
   for (const XNode& k : n.kids) collectDecls(k, out);
@@ -417,13 +448,25 @@ XPacket parsePacket(const std::string& s) {
   const XNode* rdf = findRdf(root);
   if (!rdf) return pk;
   collectDecls(root, pk.decls);
-  pk.ok = true;
+  if (!rdfShapeOk(*rdf, 0)) return pk;
+  std::string about;
+  for (const XNode& d : rdf->kids) {
+    const XAttr* ab = attrOf(d, kRdf, "about");
+    if (!ab || ab->value.empty()) continue;
+    if (!about.empty() && ab->value != about) return pk;
+    if (about.empty()) about = ab->value;
+  }
   for (const XNode& d : rdf->kids) {
     for (const XAttr& a : d.attrs) {
       if (plainAttr(a)) pk.props.push_back(fromAttr(a));
     }
     for (const XNode& k : d.kids) pk.props.push_back(parseProp(k));
   }
+  if (!noDuplicateFields(pk.props, 0)) {
+    pk.props.clear();
+    return pk;
+  }
+  pk.ok = true;
   return pk;
 }
 
@@ -466,6 +509,83 @@ struct ExtDefs {
   std::map<std::string, StructDef> types;
 };
 
+struct XmpDate {
+  int y = 0, mo = 0, d = 0, h = 0, mi = 0, s = 0;
+  long long ns = 0;
+  bool tz = false;
+  int off = 0;
+};
+
+bool parseXmpDate(const std::string& s, XmpDate& r) {
+  size_t p = 0;
+  auto ch = [&](size_t i) { return i < s.size() ? s[i] : '\0'; };
+  auto more = [&] { return p < s.size(); };
+  auto gather = [&](int max, int& out) {
+    long long v = 0;
+    bool ok = false;
+    while (ch(p) >= '0' && ch(p) <= '9') {
+      v = std::min(v * 10 + (ch(p) - '0'), 100000000000LL);
+      ok = true;
+      ++p;
+    }
+    out = static_cast<int>(std::min<long long>(v, max));
+    return ok;
+  };
+  if (s.empty()) return true;
+  bool neg = ch(0) == '-';
+  if (neg) ++p;
+  if (!gather(9999, r.y) || (more() && ch(p) != '-')) return false;
+  if (neg) r.y = -r.y;
+  if (!more()) return true;
+  ++p;
+  if (!gather(12, r.mo) || (more() && ch(p) != '-')) return false;
+  if (!more()) return true;
+  ++p;
+  if (!gather(31, r.d) || (more() && ch(p) != 'T')) return false;
+  if (!more()) return true;
+  ++p;
+  if (!gather(23, r.h)) return false;
+  if (!more()) return true;
+  auto zoneChar = [&](char c) { return c == 'Z' || c == '+' || c == '-'; };
+  if (ch(p) == ':') {
+    ++p;
+    if (!gather(59, r.mi) || (more() && ch(p) != ':' && !zoneChar(ch(p)))) return false;
+  }
+  if (!more()) return true;
+  if (ch(p) == ':') {
+    ++p;
+    if (!gather(59, r.s) || (more() && ch(p) != '.' && !zoneChar(ch(p)))) return false;
+    if (ch(p) == '.') {
+      ++p;
+      size_t start = p;
+      int frac = 0;
+      if (!gather(999999999, frac) || (more() && !zoneChar(ch(p)))) return false;
+      long long v = frac;
+      for (size_t digits = p - start; digits != 9; digits > 9 ? --digits : ++digits) v = digits > 9 ? v / 10 : v * 10;
+      r.ns = v;
+    }
+  } else if (!zoneChar(ch(p))) {
+    return false;
+  }
+  if (!more()) return true;
+  r.tz = true;
+  if (ch(p) == 'Z') {
+    ++p;
+  } else {
+    int sign = ch(p) == '+' ? 1 : -1;
+    ++p;
+    int hh = 0, mm = 0;
+    if (!gather(23, hh)) return false;
+    if (more()) {
+      if (ch(p) != ':') return false;
+      ++p;
+      if (!gather(59, mm)) return false;
+    }
+    r.off = sign * (hh * 60 + mm);
+  }
+  return !more();
+}
+
 bool checkType(const XProp& p, std::string type, const ExtDefs* ext, int depth);
 
 bool checkStruct(const XProp& p, const StructDef& sd, const ExtDefs* ext, int depth) {
@@ -480,78 +600,112 @@ bool checkStruct(const XProp& p, const StructDef& sd, const ExtDefs* ext, int de
   return true;
 }
 
+thread_local bool tGpsPart1 = false;
+thread_local bool tClosedChoices = false;
+
+std::string lowerAscii(std::string v) {
+  for (char& c : v) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+  return v;
+}
+
+std::string simplifiedType(std::string type) {
+  static const std::regex choice("(open |closed )?(choice |choice$)(of )?");
+  type = trimWs(std::regex_replace(lowerAscii(type.substr(0, type.find('|'))), choice, ""));
+  if (type.empty()) return "text";
+  auto ends = [&](const std::string& t) { return type.size() >= t.size() && type.compare(type.size() - t.size(), t.size(), t) == 0; };
+  if (ends("lang alt")) return type;
+  for (const char* a : {"bag", "alt", "seq"}) {
+    if (ends(a)) return type + " text";
+  }
+  return type;
+}
+
+const StructDef* findStruct(const std::string& low, const ExtDefs* ext, bool& textOnly) {
+  textOnly = false;
+  for (const auto& kv : structTypes()) {
+    if (lowerAscii(kv.first) == low) return &kv.second;
+  }
+  for (const auto& kv : ext ? ext->types : std::map<std::string, StructDef>()) {
+    if (lowerAscii(trimWs(kv.first)) != low) continue;
+    textOnly = kv.second.fields.empty() && !kv.second.any;
+    return &ext->types.at(kv.first);
+  }
+  return nullptr;
+}
+
 bool checkType(const XProp& p, std::string type, const ExtDefs* ext, int depth) {
-  type = trimWs(type);
   if (depth > 16) return false;
-  for (const char* pre : {"Closed Choice of ", "Open Choice of ", "closed Choice of ", "open Choice of "}) {
-    if (type.rfind(pre, 0) != 0) continue;
-    std::string rest = type.substr(std::char_traits<char>::length(pre));
-    size_t bar = rest.find('|');
-    if (bar == std::string::npos) return checkType(p, rest, ext, depth + 1);
-    if (!checkType(p, rest.substr(0, bar), ext, depth + 1)) return false;
-    if (std::tolower(static_cast<unsigned char>(pre[0])) == 'o' || p.kind != 0) return true;
+  std::string head = lowerAscii(trimWs(type));
+  size_t bar = type.find('|');
+  if (tClosedChoices && head.rfind("closed choice of ", 0) == 0 && bar != std::string::npos && p.kind == 0) {
     std::string v = trimWs(p.value);
-    for (size_t b = bar + 1; b <= rest.size();) {
-      size_t e = rest.find('|', b);
-      if (e == std::string::npos) e = rest.size();
-      if (rest.compare(b, e - b, v) == 0) return true;
+    bool listed = false;
+    for (size_t b = bar + 1; b <= type.size() && !listed;) {
+      size_t e = type.find('|', b);
+      if (e == std::string::npos) e = type.size();
+      listed = type.compare(b, e - b, v) == 0;
       b = e + 1;
     }
-    return false;
+    if (!listed) return false;
   }
-  if (type == "Lang Alt") {
-    if (p.kind != 2 || p.arr != "Alt") return false;
+  std::string t = simplifiedType(type);
+  if (t == "any") return true;
+  for (const char* arr : {"Bag", "Alt", "Seq"}) {
+    std::string pre = lowerAscii(arr) + " ";
+    if (t.rfind(pre, 0) != 0 || t == "lang alt") continue;
+    if (p.kind != 2 || p.arr != arr) return false;
     for (const XProp& i : p.kids) {
-      if (i.kind != 0 || !i.hasLang) return false;
+      if (!checkType(i, t.substr(pre.size()), ext, depth + 1)) return false;
     }
     return true;
   }
-  for (const char* c : {"Bag", "Seq", "Alt"}) {
-    std::string pre = std::string(c) + " ";
-    if (type.rfind(pre, 0) == 0) {
-      if (p.kind != 2 || p.arr != c) return false;
-      for (const XProp& i : p.kids) {
-        if (!checkType(i, type.substr(pre.size()), ext, depth + 1)) return false;
-      }
-      return true;
-    }
+  if (t == "lang alt") {
+    if (p.kind != 2 || p.arr != "Alt") return false;
+    bool lang = p.kids.empty();
+    for (const XProp& i : p.kids) lang = lang || i.hasLang;
+    return lang;
   }
-  static const std::set<std::string> texty = {"Text", "ProperName", "AgentName", "Locale", "MIMEType", "RenditionClass",
-                                              "XPath", "GUID", "URI", "URL", "Choice", "Part", "FrameRate", "FrameCount"};
-  std::string v = trimWs(p.value);
-  if (texty.count(type)) return p.kind == 0;
+  static const std::set<std::string> texty = {"text", "propername", "agentname", "rational", "renditionclass",
+                                              "uri", "url", "locale", "xpath"};
+  if (texty.count(t)) return p.kind == 0;
   static const std::regex kInt("[+-]?[0-9]+");
-  static const std::regex kReal("[+-]?([0-9]+(\\.[0-9]*)?|\\.[0-9]+)([eE][+-]?[0-9]+)?");
-  static const std::regex kRational("[+-]?[0-9]+/[+-]?[0-9]+");
-  static const std::regex kDate("[0-9]{4}(-[0-9]{2}(-[0-9]{2}(T[0-9]{2}:[0-9]{2}(:[0-9]{2}(\\.[0-9]+)?)?(Z|[+-][0-9]{2}:[0-9]{2})?)?)?)?");
-  static const std::regex kGps("[0-9]{1,3},[0-9]{1,2}(,[0-9]{1,2}|\\.[0-9]+)[NSEW]");
-  if (type == "Integer") return p.kind == 0 && std::regex_match(v, kInt);
-  if (type == "Real") return p.kind == 0 && std::regex_match(v, kReal);
-  if (type == "Boolean") return p.kind == 0 && (v == "True" || v == "False");
-  if (type == "Rational") return p.kind == 0 && std::regex_match(v, kRational);
-  if (type == "Date") {
-    return p.kind == 0 &&
-           std::regex_match(v, kDate);
+  static const std::regex kReal("[+-]?[0-9]+\\.?[0-9]*|[+-]?[0-9]*\\.?[0-9]+");
+  static const std::regex kMime("[-A-Za-z0-9_+.]+/[-A-Za-z0-9_+.]+");
+  static const std::regex kGps1("[0-9]{2},[0-9]{2}[,.][0-9]{2}[NSEW]");
+  static const std::regex kGps2("[0-9]{1,3},[0-9]{1,2}(,[0-9]{1,2}|\\.[0-9]+)[NSEW]");
+  const std::string& v = p.value;
+  if (t == "integer") return p.kind == 0 && std::regex_match(v, kInt);
+  if (t == "real") return p.kind == 0 && std::regex_match(v, kReal);
+  if (t == "boolean") return p.kind == 0 && (v == "True" || v == "False");
+  if (t == "mimetype") return p.kind == 0 && std::regex_match(v, kMime);
+  if (t == "date") {
+    XmpDate d;
+    return p.kind == 0 && parseXmpDate(v, d);
   }
-  if (type == "GPSCoordinate") return p.kind == 0 && std::regex_match(v, kGps);
-  auto st = structTypes().find(type);
-  if (st != structTypes().end()) return checkStruct(p, st->second, ext, depth);
-  if (ext) {
-    auto ct = ext->types.find(type);
-    if (ct != ext->types.end()) return checkStruct(p, ct->second, ext, depth);
-  }
-  return false;
+  if (t == "gpscoordinate") return p.kind == 0 && std::regex_match(v, tGpsPart1 ? kGps1 : kGps2);
+  bool textOnly = false;
+  const StructDef* sd = findStruct(t, ext, textOnly);
+  if (!sd) return false;
+  if (textOnly) return p.kind == 0;
+  return checkStruct(p, *sd, ext, depth);
 }
 
 bool knownType(std::string type, const ExtDefs& ext) {
-  type = trimWs(type);
-  for (const char* pre : {"Closed Choice of ", "Open Choice of ", "Bag ", "Seq ", "Alt "}) {
-    if (type.rfind(pre, 0) == 0) return knownType(type.substr(std::char_traits<char>::length(pre), type.find('|') - std::char_traits<char>::length(pre)), ext);
+  std::string t = simplifiedType(type);
+  for (bool again = true; again;) {
+    again = false;
+    for (const char* pre : {"bag ", "alt ", "seq "}) {
+      if (t.rfind(pre, 0) == 0 && t != "lang alt") {
+        t = t.substr(4);
+        again = true;
+      }
+    }
   }
-  static const std::set<std::string> basic = {"Text", "ProperName", "AgentName", "Locale", "MIMEType", "RenditionClass", "XPath",
-                                              "GUID", "URI", "URL", "Integer", "Real", "Boolean", "Rational", "Date",
-                                              "Lang Alt", "GPSCoordinate", "Choice"};
-  return basic.count(type) || structTypes().count(type) || ext.types.count(type);
+  static const std::set<std::string> basic = {"text", "propername", "agentname", "locale", "mimetype", "renditionclass", "xpath",
+                                              "uri", "url", "integer", "real", "boolean", "rational", "date",
+                                              "lang alt", "gpscoordinate"};
+  bool textOnly = false;
+  return basic.count(t) || findStruct(t, &ext, textOnly) != nullptr;
 }
 
 struct PropTable {
@@ -572,7 +726,7 @@ void addXmpCommon(PropTable& t, bool y2005) {
               {"description", "Lang Alt"}, {"format", "MIMEType"}, {"identifier", "Text"}, {"language", "Bag Locale"},
               {"publisher", "Bag ProperName"}, {"relation", "Bag Text"}, {"rights", "Lang Alt"}, {"source", "Text"},
               {"subject", "Bag Text"}, {"title", "Lang Alt"}, {"type", "Bag Open Choice of Text"}});
-  t.add(kXmp, {{"Advisory", "Bag XPath"}, {"BaseURL", "URL"}, {"CreateDate", "Date"}, {"CreatorTool", "AgentName"},
+  t.add(kXmp, {{"Advisory", "Bag Text"}, {"BaseURL", "URL"}, {"CreateDate", "Date"}, {"CreatorTool", "AgentName"},
                {"Identifier", "Bag Text"}, {"MetadataDate", "Date"}, {"ModifyDate", "Date"}, {"Nickname", "Text"},
                {"Thumbnails", "Alt Thumbnail"}});
   t.add(kIdq, {{"Scheme", "Text"}});
@@ -626,7 +780,7 @@ void addXmpCommon(PropTable& t, bool y2005) {
                 {"ImageUniqueID", "Text"}, {"GPSVersionID", "Text"}, {"GPSLatitude", "GPSCoordinate"},
                 {"GPSLongitude", "GPSCoordinate"}, {"GPSAltitudeRef", "Closed Choice of Integer|0|1"},
                 {"GPSAltitude", "Rational"}, {"GPSTimeStamp", "Date"}, {"GPSSatellites", "Text"},
-                {"GPSStatus", "Closed Choice of Text|A|V"}, {"GPSMeasureMode", "Closed Choice of Text|2|3"}, {"GPSDOP", "Rational"},
+                {"GPSStatus", "Closed Choice of Text|A|V"}, {"GPSMeasureMode", y2005 ? "Closed Choice of Text|2|3" : "Closed Choice of Integer|2|3"}, {"GPSDOP", "Rational"},
                 {"GPSSpeedRef", "Closed Choice of Text|K|M|N"}, {"GPSSpeed", "Rational"},
                 {"GPSTrackRef", "Closed Choice of Text|T|M"}, {"GPSTrack", "Rational"},
                 {"GPSImgDirectionRef", "Closed Choice of Text|T|M"}, {"GPSImgDirection", "Rational"},
@@ -929,10 +1083,23 @@ std::string xmpUtf8(const std::string& raw) {
 }
 }
 
+std::string xmpPropertiesProblem(const XPacket& pk, int tableId, const std::string* mainRaw);
+
+bool prefixesCanonical(const std::vector<XProp>& props, const std::map<std::string, std::string>& canon, int depth) {
+  if (depth > 64) return false;
+  for (const XProp& p : props) {
+    auto c = canon.find(p.ns);
+    if (c != canon.end() && c->second != p.prefix) return false;
+    if (!prefixesCanonical(p.kids, canon, depth + 1)) return false;
+  }
+  return true;
+}
+
 std::string pdfaXmpProblem(const std::string& raw, int part, char conf, const std::string* mainRaw) {
   std::string packet = xmpUtf8(raw);
   XPacket pk = parsePacket(packet);
   if (!pk.ok) return "XMP metadata is not well-formed RDF/XML";
+  if (part >= 2 && packet != raw) return "XMP metadata is not encoded as UTF-8";
   std::map<std::string, std::string> id;
   for (const XProp& p : pk.props) {
     if (p.ns == kPdfaId && p.kind == 0) id[p.name] = trimWs(p.value);
@@ -946,12 +1113,11 @@ std::string pdfaXmpProblem(const std::string& raw, int part, char conf, const st
   static const std::map<std::string, std::string> canon = {{kPdfaId, "pdfaid"}, {kExtNs, "pdfaExtension"},
                                                            {kSchemaNs, "pdfaSchema"}, {kPropNs, "pdfaProperty"},
                                                            {kTypeNs, "pdfaType"}, {kFieldNs, "pdfaField"}};
-  for (const auto& d : pk.decls) {
-    auto c = canon.find(d.second);
-    if (c != canon.end() && c->second != d.first) return "namespace " + d.second + " is bound to the prefix " + d.first + " instead of " + c->second;
-  }
+  if (!prefixesCanonical(pk.props, canon, 0)) return "a PDF/A identification or extension schema property uses a non-standard prefix";
   if (mainRaw && part >= 4) return std::string();
-  if (!mainRaw && id["part"] != std::to_string(part)) return "pdfaid:part does not identify PDF/A-" + std::to_string(part);
+  static const std::regex kPart("[+-]?[0-9]+");
+  if (!mainRaw && (!std::regex_match(id["part"], kPart) || std::atoi(id["part"].c_str()) != part))
+    return "pdfaid:part does not identify PDF/A-" + std::to_string(part);
   if (part >= 4) {
     static const std::regex kYear("[0-9]{4}");
     if (!std::regex_match(id["rev"], kYear)) return "pdfaid:rev is missing or not a four-digit year";
@@ -961,15 +1127,23 @@ std::string pdfaXmpProblem(const std::string& raw, int part, char conf, const st
       return "pdfaid:conformance does not match the PDF/A-4 level";
     return std::string();
   }
-  if (!mainRaw && id["conformance"] != std::string(1, conf)) return "pdfaid:conformance does not match the PDF/A conformance level";
+  std::string accepted = conf == 'A' ? "A" : conf == 'U' ? "UA" : part == 1 ? "BA" : "BUA";
+  const std::string& declared = id["conformance"];
+  if (!mainRaw && (declared.size() != 1 || accepted.find(declared[0]) == std::string::npos))
+    return "pdfaid:conformance does not match the PDF/A conformance level";
+  return xmpPropertiesProblem(pk, part == 1 ? 2 : 3, mainRaw);
+}
+
+std::string xmpPropertiesProblem(const XPacket& pk, int tableId, const std::string* mainRaw) {
   ExtDefs ext;
   if (mainRaw) {
     XPacket mainPk = parsePacket(xmpUtf8(*mainRaw));
     if (mainPk.ok) collectExt(mainPk, ext);
   }
-  if (!validateExt(pk, mainRaw ? &ext : nullptr)) return "PDF/A extension schema is invalid";
+  if (!validateExt(pk, mainRaw ? &ext : nullptr)) return "an XMP extension schema description is invalid";
   collectExt(pk, ext);
-  const PropTable& t = table(part == 1 ? 2 : 3);
+  tGpsPart1 = tableId == 2;
+  const PropTable& t = table(tableId);
   for (const XProp& p : pk.props) {
     if (p.ns == kExtNs) continue;
     const std::string* def = t.find(p);
@@ -991,10 +1165,13 @@ bool dateParts(std::string s, bool pdf, long long& when) {
   if (pdf) {
     if (s.rfind("D:", 0) == 0) s = s.substr(2);
   } else {
+    size_t tpos = s.find('T');
+    size_t zone = tpos == std::string::npos ? std::string::npos : s.find_first_of("+-Z", tpos);
     std::string t;
-    for (char c : s) {
-      if (c != '-' && c != ':' && c != 'T') t += c;
+    for (size_t k = 0; k < std::min(zone, s.size()); ++k) {
+      if (s[k] != '-' && s[k] != ':' && s[k] != 'T') t += s[k];
     }
+    if (zone != std::string::npos) t += s.substr(zone);
     s = t;
   }
   int f[6] = {0, 1, 1, 0, 0, 0};
@@ -1038,6 +1215,77 @@ bool dateParts(std::string s, bool pdf, long long& when) {
 }
 }
 
+namespace {
+bool pdfDateMs(std::string s, long long& ms) {
+  if (s.rfind("D:", 0) != 0) return false;
+  if (!s.empty() && s.back() == '\'') {
+    if (s.size() >= 2 && s[s.size() - 2] == '\'') return false;
+    s.pop_back();
+  }
+  auto digits = [&](size_t off, size_t len, int& out) {
+    if (off + len > s.size()) return false;
+    for (size_t i = off; i < off + len; ++i) {
+      if (!std::isdigit(static_cast<unsigned char>(s[i]))) return false;
+    }
+    out = std::atoi(s.substr(off, len).c_str());
+    return true;
+  };
+  int year = 0, month = 1, day = 1, hour = 0, minute = 0, second = 0, tzh = 0, tzm = 0;
+  if (!digits(2, 4, year)) return false;
+  size_t n = s.size();
+  if (n > 6 && !digits(6, 2, month)) return false;
+  if (n > 8 && !digits(8, 2, day)) return false;
+  if (n > 10 && !digits(10, 2, hour)) return false;
+  if (n > 12 && !digits(12, 2, minute)) return false;
+  if (n > 14 && !digits(14, 2, second)) return false;
+  char sign = 'Z';
+  if (n > 16) {
+    sign = s[16];
+    if (sign != 'Z' && sign != '+' && sign != '-') return false;
+  }
+  if (n > 17 && !digits(17, 2, tzh)) return false;
+  if (n > 19 && s[19] != '\'') return false;
+  if (n > 20 && !digits(20, 2, tzm)) return false;
+  if (n > 22) return false;
+  int off = 0;
+  if (sign != 'Z') {
+    if (tzh <= 23 && tzm <= 59) off = (sign == '-' ? -1 : 1) * (tzh * 60 + tzm);
+  } else if (tzh != 0 || tzm != 0) {
+    return false;
+  }
+  std::tm t{};
+  t.tm_year = year - 1900;
+  t.tm_mon = month - 1;
+  t.tm_mday = day;
+  t.tm_hour = hour;
+  t.tm_min = minute;
+  t.tm_sec = second;
+  ms = (static_cast<long long>(timegm(&t)) - off * 60LL) * 1000;
+  return true;
+}
+
+bool xmpDateMs(const std::string& v, long long& ms) {
+  XmpDate d;
+  if (v.empty() || !parseXmpDate(v, d)) return false;
+  std::tm t{};
+  t.tm_year = d.y - 1900;
+  t.tm_mon = d.mo - 1;
+  t.tm_mday = d.d;
+  t.tm_hour = d.h;
+  t.tm_min = d.mi;
+  t.tm_sec = d.s;
+  long long sec;
+  if (d.tz) {
+    sec = static_cast<long long>(timegm(&t)) - d.off * 60LL;
+  } else {
+    t.tm_isdst = -1;
+    sec = static_cast<long long>(std::mktime(&t));
+  }
+  ms = sec * 1000 + d.ns / 1000000;
+  return true;
+}
+}
+
 std::string xmpInfoMismatch(const std::string& raw, const std::map<std::string, std::string>& info) {
   XPacket pk = parsePacket(xmpUtf8(raw));
   if (!pk.ok) return std::string();
@@ -1049,14 +1297,15 @@ std::string xmpInfoMismatch(const std::string& raw, const std::map<std::string, 
   };
   auto alt = [&](const char* name, std::string& out) {
     const XProp* p = prop(kDc, name);
-    if (!p || p->kind != 2) return false;
+    if (!p || p->kind != 2 || p->kids.empty()) return false;
     for (const XProp& k : p->kids) {
       if (k.lang == "x-default") {
         out = k.value;
         return true;
       }
     }
-    return false;
+    out = p->kids.front().value;
+    return true;
   };
   for (const auto& kv : info) {
     const std::string& key = kv.first;
@@ -1081,10 +1330,97 @@ std::string xmpInfoMismatch(const std::string& raw, const std::map<std::string, 
     if (!have) return "document information entry " + key + " has no matching XMP property";
     if (key == "CreationDate" || key == "ModDate") {
       long long a = 0, b = 0;
-      if (!dateParts(kv.second, true, a) || !dateParts(trimWs(xv), false, b) || a != b)
+      if (!pdfDateMs(kv.second, a) || !xmpDateMs(xv, b) || a != b)
         return "document information entry " + key + " does not match its XMP equivalent";
     } else if (xv != kv.second) {
       return "document information entry " + key + " does not match its XMP equivalent";
+    }
+  }
+  return std::string();
+}
+
+std::string printXmpProblem(const std::string& raw, const std::string& xVersion,
+                            const std::string& vtVersion, bool pdf20, bool objectLevel,
+                            const std::string& eVersion) {
+  std::string packet = xmpUtf8(raw);
+  XPacket pk = parsePacket(packet);
+  if (!pk.ok) return "XMP metadata is not well-formed RDF/XML";
+  size_t hdr = packet.find("<?xpacket");
+  if (hdr != std::string::npos) {
+    std::string h = packet.substr(hdr, packet.find("?>", hdr) - hdr);
+    if (h.find("bytes=") != std::string::npos || h.find("encoding=") != std::string::npos)
+      return "XMP packet header uses the bytes or encoding attribute";
+  }
+  static const std::map<std::string, std::string> canon = {
+      {kDc, "dc"}, {kXmp, "xmp"}, {kPdf, "pdf"}, {kMM, "xmpMM"}, {kPdfxId, "pdfxid"}, {kPdfvtId, "pdfvtid"},
+      {kPdfeId, "pdfe"}};
+  for (const auto& d : pk.decls) {
+    auto c = canon.find(d.second);
+    if (c != canon.end() && c->second != d.first)
+      return "namespace " + d.second + " is bound to the prefix " + d.first + " instead of " + c->second;
+  }
+  if (!eVersion.empty()) {
+    std::string why = xmpPropertiesProblem(pk, 4, nullptr);
+    if (!why.empty() || objectLevel) return why;
+    for (const XProp& p : pk.props) {
+      if (p.ns == kPdfeId && p.kind == 0 && p.name == "ISO_PDFEVersion" && trimWs(p.value) == eVersion)
+        return std::string();
+    }
+    return "pdfe:ISO_PDFEVersion is missing or does not identify " + eVersion;
+  }
+  if (objectLevel) return std::string();
+  auto prop = [&](const std::string& ns, const char* name) -> const XProp* {
+    for (const XProp& p : pk.props) {
+      if (p.ns == ns && p.name == name) return &p;
+    }
+    return nullptr;
+  };
+  auto simple = [&](const std::string& ns, const char* name) {
+    const XProp* p = prop(ns, name);
+    return p && p->kind == 0 ? trimWs(p->value) : std::string();
+  };
+  for (const XProp& p : pk.props) {
+    if (p.ns == kPdfxId && p.name != "GTS_PDFXVersion")
+      return "the PDF/X identification namespace carries the undefined property " + p.name;
+  }
+  if (!xVersion.empty() && simple(kPdfxId, "GTS_PDFXVersion") != xVersion)
+    return "pdfxid:GTS_PDFXVersion is missing or does not identify " + xVersion;
+  std::string trapped = simple(kPdf, "Trapped");
+  if (trapped != "True" && trapped != "False") return "pdf:Trapped is missing or holds a value other than True or False";
+  long long when = 0;
+  for (const char* n : {"CreateDate", "ModifyDate", "MetadataDate"}) {
+    if (!dateParts(simple(kXmp, n), false, when)) return std::string("xmp:") + n + " is missing or not a valid date";
+  }
+  if (!pdf20) {
+    for (const char* n : {"DocumentID", "VersionID", "RenditionClass"}) {
+      if (simple(kMM, n).empty()) return std::string("xmpMM:") + n + " is missing or empty";
+    }
+    const XProp* title = prop(kDc, "title");
+    bool titled = false;
+    for (const XProp& k : title && title->kind == 2 ? title->kids : std::vector<XProp>()) {
+      titled = titled || !trimWs(k.value).empty();
+    }
+    if (!titled) return "dc:title is missing or empty";
+  }
+  if (!vtVersion.empty()) {
+    for (const XProp& p : pk.props) {
+      if (p.ns == kPdfvtId && p.name != "GTS_PDFVTVersion" && p.name != "GTS_PDFVTModDate" &&
+          !(pdf20 && (p.name == "rev" || p.name == "GTS_PDFVTRev")))
+        return "the PDF/VT identification namespace carries the undefined property " + p.name;
+    }
+    if (simple(kPdfvtId, "GTS_PDFVTVersion") != vtVersion)
+      return "pdfvtid:GTS_PDFVTVersion is missing or does not identify " + vtVersion;
+    long long vtMod = 0, mod = 0;
+    if (!dateParts(simple(kPdfvtId, "GTS_PDFVTModDate"), false, vtMod))
+      return "pdfvtid:GTS_PDFVTModDate is missing or not a valid date";
+    if (dateParts(simple(kXmp, "ModifyDate"), false, mod) &&
+        simple(kXmp, "ModifyDate") != simple(kPdfvtId, "GTS_PDFVTModDate"))
+      return "pdfvtid:GTS_PDFVTModDate differs from the document modification date";
+    if (pdf20) {
+      static const std::regex kYear("[0-9]{4}");
+      if (!std::regex_match(simple(kPdfvtId, "rev"), kYear)) return "pdfvtid:rev is missing or not a four-digit year";
+      if (!std::regex_match(simple(kPdfvtId, "GTS_PDFVTRev"), kYear))
+        return "pdfvtid:GTS_PDFVTRev is missing or not a four-digit year";
     }
   }
   return std::string();
@@ -1179,6 +1515,11 @@ int evalValueType(const PfAtom& a, const Subject&, const Events& ev, bool&) {
   const std::string& scope = param(a, "scope");
   const std::string& by = param(a, "by");
   int ti = by == "pdfa-1" ? 2 : by == "pdfa-2" ? 3 : -1;
+  tGpsPart1 = ti == 2;
+  tClosedChoices = true;
+  struct Reset {
+    ~Reset() { tClosedChoices = false; }
+  } reset;
   ScopedPackets sp = packetsFor(ev, scope, ti < 0);
   NodeSet found;
   for (size_t i = 0; i < sp.pks.size(); ++i) {

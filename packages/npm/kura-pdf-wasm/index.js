@@ -2,7 +2,7 @@ import createModule from './engine/kura.js';
 
 export const LEVELS = [
   '1b', '1a', '2b', '2u', '2a', '3b', '3u', '3a', '4', '4f', '4e',
-  'x1a', 'x3', 'x4', 'x6', 'e1', 'vt1', 'vt3',
+  'x1a', 'x3', 'x4', 'x6', 'e1', 'vt1', 'vt3', 'none',
 ];
 
 export const CHECK_ONLY_LEVELS = ['x4p', 'x5g', 'x5n', 'x5pg', 'x6n', 'x6p', 'vt2'];
@@ -17,7 +17,7 @@ export class KuraError extends Error {
   }
 }
 
-const BYTE_OPTIONS = ['attachXml', 'embedSource', 'destProfile', 'defaultRgb', 'defaultCmyk', 'defaultGray'];
+const BYTE_OPTIONS = ['attachXml', 'embedSource', 'destProfile', 'defaultRgb', 'defaultCmyk', 'defaultGray', 'deviceLink'];
 
 let pending = null;
 
@@ -44,7 +44,11 @@ function prepare(options, check) {
   const out = {};
   for (const [key, value] of Object.entries(options ?? {})) {
     if (value === undefined || value === null) continue;
-    out[key] = BYTE_OPTIONS.includes(key) ? toBytes(value, `options.${key}`) : value;
+    if (BYTE_OPTIONS.includes(key) || (key === 'convertColors' && typeof value !== 'string')) {
+      out[key] = toBytes(value, `options.${key}`);
+    } else {
+      out[key] = Array.isArray(value) ? value.join(',') : value;
+    }
   }
   if (check) out.check = true;
   return out;
