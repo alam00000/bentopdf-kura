@@ -8,7 +8,7 @@ The engine and everything in the [repository](https://github.com/alam00000/bento
 
 ## Commercial license
 
-If you want to use Kura inside a proprietary or closed-source product, as the backend of a service without AGPL obligations, or for OEM redistribution, a commercial license is available. Contact us at [contact@bentopdf.com](mailto:contact@bentopdf.com).
+If you want to use Kura inside a proprietary or closed-source product, as the backend of a service without AGPL obligations, or for OEM redistribution, commercial licenses are available as [annual subscriptions from $99/year](https://www.bentopdf.com/kura#pricing), under the [Kura Commercial License](https://github.com/alam00000/bentopdf-kura/blob/main/COMMERCIAL-LICENSE.md). For OEM terms, contact us at [contact@bentopdf.com](mailto:contact@bentopdf.com).
 
 ## Third-party components
 

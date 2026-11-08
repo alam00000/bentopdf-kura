@@ -158,7 +158,7 @@ That keeps your server responsive and gives you crash isolation. For untrusted u
 
 ## License
 
-AGPL-3.0-only. For use in proprietary products, a commercial license is available; contact us at [contact@bentopdf.com](mailto:contact@bentopdf.com). Bundled third-party components keep their own licenses; see [NOTICE.md](https://github.com/alam00000/bentopdf-kura/blob/main/NOTICE.md).
+AGPL-3.0-only. For use in proprietary products, commercial licenses are available as [annual subscriptions from $99/year](https://www.bentopdf.com/kura#pricing), under the [Kura Commercial License](https://github.com/alam00000/bentopdf-kura/blob/main/COMMERCIAL-LICENSE.md); for OEM terms, contact us at [contact@bentopdf.com](mailto:contact@bentopdf.com). Bundled third-party components keep their own licenses; see [NOTICE.md](https://github.com/alam00000/bentopdf-kura/blob/main/NOTICE.md).
 
 ## Locked files
 

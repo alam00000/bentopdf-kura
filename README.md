@@ -355,7 +355,7 @@ See [BUILDING.md](https://github.com/alam00000/bentopdf-kura/blob/main/BUILDING.
 
 Kura is licensed under the [GNU AGPL v3](https://github.com/alam00000/bentopdf-kura/blob/main/LICENSE).
 
-If you need to use Kura in a proprietary or closed-source product, a commercial license is available. Contact us at [contact@bentopdf.com](mailto:contact@bentopdf.com).
+If you need to use Kura in a proprietary or closed-source product, commercial licenses are available as [annual subscriptions from $99/year](https://www.bentopdf.com/kura#pricing), under the [Kura Commercial License](COMMERCIAL-LICENSE.md). For OEM terms, contact us at [contact@bentopdf.com](mailto:contact@bentopdf.com).
 
 Bundled third-party components retain their own licenses. See [NOTICE.md](https://github.com/alam00000/bentopdf-kura/blob/main/NOTICE.md) for the full list.
 
