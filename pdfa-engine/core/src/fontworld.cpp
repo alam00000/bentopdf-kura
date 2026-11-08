@@ -155,7 +155,33 @@ const Range kRanges[] = {
     {0x2300, 0x23FF, "NotoSansSymbols"}, {0x2460, 0x24FF, "NotoSansSymbols"}, {0x2500, 0x27BF, "NotoSansSymbols2"},
     {0x1F000, 0x1FBFF, "NotoSansSymbols2"}};
 
+thread_local std::string gHanFamily = "NotoSansSC";
+
+const char* cjkFamilyFor(uint32_t cp) {
+  if ((cp >= 0x3040 && cp <= 0x30FF) || (cp >= 0x31F0 && cp <= 0x31FF) || (cp >= 0xFF66 && cp <= 0xFF9F)) return "NotoSansJP";
+  if ((cp >= 0x1100 && cp <= 0x11FF) || (cp >= 0x3130 && cp <= 0x318F) || (cp >= 0xAC00 && cp <= 0xD7AF)) return "NotoSansKR";
+  if ((cp >= 0x3000 && cp <= 0x303F) || (cp >= 0x3400 && cp <= 0x4DBF) || (cp >= 0x4E00 && cp <= 0x9FFF) ||
+      (cp >= 0xF900 && cp <= 0xFAFF) || (cp >= 0xFF00 && cp <= 0xFF65) || (cp >= 0x20000 && cp <= 0x2FFFF))
+    return gHanFamily.c_str();
+  return nullptr;
+}
+
+std::string hanFamilyFor(const std::string& lowerBase, const std::set<uint32_t>& text) {
+  for (uint32_t cp : text)
+    if ((cp >= 0x3040 && cp <= 0x30FF) || (cp >= 0xFF66 && cp <= 0xFF9F)) return "NotoSansJP";
+  for (uint32_t cp : text)
+    if ((cp >= 0xAC00 && cp <= 0xD7AF) || (cp >= 0x1100 && cp <= 0x11FF)) return "NotoSansKR";
+  for (const char* k : {"gothic", "mincho", "meiryo", "hiragino", "kozmin", "kozgo", "msgothic", "ms-gothic", "ms-mincho", "yugoth", "yumin", "osaka"})
+    if (lowerBase.find(k) != std::string::npos) return "NotoSansJP";
+  for (const char* k : {"gulim", "batang", "dotum", "gungsuh", "malgun", "nanum"})
+    if (lowerBase.find(k) != std::string::npos) return "NotoSansKR";
+  for (const char* k : {"mingliu", "pmingliu", "dfkai", "kaiu", "msjh", "jhenghei", "taipei"})
+    if (lowerBase.find(k) != std::string::npos) return "NotoSansTC";
+  return "NotoSansSC";
+}
+
 const char* familyFor(uint32_t cp, bool serif) {
+  if (const char* cjk = cjkFamilyFor(cp)) return cjk;
   for (const Range& r : kRanges)
     if (cp >= r.lo && cp <= r.hi) return r.family;
   return serif ? "NotoSerif" : "NotoSans";
@@ -181,7 +207,15 @@ std::shared_ptr<WFont> loadFont(Ctx& ctx, WorldCache& cache, const std::string& 
   if (it != cache.fonts.end()) return it->second;
   auto f = std::make_shared<WFont>();
   f->name = name;
-  if (!ctx.opt.loadWorldFont || !ctx.opt.loadWorldFont(name, f->data) || !f->parse() ||
+  bool cjk = false;
+  for (const char* sc : {"JP", "SC", "TC", "KR"}) {
+    std::string pre = std::string("NotoSans") + sc + "-";
+    if (name.rfind(pre, 0) == 0) {
+      cjk = true;
+      if (!ctx.opt.loadCjkFont || !ctx.opt.loadCjkFont(sc, name.find("-Bold") != std::string::npos, f->data)) return nullptr;
+    }
+  }
+  if ((!cjk && (!ctx.opt.loadWorldFont || !ctx.opt.loadWorldFont(name, f->data))) || !f->parse() ||
       FT_New_Memory_Face(cache.lib.lib, reinterpret_cast<const FT_Byte*>(f->data.data()),
                          static_cast<FT_Long>(f->data.size()), 0, &f->face) != 0 ||
       FT_Select_Charmap(f->face, FT_ENCODING_UNICODE) != 0) {
@@ -741,6 +775,9 @@ bool embedWorldSubstitute(Ctx& ctx, QPDFObjectHandle font) {
     text[code] = {u};
   }
   if (text.empty()) return false;
+  std::set<uint32_t> allText;
+  for (const auto& [code, cps] : text) allText.insert(cps.begin(), cps.end());
+  gHanFamily = hanFamilyFor(lower, allText);
 
   std::shared_ptr<WFont> base = loadFont(ctx, cache, serif ? "NotoSerif-Regular" : "NotoSans-Regular");
   if (!base) base = loadFont(ctx, cache, "NotoSans-Regular");

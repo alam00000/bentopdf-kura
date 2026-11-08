@@ -61,7 +61,7 @@ The names match the [npm package](/npm) options; every one maps to a [CLI](/cli)
 | `attachXmlName`, `facturxProfile` | e-invoice attachment name and profile; `facturxProfile` is up to 32 letters, digits, spaces, `_` or `-`, for example `EN 16931` |
 | `profile` | a bundled preflight profile to apply, by its `id` from `/api/profiles`, for example `press/book-text-pages-check-and-fix` |
 | `report=json` | return the JSON report with the PDF inside instead of raw bytes |
-| `password` | the password of an encrypted input, when you cannot send the `X-Password` header; the header wins when both are sent |
+| `password` | the password of an encrypted input, as a form field when you cannot send the `X-Password` header; the header wins when both are sent. It is not read from the URL, because URLs end up in logs |
 | `dedupe=true` | through a [coordinator](/self-hosting#several-machines): reuse the result of an identical recent job instead of converting again |
 
 ### Body
