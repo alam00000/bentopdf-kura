@@ -1,6 +1,6 @@
 # Preflight profiles
 
-A preflight profile is a set of checks to run against a document, optionally with repairs to apply. Kura ships 397 of them under `pdfa-engine/profiles/`, every one written by BentoPDF from public sources and generated from one script, and it accepts your own.
+A preflight profile is a set of checks to run against a document, optionally with repairs to apply. Kura ships 685 of them under `pdfa-engine/profiles/`, every one written by BentoPDF from public sources and generated from one script, and it accepts your own.
 
 ```bash
 kura --check --profile pdfa-engine/profiles/report/report-hairlines.json in.pdf

@@ -56,7 +56,7 @@ PDF/VT (ISO 16612) is PDF/X-4 plus a record structure for personalized print run
 
 ## Check-only targets
 
-Seven flavours reference an external press profile rather than embedding one: `x4p`, `x5g`, `x5n`, `x5pg`, `x6n`, `x6p` and `vt2`. Kura validates documents against them with `--check` but does not produce them, because producing one means asserting a press characterization the engine cannot know.
+Seven flavours reference an external press profile rather than embedding one: `x4p`, `x5g`, `x5n`, `x5pg`, `x6n`, `x6p` and `vt2`. Kura validates documents against them with `--check` and, apart from `x5n`, does not produce them, because producing one means asserting a press characterization the engine cannot know. `x5n` is produced when you supply the press profile and the address it is published at (`--dest-profile` and `--profile-url`).
 
 ## E-invoices
 

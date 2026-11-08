@@ -25,6 +25,8 @@ COPY --from=server /src/target/release/kura-server /usr/local/bin/kura-server
 COPY pdfa-engine/core/fonts-world /usr/local/share/kura/fonts-world
 COPY pdfa-engine/core/fonts-cjk /usr/local/share/kura/fonts-cjk
 COPY pdfa-engine/core/icc /usr/local/share/kura/icc
+COPY pdfa-engine/third_party/icc /tmp/icc
+RUN while read -r f; do [ -n "$f" ] && cp "/tmp/icc/$f" /usr/local/share/kura/icc/; done < /tmp/icc/SHIP && cp -R /tmp/icc/LICENSES /usr/local/share/kura/icc/LICENSES && rm -rf /tmp/icc
 COPY pdfa-engine/third_party/cmap-resources/LICENSE.md /usr/local/share/kura/licenses/CMAP-RESOURCES-LICENSE.md
 COPY site/index.html site/preflight.html site/app.js site/preflight.js site/ui.js site/pdf.js \
      site/profiles.js site/engine-http.js site/app.css site/logo.svg site/

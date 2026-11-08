@@ -28,7 +28,7 @@ const API_TOKEN = process.env.KURA_API_TOKEN ?? '';
 const KURA_BIN = path.resolve(process.env.KURA_BIN ?? '/usr/local/bin/kura');
 const PROFILES = path.resolve(process.env.KURA_PROFILES ?? path.join(ROOT, 'pdfa-engine', 'profiles'));
 
-const LEVELS = ['1b', '1a', '2b', '2u', '2a', '3b', '3u', '3a', '4', '4f', '4e', 'x1a', 'x3', 'x4', 'x6', 'e1', 'vt1', 'vt3'];
+const LEVELS = ['1b', '1a', '2b', '2u', '2a', '3b', '3u', '3a', '4', '4f', '4e', 'x1a', 'x3', 'x4', 'x6', 'e1', 'vt1', 'vt3', 'none'];
 const CHECK_ONLY = ['x4p', 'x5g', 'x5n', 'x5pg', 'x6n', 'x6p', 'vt2'];
 
 const BOOL_FLAGS = {

@@ -13,6 +13,8 @@ fill() {
   rm -rf "$NPM/$pkg/bin/fonts-world" "$NPM/$pkg/bin/fonts-cjk" "$NPM/$pkg/bin/icc"
   cp -R "$ROOT/pdfa-engine/core/fonts-world" "$ROOT/pdfa-engine/core/fonts-cjk" "$NPM/$pkg/bin/"
   cp -R "$ROOT/pdfa-engine/core/icc" "$NPM/$pkg/bin/icc"
+  while read -r f; do [ -n "$f" ] && cp "$ROOT/pdfa-engine/third_party/icc/$f" "$NPM/$pkg/bin/icc/"; done < "$ROOT/pdfa-engine/third_party/icc/SHIP"
+  cp -R "$ROOT/pdfa-engine/third_party/icc/LICENSES" "$NPM/$pkg/bin/icc/LICENSES"
   cp "$ROOT/LICENSE" "$NPM/$pkg/LICENSE"
   cp "$ROOT/NOTICE.md" "$NPM/$pkg/NOTICE.md"
   echo "filled $pkg from $from"

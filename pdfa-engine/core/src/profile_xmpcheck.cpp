@@ -1216,6 +1216,18 @@ bool dateParts(std::string s, bool pdf, long long& when) {
 }
 
 namespace {
+
+long long utcSeconds(const std::tm& t) {
+  long long y = t.tm_year + 1900LL, m = t.tm_mon + 1LL;
+  y -= m <= 2;
+  long long era = (y >= 0 ? y : y - 399) / 400;
+  long long yoe = y - era * 400;
+  long long doy = (153 * (m + (m > 2 ? -3 : 9)) + 2) / 5 + t.tm_mday - 1;
+  long long doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
+  long long days = era * 146097 + doe - 719468;
+  return days * 86400 + t.tm_hour * 3600LL + t.tm_min * 60LL + t.tm_sec;
+}
+
 bool pdfDateMs(std::string s, long long& ms) {
   if (s.rfind("D:", 0) != 0) return false;
   if (!s.empty() && s.back() == '\'') {
@@ -1260,7 +1272,7 @@ bool pdfDateMs(std::string s, long long& ms) {
   t.tm_hour = hour;
   t.tm_min = minute;
   t.tm_sec = second;
-  ms = (static_cast<long long>(timegm(&t)) - off * 60LL) * 1000;
+  ms = (utcSeconds(t) - off * 60LL) * 1000;
   return true;
 }
 
@@ -1276,7 +1288,7 @@ bool xmpDateMs(const std::string& v, long long& ms) {
   t.tm_sec = d.s;
   long long sec;
   if (d.tz) {
-    sec = static_cast<long long>(timegm(&t)) - d.off * 60LL;
+    sec = utcSeconds(t) - d.off * 60LL;
   } else {
     t.tm_isdst = -1;
     sec = static_cast<long long>(std::mktime(&t));

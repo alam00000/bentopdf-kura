@@ -24,9 +24,9 @@ curl -o out.pdf --data-binary @in.pdf 'http://localhost:8080/api/convert?level=2
 
 `POST /api/check?level=<level>` returns the report as JSON without changing anything; add `analyze=true` or `profile=<bundled profile>` for preflight findings. `GET /api/profiles` lists the bundled profiles, `POST /api/verify-password` checks a password, `GET /healthz` reports `{ok, version, active, queued}`.
 
-Query parameters take the same names as the npm package options (`ua`, `lang`, `rasterDpi`, `outputCondition`, ...). Send `multipart/form-data` with a `file` field when you also need to send a custom `profile`, an e-invoice `xml` or ICC profiles. `X-Password` carries the password of an encrypted input.
+Query parameters take the same names as the npm package options (`ua`, `lang`, `rasterDpi`, `outputCondition`, ...); switches take `true`, `1` or `on`. `profile=<id>` names a bundled profile by the `id` from `/api/profiles`. Profile variables, colour profile names and file paths cannot be passed over HTTP; upload ICC files as form fields instead. Send `multipart/form-data` with a `file` field when you also need to send a custom `profile`, an e-invoice `xml` or ICC profiles. `X-Password` carries the password of an encrypted input.
 
-Errors are JSON with `ok: false`, an `errorCode` and an `error`: `400 BAD_LEVEL` / `BAD_REQUEST` / `BAD_PROFILE` / `NOT_A_PDF`, `401 UNAUTHORIZED`, `413 TOO_LARGE`, `422` with the engine's rejection code, `429 BUSY`, `504 TIMEOUT`.
+Errors are JSON with `ok: false`, an `errorCode` and an `error`: `400 BAD_LEVEL` / `BAD_REQUEST` / `BAD_PROFILE` / `NOT_A_PDF`, `401 UNAUTHORIZED`, `413 TOO_LARGE`, `404 NOT_FOUND`, `422` with the engine's rejection code, `429 BUSY`, `500 INTERNAL`, `504 TIMEOUT`.
 
 The full reference is in the docs: [HTTP API](https://kura.bentopdf.com/docs/http-api).
 
@@ -42,6 +42,11 @@ The full reference is in the docs: [HTTP API](https://kura.bentopdf.com/docs/htt
 | `KURA_TIMEOUT_MS` | 600000 | per-job time limit |
 | `KURA_API_TOKEN` | (unset) | when set, `/api/*` requires `Authorization: Bearer <token>` (or `X-Api-Token`) |
 | `KURA_LOG_FORMAT` | text | `json` for one JSON object per log line |
+| `KURA_LOG_LEVEL` | info | `warn`, `error` or `debug` |
+| `KURA_TLS_CERT`, `KURA_TLS_KEY` | (unset) | PEM certificate and key; the service then speaks HTTPS |
+| `KURA_BIN` | /usr/local/bin/kura | the engine binary run for each job |
+| `KURA_PROFILES` | pdfa-engine/profiles | the bundled preflight profiles listed at `/api/profiles` |
+| `KURA_SITE` | site | the folder with the web pages |
 
 The server has no authentication unless `KURA_API_TOKEN` is set, and it binds all interfaces by default. On a public host, set a token or bind `KURA_HOST` to localhost behind an authenticating reverse proxy, which is also where TLS and rate limiting belong.
 
@@ -55,6 +60,8 @@ The same image doubles as the CLI: pass arguments and it converts instead of ser
 docker run --rm --user "$(id -u):$(id -g)" -v "$PWD":/work \
   ghcr.io/alam00000/bentopdf-kura:latest --level 2b in.pdf out.pdf
 ```
+
+A first argument of `serve`, `coordinator` or `worker` (or none) starts the service; anything else, `tool ...` included, runs `kura`.
 
 ## Several machines
 

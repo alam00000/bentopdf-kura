@@ -20,6 +20,7 @@ tests
 **/node_modules
 pdfa-engine/third_party/*
 !pdfa-engine/third_party/harfbuzz
+!pdfa-engine/third_party/icc
 site/kura.js
 site/kura.wasm
 site/worker.js

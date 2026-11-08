@@ -34,7 +34,7 @@ Converts one document. Returns a `Promise<KuraResult>`; throws `KuraError` when 
 
 ```ts
 type Level = '1b' | '1a' | '2b' | '2u' | '2a' | '3b' | '3u' | '3a' | '4' | '4f' | '4e'
-           | 'x1a' | 'x3' | 'x4' | 'x6' | 'e1' | 'vt1' | 'vt3';
+           | 'x1a' | 'x3' | 'x4' | 'x6' | 'e1' | 'vt1' | 'vt3' | 'none';
 
 interface KuraOptions {
   ua?: boolean;                 // layer PDF/UA on a PDF/A level
@@ -50,6 +50,7 @@ interface KuraOptions {
   facturxProfile?: string;
   embedSource?: boolean;        // attach the input document with /AFRelationship /Source
   embedSourceName?: string;
+  pdfVersion?: string;          // '1.3'..'2.0', with level 'none'
   outputCondition?: string;     // PDF/X output intent identification
   outputConditionInfo?: string;
   registry?: string;

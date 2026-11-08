@@ -123,6 +123,29 @@ kura --level 2b --convert-colors gray in.pdf out.pdf
 | `gray` | grayscale | the built-in Dot Gain 15% |
 | `rgb` | RGB | sRGB IEC61966-2.1 |
 | an ICC file | that profile's colour space | the file; a CMYK profile also becomes the output intent |
+
+#### Colour profiles: what is included and where Kura looks
+
+You can use any ICC profile: pass the file, or give its name (the description inside the profile, for example `"ISO Coated v2 (ECI)"`) and Kura finds it. A name is looked up in this order, first match wins:
+
+1. every `--icc-folder <dir>` you pass;
+2. the computer's colour folders:
+   - Windows: `C:\Windows\System32\spool\drivers\color` and the Adobe profile folder under Common Files;
+   - macOS: `~/Library/ColorSync/Profiles`, `/Library/ColorSync/Profiles`, `/System/Library/ColorSync/Profiles` and the Adobe profile folders under Application Support;
+   - Linux: `~/.color/icc`, `~/.local/share/color/icc`, `/usr/share/color/icc` and `/usr/local/share/color/icc`;
+3. the profiles that ship with Kura, in the `icc` folder next to the binary (or `/usr/local/share/kura/icc` in Docker).
+
+So a profile installed by Adobe applications, a printer driver or your operating system is used automatically, without any option.
+
+Kura ships these profiles:
+
+| Profiles | Source |
+|---|---|
+| Dot Gain 10%, 15%, 20%, 25%, 30%, Gray Gamma 1.8 and 2.2, ProPhoto RGB, Lab D50, PCS XYZ, Flat XYZ, Black & White | made by Kura from published formulas, free to use |
+| Coated FOGRA27, Coated FOGRA39, Uncoated FOGRA29, Web Coated FOGRA28, Coated GRACoL 2006, U.S. Web Coated (SWOP) v2, U.S. Web Uncoated v2, Web Coated SWOP 2006 Grade 3 and 5, Japan Color 2001 Coated and Uncoated, 2002 Newspaper, 2003 Web Coated, Japan Web Coated, Adobe RGB (1998), Apple RGB, ColorMatch RGB, PAL/SECAM, SMPTE-C, HDTV, NTSC, PAL | Adobe, under Adobe's colour profile bundling licence (`ICC-PROFILE-TERMS.md`) |
+| SWOP 2006 Coated 3 (IDEAlliance), ISO Coated v2 (ECI), sRGB IEC61966-2.1 | redistributable under their owners' terms |
+
+Coated GRACoL 2006 (CMYK) and sRGB are also built into the engine, so conversion works with no profile files at all; the browser build relies on those. A name that is not found anywhere is refused with `ICC_PROFILE_MISSING`; Kura never silently swaps in another profile.
 | a profile name | that profile's colour space | looked up by file name or description in the system colour folders and `--icc-folder` |
 
 With a CMYK target, RGB, calibrated RGB and gray, and Lab are converted; device CMYK is kept as it is; ICC-based CMYK is written as device CMYK under the output intent; device gray is kept unless `--gray-to-k` is given. Spot colours (Separation and DeviceN) become process colour unless `--keep-spots` is given. With a gray or RGB target, everything except spot colours is converted. Images, text, vector art and shadings are all converted, and the report lists the changes as `COLOR_CONVERTED`.

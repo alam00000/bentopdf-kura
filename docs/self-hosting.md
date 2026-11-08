@@ -37,6 +37,14 @@ Set these with `-e` flags or in your compose file:
 | `KURA_API_TOKEN` | (unset) | when set, `/api/*` requires `Authorization: Bearer <token>` (or `X-Api-Token`); unauthenticated otherwise |
 | `KURA_LOG_FORMAT` | text | `json` writes one JSON object per log line, for log collectors |
 | `KURA_LOG_LEVEL` | info | `warn` or `error` for quieter logs, `debug` for more |
+| `KURA_TLS_CERT`, `KURA_TLS_KEY` | (unset) | PEM certificate chain and key; set both and the service speaks HTTPS itself |
+| `KURA_BIN` | `/usr/local/bin/kura` | the engine binary the service runs for each job |
+| `KURA_PROFILES` | `pdfa-engine/profiles` (`/kura/pdfa-engine/profiles` in the image) | the folder of bundled preflight profiles listed at `/api/profiles` |
+| `KURA_SITE` | `site` (`/kura/site` in the image) | the folder with the web pages |
+
+Numbers outside their range are clamped: `KURA_CONCURRENCY` 1 to 1024, `KURA_QUEUE` 0 to 100000, `KURA_TIMEOUT_MS` at least 1000, `KURA_MAX_UPLOAD_MB` at least 1. A value that is not a number is ignored and the default used. The service prints the concurrency, queue and upload limit it ended up with in its first log line.
+
+The engine inside the container also reads its own variables, such as `PDFA_TIMEOUT` and `KURA_FONT_DIR`; see [CLI environment](/cli#environment). The service sets `PDFA_TIMEOUT` itself from `KURA_TIMEOUT_MS`.
 
 Each job is a separate engine process with its own memory, so size `KURA_CONCURRENCY` to your cores and memory: 2 is right for a small VPS, 4 to 8 for a real server. A 500-page scanned document at PDF/A-1 can need a few gigabytes while its pages are rasterized.
 
@@ -75,7 +83,13 @@ docker run --rm --user "$(id -u):$(id -g)" -v "$PWD":/work \
   ghcr.io/alam00000/bentopdf-kura:latest --level 2b in.pdf out.pdf
 ```
 
-Every [CLI option](/cli) works, including batch mode over a mounted folder.
+Every [CLI option](/cli) works, including batch mode over a mounted folder and the [tools](/cli#tools):
+
+```bash
+docker run --rm -v "$PWD":/work ghcr.io/alam00000/bentopdf-kura:latest tool info in.pdf
+```
+
+The rule is simple: a first argument of `serve`, `coordinator` or `worker`, or none at all, starts the service; anything else is handed to `kura`. The bundled colour profiles and the world and CJK font packs are in `/usr/local/share/kura`, where the CLI finds them on its own.
 
 ## Without Docker
 
@@ -87,6 +101,17 @@ KURA_BIN=/usr/local/bin/kura server/target/release/kura-server serve
 ```
 
 Run it from the repository folder, or set `KURA_SITE` to the folder with the web interface and `KURA_PROFILES` to the bundled profiles (`site` and `pdfa-engine/profiles` by default).
+
+`kura-server` has three roles. Every option can also be set by the environment variable shown, which is how the container is usually configured:
+
+| Command | Options |
+|---|---|
+| `kura-server serve` (the default with no command) | `--coordinator <url>` (`KURA_COORDINATOR`): pass every job to a coordinator instead of running it here |
+| `kura-server coordinator` | `--data <dir>` (`KURA_DATA`, default `kura-data`), `--hot-folder <spec>` (repeatable; `KURA_HOT_FOLDERS`, separated by `;`), `--max-attempts <n>` (`KURA_MAX_ATTEMPTS`, 3), `--lease-ms <ms>` (`KURA_LEASE_MS`, 30000), `--result-ttl-s <s>` (`KURA_RESULT_TTL_S`, 3600) |
+| `kura-server worker` | `--coordinator <url>` (`KURA_COORDINATOR`, required), `--slots <n>` (`KURA_SLOTS`), `--name <name>` (`KURA_WORKER_NAME`, `worker`) |
+| any role | `--tls-cert`, `--tls-key` (`KURA_TLS_CERT`, `KURA_TLS_KEY`), `--ca-file` (`KURA_CA_FILE`), `--insecure-http` (`KURA_INSECURE_HTTP`), `--help`, `--version` |
+
+The service stops cleanly on `SIGTERM` or Ctrl-C: it stops accepting connections and gives running requests up to 10 seconds. A worker finishes the jobs it is running first; a second signal stops it at once.
 
 ## Several machines
 
@@ -141,14 +166,14 @@ docker run -d --name kura-coordinator -p 8080:8080 -e KURA_CLUSTER_TOKEN=change-
   --hot-folder '/srv/scans?level=2b&ua=true' --hot-folder '/srv/print?level=x4&profile=press/book-text-pages-check-and-fix'
 ```
 
-The folders must be writable by the container's user (uid 10001). Each gets `input/`, `done/` and `failed/`. Drop files into `input/`; once a file has stopped growing it is queued. A converted file lands in `done/` under the same name with `.pdf`, with its report next to it as `.json`. A file the engine rejects moves to `failed/` with a `.json` that says why. Add `mode=check` to only check: the report goes to `done/` with the untouched original.
+A folder's options take the same names and values as the [HTTP API](/http-api#query-parameters), plus `mode=convert` (the default) or `mode=check`, and `dedupe=true`. They are checked when the coordinator starts: a folder with a bad option stops it with a message naming the folder. The folders must be writable by the container's user (uid 10001). Each gets `input/`, `done/` and `failed/`. Drop files into `input/`; once a file has stopped growing it is queued. A converted file lands in `done/` under the same name with `.pdf`, with its report next to it as `.json`. A file the engine rejects moves to `failed/` with a `.json` that says why. Add `mode=check` to only check: the report goes to `done/` with the untouched original.
 
 ### Coordinator and worker settings
 
 | Env var | Default | Meaning |
 |---|---|---|
 | `KURA_CLUSTER_TOKEN` | (required) | shared secret between the coordinator, its workers and `serve --coordinator` front ends |
-| `KURA_DATA` | `/data` in the image | where the coordinator keeps its queue and job files |
+| `KURA_DATA` | `/data` in the image, `kura-data` otherwise | where the coordinator keeps its queue and job files |
 | `KURA_HOT_FOLDERS` | (none) | watched folders, separated by `;`, same form as `--hot-folder` |
 | `KURA_MAX_ATTEMPTS` | 3 | tries per job before it is marked failed |
 | `KURA_LEASE_MS` | 30000 | how long a silent worker keeps its jobs before they are handed to another |

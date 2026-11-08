@@ -51,7 +51,7 @@ Converts one document. Returns a `Promise<KuraResult>`; throws `KuraError` when 
 
 ```ts
 type Level = '1b' | '1a' | '2b' | '2u' | '2a' | '3b' | '3u' | '3a' | '4' | '4f' | '4e'
-           | 'x1a' | 'x3' | 'x4' | 'x6' | 'e1' | 'vt1' | 'vt3';
+           | 'x1a' | 'x3' | 'x4' | 'x6' | 'e1' | 'vt1' | 'vt3' | 'none';
 
 interface KuraOptions {
   ua?: boolean;                 // layer PDF/UA on a PDF/A level

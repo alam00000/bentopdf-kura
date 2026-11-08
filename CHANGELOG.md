@@ -14,6 +14,44 @@ All notable changes to this project are documented here. The format follows
   matching the CLI flags. A PDF/X-4 can now be made fully CMYK with a press
   profile as its output intent from any of them.
 - The colour conversion flags are documented in the CLI reference.
+- Check mode matches veraPDF: the same verdict on all 2,694 files of the
+  veraPDF test corpus and on a failing and a passing test file for every veraPDF
+  rule at every PDF/A level and at PDF/UA-1 and UA-2, including the ISO 32005
+  structure rules for UA-2.
+- PDF/X, PDF/E and PDF/VT checks aligned with an independent industry checker,
+  following the ISO standard where the two differ.
+- Substitute fonts for about 50 scripts (Noto, SIL OFL) and for Chinese,
+  Japanese and Korean, shaped with HarfBuzz.
+- Adobe's predefined CJK CMaps and CID-to-Unicode tables (BSD-3-Clause).
+- Twelve ICC profiles made by Kura (Dot Gain 10-30%, Gray Gamma 1.8 and 2.2,
+  ProPhoto RGB, Lab D50, PCS XYZ, Flat XYZ, Black & White), shipped with every
+  build; `--icc-folder` and the system colour folders are searched for named
+  profiles.
+- Release archives, the Docker image and the native npm packages now also ship
+  the 25 third-party profiles whose terms allow redistribution (22 Adobe bundle
+  profiles, SWOP 2006, ISO Coated v2, sRGB), listed in
+  `pdfa-engine/third_party/icc/SHIP`.
+- Overprint flattening (`ink.flatten_overprint`), ink limits and tone curves in
+  colour conversion presets; 685 bundled presets.
+- `--level none` with `--pdf-version` to apply a preset without a standard; the
+  npm packages and the HTTP API accept level `none` and `pdfVersion`.
+- Public conformance results on 4,860 real-world PDFs at all 20 levels, with
+  the scripts to reproduce them (`conformance/`).
+
+### Changed
+
+- A named colour profile that cannot be found is refused with
+  `ICC_PROFILE_MISSING` instead of silently replaced by the built-in CMYK
+  profile.
+- PDF/X conversion keeps LZW-compressed streams by re-encoding them instead of
+  emptying them.
+
+### Fixed
+
+- Many conversion fixes found by the conformance run: indexed images in PDF/A-1
+  colour conversion, inherited page resources in transparency detection,
+  PDF/UA-2 structure destinations on outlines, JPEG 2000 images reached only
+  through the structure tree, inline images inside patterns and Type 3 glyphs.
 
 ## [1.3.0] - 2026-11-06
 

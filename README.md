@@ -8,7 +8,7 @@
 
 Kura converts everyday PDFs into archival, print and accessible ones: every PDF/A level, PDF/UA, PDF/X, PDF/E and PDF/VT, from one engine. It repairs what is wrong, embeds what is missing, converts colour where the standard demands it, and writes a file that validates clean, or tells you exactly why it cannot.
 
-It is also a full print preflight engine: 397 bundled profiles check and repair what a press cares about, such as hairlines, rich black, low-resolution images, overprint, transparency, page boxes, fonts and colour, and you can write your own in JSON from a published catalogue of checks and fixes.
+It is also a full print preflight engine: 685 bundled profiles check and repair what a press cares about, such as hairlines, rich black, low-resolution images, overprint, transparency, page boxes, fonts and colour, and you can write your own in JSON from a published catalogue of checks and fixes.
 
 The name comes from the 蔵 (*kura*), the traditional Japanese storehouse where a family kept the things meant to outlast them.
 
@@ -48,13 +48,15 @@ Making a PDF conform to a standard has three problems: **tools that quietly prod
 
 Kura is built around solving those three.
 
-* **Honest output.** Every conversion is checked. When the engine cannot make a document conform, it refuses with a reason and, where one exists, the level that would work. It never writes a file that claims a standard it does not meet, and its check mode has never reported a false finding in testing.
+* **Honest output.** Every conversion is checked. When the engine cannot make a document conform, it refuses with a reason and, where one exists, the level that would work. It never writes a file that claims a standard it does not meet, and its check mode gives the same verdict as veraPDF on every file of veraPDF's test corpus and on a test file for every one of veraPDF's PDF/A and PDF/UA rules.
 
-* **Content preserving.** Text stays searchable, attachments stay attached, signatures are re-applied in the same pass, and pages are rasterized only when a rule leaves no other way, never silently.
+* **Content preserving.** Text stays searchable, attachments stay attached, signatures are re-applied in the same pass, transparency and overprint are flattened as vectors, and pages are rasterized only when a rule leaves no other way, never silently.
+
+* **Fonts for every script.** Unembedded fonts are replaced by bundled open-licence fonts covering Latin, Greek, Cyrillic, Arabic, Hebrew, the Indic scripts, Thai, Chinese, Japanese, Korean and about 50 other scripts, shaped with HarfBuzz, so the converted page still reads the same.
 
 * **Every standard, one engine.** All eleven PDF/A levels, PDF/UA-1 and UA-2, PDF/X-1a through X-6, PDF/E-1 and PDF/VT, plus Factur-X, ZUGFeRD, XRechnung and Order-X e-invoices, with the same options and the same report everywhere.
 
-* **Preflight built in.** The same engine runs print preflight: 397 bundled profiles for hairlines, rich black, image resolution, overprint, transparency, page boxes, fonts and colour, each a set of checks with repairs where a repair exists, plus your own in JSON.
+* **Preflight built in.** The same engine runs print preflight: 685 bundled profiles for hairlines, rich black, image resolution, overprint, transparency, page boxes, fonts and colour, each a set of checks with repairs where a repair exists, plus your own in JSON.
 
 * **Runs anywhere.** The same engine powers the CLI, the C library, the npm package, the Docker image and the browser build, which runs entirely on your machine with nothing to install.
 
@@ -73,18 +75,27 @@ Kura validates clean against every public conformance suite there is:
 | PDF/UA Reference Suite | accessibility | 10 / 10 |
 | Cal Poly PDF/VT | variable-data print | 24 / 24 |
 
-Check mode agrees with veraPDF on every labelled file of its test corpus at every PDF/A level and at PDF/UA-1 and PDF/UA-2.
+Real-world documents: 4,860 public PDFs (web, government, journals, arXiv, EU law, test suites) were converted to all 20 levels and every output was checked by an independent validator, veraPDF for PDF/A and PDF/UA and callas pdfToolbox for PDF/X, PDF/E and PDF/VT. 95 to 98% pass at every PDF/A, PDF/UA-1, PDF/X, PDF/E and PDF/VT level; the rest are mostly damaged or password-locked files, which Kura refuses with a reason. Every file, every number and the scripts to reproduce them are on [Conformance](https://kura.bentopdf.com/docs/conformance).
+
+Check mode gives the same verdict as veraPDF on all 2,694 files of veraPDF's test corpus, and on a failing and a passing test file for every veraPDF rule at every PDF/A level and at PDF/UA-1 and UA-2.
 
 For robustness, see the [benchmark](#benchmark): real-world files, every one listed, zero crashes. It is fuzzed continuously by ClusterFuzzLite in this repository's own CI through five harnesses, built and tested under AddressSanitizer and UndefinedBehaviorSanitizer on every push, and refuses pathological files with an error instead of falling over.
 
 > [!NOTE]
-> Check mode sees exactly what the converter can repair. That means it never reports a false finding, but it is blind to any defect the converter itself cannot detect. It is a preflight, not a replacement for an independent validator.
+> Check mode is tested rule by rule against veraPDF, but it is still Kura's own checker. For a formal acceptance decision, confirm with an independent validator.
 
 ---
 
 ## Benchmark
 
-Kura was run over **30,677 real PDFs**: 966 files from the pdf.js regression corpus, 1,927 web PDFs fetched straight from the Common Crawl archive, 27,784 web PDFs from the DARPA SafeDocs archive of the 2021 crawl. Every file was converted to PDF/A-2b with the CLI exactly as shipped, one process per file, under the default 120-second watchdog, and a fixed one-in-ten sample of the outputs was validated independently with veraPDF. Every document is listed with its origin and SHA-256, so the run can be reproduced.
+Two large runs, measuring different things:
+
+| Run | Files | Levels | What it measures |
+|---|---:|---|---|
+| [Conformance](https://kura.bentopdf.com/docs/conformance) | 4,860 | all 20 convertible levels | is the output valid? every output checked by veraPDF or callas pdfToolbox |
+| Robustness, below | 30,677 | PDF/A-2b | does the engine crash, hang or slow down on real files? |
+
+**Robustness.** Kura was run over **30,677 real PDFs**: 966 files from the pdf.js regression corpus, 1,927 web PDFs fetched straight from the Common Crawl archive, 27,784 web PDFs from the DARPA SafeDocs archive of the 2021 crawl. Every file was converted to PDF/A-2b with the CLI exactly as shipped, one process per file, under the default 120-second watchdog, and a fixed one-in-ten sample of the outputs was validated independently with veraPDF. Every document is listed with its origin and SHA-256, so the run can be reproduced.
 
 | tranche | files | converted | rejected with a reason | timeouts | crashes | veraPDF sample | median | p95 |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
@@ -228,15 +239,16 @@ That is 25 targets. The [standards page](https://kura.bentopdf.com/docs/standard
 
 ## Preflight
 
-Kura is as much a preflight engine as a conversion engine. A preflight profile is a set of checks to run against a document, optionally with repairs to apply, and 397 of them ship under `pdfa-engine/profiles/`, every one written by BentoPDF from public sources and generated from one script:
+Kura is as much a preflight engine as a conversion engine. A preflight profile is a set of checks to run against a document, optionally with repairs to apply, and 685 of them ship under `pdfa-engine/profiles/`, every one written by BentoPDF from public sources and generated from one script:
 
 | Folder | Contents |
 |---|---|
-| `profiles/report` | report-only profiles: hairlines, small text, rich black, white objects, invisible text, images, spot colours, overprint, transparency, fonts, pages, ink and document health |
-| `profiles/press`, `profiles/gwg` | check and check-and-fix profiles per print process, and the Ghent Workgroup 2022 workflows written from the published specification |
-| `profiles/online`, `archive`, `accessibility`, `standards` | screen and download checks, and conformance checks for every PDF/A, X, E and VT flavour |
-| `profiles/images`, `colour`, `objects`, `pages`, `document` | single-question profiles with the thresholds a shop actually asks for: resolution, ink, spot counts, hairlines, text sizes, boxes, versions, annotations, layers |
-| `profiles/actions` | repair-only profiles: rotation, boxes and bleed, overprint and knockout, hairlines, stamps, layers, initial view |
+| `report` | report-only profiles: hairlines, small text, rich black, white objects, invisible text, images, spot colours, overprint, transparency, fonts, pages, ink and document health |
+| `press`, `gwg`, `packaging` | check and check-and-fix profiles per print process, the Ghent Workgroup 2022 workflows written from the published specification, and packaging by process and product |
+| `colour-conversion`, `print-conditions` | convert all colour to a named press condition, CMYK to CMYK between conditions, grey or sRGB, ink limits, neutral greys to black, tone adjustments |
+| `online`, `archive`, `accessibility`, `standards`, `compatibility` | screen and download checks, conformance checks for every PDF/A, X, E and VT flavour, and compatibility fixes |
+| `images`, `colour`, `objects`, `pages`, `document` | single-question profiles with the thresholds a shop actually asks for: resolution, ink, spot counts, hairlines, text sizes, boxes, versions, annotations, layers |
+| `actions`, `place-content`, `plans` | repair-only profiles (rotation, boxes and bleed, overprint and knockout, flattening, layers, initial view), placing stamps, text and barcodes, and multi-step plans |
 
 Run a profile in check mode to get findings without writing a file, or with a conversion to have its repairs applied in the same pass:
 
@@ -266,17 +278,19 @@ Profiles are plain JSON, so you can write your own from the [catalogue of checks
 
 Depending on the document and the target, the engine can:
 
-* embed metric-compatible substitutes for fonts that are not embedded, and repair width tables, encodings and Unicode maps on fonts that are
-* convert RGB, Lab and calibrated colour to CMYK through Little CMS for PDF/X-1a
+* embed metric-compatible substitutes for fonts that are not embedded, including Chinese, Japanese, Korean and about 50 other scripts, and repair width tables, encodings and Unicode maps on fonts that are
+* convert colour through ICC profiles with Little CMS at any level: to CMYK for print, to grey or sRGB, with ink limits, black preservation and spot handling
+* use any ICC profile you name: it is looked up in your `--icc-folder`, the computer's colour folders (Windows, macOS, Linux, and Adobe's folders if Adobe software is installed) and Kura's own profiles; a name that is not found is refused, never silently swapped
+* flatten overprint so a file looks the same on a press as on screen
 * add or repair output intents, default colour spaces and colourant names
-* detect transparency anywhere in the document, including inside patterns and form XObjects, and flatten it by rasterizing only the pages that need it
+* detect transparency anywhere in the document, including inside patterns and form XObjects, and flatten it as vectors, rasterizing only regions that cannot be expressed otherwise
 * rebuild XMP metadata from the document information dictionary, exactly consistent
 * strip or repair encryption, scripting, actions, annotations and embedded files according to what each part permits
 * build a structure tree from scratch for PDF/UA, or repair one that exists
 * embed an e-invoice, derive its file name, relationship and XMP schema from the guideline it declares, and pull it back out later
 * lay an invisible OCR text layer over scanned pages so they become searchable
 * apply a PKCS#7 signature in the same pass, so the signed file is still conformant
-* run preflight profiles: 397 bundled checks and repairs, or your own in JSON
+* run preflight profiles: 685 bundled checks and repairs, or your own in JSON
 * wrap a bare JPEG as a single-page PDF and convert that
 
 ---

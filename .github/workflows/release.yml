@@ -80,6 +80,8 @@ jobs:
             cp pdfa-engine/third_party/cmap-resources/LICENSE.md "stage/$name/CMAP-RESOURCES-LICENSE.md"
             cp -R pdfa-engine/core/fonts-world pdfa-engine/core/fonts-cjk "stage/$name/"
             cp -R pdfa-engine/core/icc "stage/$name/icc"
+            while read -r f; do [ -n "$f" ] && cp "pdfa-engine/third_party/icc/$f" "stage/$name/icc/"; done < pdfa-engine/third_party/icc/SHIP
+            cp -R pdfa-engine/third_party/icc/LICENSES "stage/$name/icc/LICENSES"
             cp pdfa-engine/core/include/kura/kura.h "stage/$name/include/kura/"
             if [ "$name" = windows-x64 ]; then
               (cd "stage/$name" && zip -q -r "../../out/kura-$TAG-$name.zip" .)

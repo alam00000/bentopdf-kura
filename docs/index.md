@@ -25,7 +25,7 @@ features:
   - title: Every standard
     details: All eleven PDF/A levels, PDF/UA-1 and UA-2, PDF/X-1a to X-6, PDF/E-1, PDF/VT, and Factur-X, ZUGFeRD, XRechnung and Order-X e-invoices. Twenty-five targets, one set of options.
   - title: Print preflight
-    details: 397 bundled profiles check and repair what a press cares about, such as hairlines, rich black, low-resolution images, overprint, transparency, page boxes and fonts, and you can write your own in JSON.
+    details: 685 bundled profiles check and repair what a press cares about, such as hairlines, rich black, low-resolution images, overprint, transparency, page boxes and fonts, and you can write your own in JSON.
   - title: Content preserving
     details: Text stays searchable, attachments stay attached, colour is converted through real ICC profiles, and a page is rasterized only when a rule leaves no other way.
   - title: Runs everywhere

@@ -2,6 +2,8 @@
 
 This document records a robustness benchmark of the Kura engine (BentoPDF Kura Engine (kura) 1.1.0) on 30,677 real PDFs from public corpora, on Darwin arm64, Apple M4. Every file was converted to PDF/A-2b with the CLI exactly as shipped, one process per file, with the default 120-second watchdog. The raw per-file data is in [bench/RESULTS.csv](bench/RESULTS.csv); every document's origin and SHA-256 are in [bench/MANIFEST.csv](bench/MANIFEST.csv), so the run can be reproduced with `make bench`.
 
+This run measures robustness at one level. Output validity at all 20 levels, judged by veraPDF and callas pdfToolbox on 4,860 further files, is on [Conformance](https://kura.bentopdf.com/docs/conformance).
+
 ## What is measured
 
 A conversion engine that takes untrusted files has two ways to fail badly: it can crash or hang, and it can write a file that claims a standard it does not meet. So each run is graded on four outcomes, in order of severity:
