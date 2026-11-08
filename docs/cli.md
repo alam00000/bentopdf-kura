@@ -335,7 +335,7 @@ kura --level 2b --watch -d archive/ hot/     # convert whatever lands in hot/
 
 ## Tools
 
-`kura tool <name> <arguments>` runs a single job and prints one JSON result, `{"ok":true,"tool":"<name>",…}` on success. `kura tool <name> --help` shows a tool's arguments. Every tool takes `--password <pw>` for encrypted input, and `--pages` where shown takes a list such as `1-3,5` or `2-last`.
+`kura tool <name> <arguments>` runs a single job and prints one JSON object: an `ok` flag with the tool's fields, or for the report tools (`inventory`, `invoice-synopsis`) a `report` object. `kura tool <name> --help` shows a tool's arguments. Every tool takes `--password <pw>` for encrypted input, and `--pages` where shown takes a list such as `1-3,5` or `2-last`.
 
 Exit status: 0 on success, 1 when the answer is "no" (no die line, no invoice, no document parts, a certificate that no longer matches), 2 when the file cannot be read or written, 64 for wrong arguments. A failure prints `{"ok":false,…,"error":"…"}`; the codes are on [Rejection codes](/rejections#tools).
 
