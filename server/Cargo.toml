@@ -4,7 +4,7 @@
 name = "kura-server"
 version = "1.2.1"
 edition = "2024"
-rust-version = "1.100"
+rust-version = "1.89"
 license = "AGPL-3.0-only"
 publish = false
 
