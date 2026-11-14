@@ -4,11 +4,11 @@ use crate::jsjson;
 use crate::wire;
 use axum::body::Body;
 use axum::extract::Request;
-use axum::http::{header, Method, StatusCode};
+use axum::http::{Method, StatusCode, header};
 use axum::response::Response;
-use rusqlite::{params, Connection, OptionalExtension};
+use rusqlite::{Connection, OptionalExtension, params};
 use serde::{Deserialize, Serialize};
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 use std::collections::HashMap;
 use std::io;
@@ -133,7 +133,7 @@ pub fn parse_hot_folder(spec: &str, profiles: &Path) -> Result<HotFolder, String
         Some(m) => {
             return Err(format!(
                 "hot folder {root}: mode must be convert or check, not {m}"
-            ))
+            ));
         }
     };
     let probe = tempfile::tempdir().map_err(|e| e.to_string())?;
@@ -416,10 +416,10 @@ impl Coord {
                 params![now + self.set.lease_ms, id, b.id],
             );
         }
-        if let Ok(mut v) = self.version.write() {
-            if v.is_empty() {
-                v.clone_from(&b.version);
-            }
+        if let Ok(mut v) = self.version.write()
+            && v.is_empty()
+        {
+            v.clone_from(&b.version);
         }
     }
 
@@ -454,13 +454,12 @@ impl Coord {
             {
                 return false;
             }
-            if let Some((from, names)) = staged {
-                if names
+            if let Some((from, names)) = staged
+                && names
                     .iter()
                     .any(|n| std::fs::rename(from.join(n), dir.join(n)).is_err())
-                {
-                    return false;
-                }
+            {
+                return false;
             }
             let state = finished_state(kind_of(&kind), result, &dir);
             let updated = tx.execute(
@@ -710,11 +709,12 @@ impl Coord {
         m.insert("workers".into(), Value::Array(workers));
         m.insert(
             "folders".into(),
-            json!(self
-                .folders
-                .iter()
-                .map(|f| f.root.to_string_lossy())
-                .collect::<Vec<_>>()),
+            json!(
+                self.folders
+                    .iter()
+                    .map(|f| f.root.to_string_lossy())
+                    .collect::<Vec<_>>()
+            ),
         );
         m.insert("jobs".into(), Value::Array(jobs));
         jsjson::to_string(&Value::Object(m))
@@ -736,9 +736,16 @@ fn hash_job(kind: Kind, args: &[Arg], dir: &Path) -> io::Result<String> {
     h.update(serde_json::to_vec(args).map_err(io::Error::other)?);
     for n in exec::input_files(args) {
         h.update(n.as_bytes());
-        io::copy(&mut std::fs::File::open(dir.join(&n))?, &mut h)?;
+        let mut f = std::fs::File::open(dir.join(&n))?;
+        let mut buf = [0u8; 64 * 1024];
+        loop {
+            match io::Read::read(&mut f, &mut buf)? {
+                0 => break,
+                k => h.update(&buf[..k]),
+            }
+        }
     }
-    Ok(format!("{:x}", h.finalize()))
+    Ok(h.finalize().iter().map(|b| format!("{b:02x}")).collect())
 }
 
 fn atomic_write(dest: &Path, write: impl FnOnce(&Path) -> io::Result<()>) -> io::Result<()> {
@@ -978,28 +985,28 @@ pub async fn internal(c: Arc<Coord>, app: &App, req: Request, path: &str) -> Res
             };
         }
     }
-    if method == Method::GET {
-        if let Some(id) = id_of(path, "/result") {
-            let Some(done) = c.wait_for(id, Duration::from_secs(25)).await else {
-                return plain(StatusCode::NO_CONTENT, "");
-            };
-            let Some(result) = done else {
-                return plain(StatusCode::NOT_FOUND, "no such job");
-            };
-            let dir = c.dir(id);
-            let files: Vec<String> = ["out.pdf"]
-                .iter()
-                .filter(|n| dir.join(n).exists())
-                .map(|n| n.to_string())
-                .collect();
-            return match wire::encode(&result, &dir, &files).await {
-                Ok(body) if dir.exists() => Response::builder()
-                    .status(StatusCode::OK)
-                    .body(body)
-                    .expect("valid response"),
-                _ => plain(StatusCode::NOT_FOUND, "result expired"),
-            };
-        }
+    if method == Method::GET
+        && let Some(id) = id_of(path, "/result")
+    {
+        let Some(done) = c.wait_for(id, Duration::from_secs(25)).await else {
+            return plain(StatusCode::NO_CONTENT, "");
+        };
+        let Some(result) = done else {
+            return plain(StatusCode::NOT_FOUND, "no such job");
+        };
+        let dir = c.dir(id);
+        let files: Vec<String> = ["out.pdf"]
+            .iter()
+            .filter(|n| dir.join(n).exists())
+            .map(|n| n.to_string())
+            .collect();
+        return match wire::encode(&result, &dir, &files).await {
+            Ok(body) if dir.exists() => Response::builder()
+                .status(StatusCode::OK)
+                .body(body)
+                .expect("valid response"),
+            _ => plain(StatusCode::NOT_FOUND, "result expired"),
+        };
     }
     plain(StatusCode::NOT_FOUND, "no such route")
 }

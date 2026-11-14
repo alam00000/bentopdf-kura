@@ -244,7 +244,7 @@ impl Worker {
             {
                 Ok(x) => x,
                 Err(e) => {
-                    return tracing::warn!(error = %e, "job download failed, the lease will expire")
+                    return tracing::warn!(error = %e, "job download failed, the lease will expire");
                 }
             };
         self.running.lock().map(|mut r| r.insert(meta.id)).ok();
@@ -273,7 +273,7 @@ impl Worker {
             let body = match wire::encode(result, dir, &outputs).await {
                 Ok(b) => b,
                 Err(e) => {
-                    return tracing::error!(job = meta.id, error = %e, "cannot read the job output")
+                    return tracing::error!(job = meta.id, error = %e, "cannot read the job output");
                 }
             };
             let headers = [("x-kura-worker", self.id.clone())];
@@ -289,7 +289,7 @@ impl Worker {
                 .await
             {
                 Ok(r) if r.status() == StatusCode::OK => {
-                    return tracing::info!(job = meta.id, "result uploaded")
+                    return tracing::info!(job = meta.id, "result uploaded");
                 }
                 Ok(r)
                     if r.status() == StatusCode::CONFLICT
@@ -298,7 +298,7 @@ impl Worker {
                     return tracing::warn!(
                         job = meta.id,
                         "result no longer wanted, the job was reassigned"
-                    )
+                    );
                 }
                 Ok(r) => {
                     tracing::warn!(job = meta.id, status = %r.status(), "result upload refused, retrying")

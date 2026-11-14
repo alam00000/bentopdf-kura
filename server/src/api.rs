@@ -4,12 +4,12 @@ use crate::jsjson;
 use crate::wire::{self, Peer};
 use axum::body::Body;
 use axum::extract::{Request, State};
-use axum::http::{header, HeaderMap, HeaderValue, Method, StatusCode};
+use axum::http::{HeaderMap, HeaderValue, Method, StatusCode, header};
 use axum::response::Response;
 use base64::Engine;
 use futures_util::{Stream, StreamExt};
 use serde::{Deserialize, Serialize};
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value, json};
 use std::collections::HashMap;
 use std::io;
 use std::path::{Path, PathBuf};
@@ -336,7 +336,7 @@ async fn remote_run(
             }
             Ok(res) if res.status() == StatusCode::NO_CONTENT => continue,
             Ok(res) if res.status() == StatusCode::NOT_FOUND => {
-                return Err(ExecError::Failed("coordinator lost the job".into()))
+                return Err(ExecError::Failed("coordinator lost the job".into()));
             }
             Ok(res) => tracing::warn!(job = id, status = %res.status(), "unexpected result status"),
             Err(e) => tracing::warn!(job = id, error = %e, "coordinator unreachable, retrying"),
@@ -676,7 +676,7 @@ pub fn build_args(
                 "BAD_LEVEL",
                 format!("level must be one of {}", allowed.join(", ")),
                 Some(("levels", json!(allowed))),
-            ))
+            ));
         }
     };
     let lit = |s: &str| Arg::Lit(s.to_string());
@@ -785,19 +785,19 @@ pub fn engine_failure(r: &RunResult) -> (StatusCode, Value) {
         );
     }
     let report = parse_report(&r.out);
-    if r.code == Some(2) {
-        if let Some(mut m) = report {
-            let pick = |m: &Map<String, Value>, k: &str, d: &str| match m.get(k) {
-                None | Some(Value::Null) => Value::String(d.into()),
-                Some(v) => v.clone(),
-            };
-            let code = pick(&m, "errorCode", "REJECTED");
-            let error = pick(&m, "error", "input rejected");
-            m.insert("ok".into(), Value::Bool(false));
-            m.insert("errorCode".into(), code);
-            m.insert("error".into(), error);
-            return (StatusCode::UNPROCESSABLE_ENTITY, Value::Object(m));
-        }
+    if r.code == Some(2)
+        && let Some(mut m) = report
+    {
+        let pick = |m: &Map<String, Value>, k: &str, d: &str| match m.get(k) {
+            None | Some(Value::Null) => Value::String(d.into()),
+            Some(v) => v.clone(),
+        };
+        let code = pick(&m, "errorCode", "REJECTED");
+        let error = pick(&m, "error", "input rejected");
+        m.insert("ok".into(), Value::Bool(false));
+        m.insert("errorCode".into(), code);
+        m.insert("error".into(), error);
+        return (StatusCode::UNPROCESSABLE_ENTITY, Value::Object(m));
     }
     if r.code == Some(64) {
         let line = r
@@ -1225,7 +1225,7 @@ async fn job(
                 "BUSY",
                 "queue full, retry later",
             )
-            .into())
+            .into());
         }
         Err(ExecError::Failed(e)) => {
             tracing::error!(error = %e, "job could not run");
@@ -1333,10 +1333,10 @@ pub async fn handle(State(app): State<Arc<App>>, req: Request) -> Response {
             }
         }
     }
-    if let Some(c) = &coord {
-        if path.starts_with("/internal/") {
-            return crate::coord::internal(c.clone(), &app, req, &path).await;
-        }
+    if let Some(c) = &coord
+        && path.starts_with("/internal/")
+    {
+        return crate::coord::internal(c.clone(), &app, req, &path).await;
     }
     if method == Method::POST && path.starts_with("/api/") {
         if !authorized(&app, req.headers()) {
@@ -1503,7 +1503,9 @@ mod tests {
     fn allow_list_accepts_what_the_api_builds() {
         let d = job_dir();
         let profiles = Path::new(env!("CARGO_MANIFEST_DIR")).join("../pdfa-engine/profiles");
-        let q = Query::parse("level=x4&ua=1&lang=en-US&rasterDpi=150&imageMaxPpi=72.5&vtRecords=1-3,4-6&facturxProfile=BASIC WL&outputCondition=FOGRA39&profile=press/book-text-pages-check-and-fix&convertColors=cmyk&intent=relative&convertObjects=text,vector,images&inkLimit=300&rgbGrayToK=5&keepSpots=1&noBpc=1&grayToK=1");
+        let q = Query::parse(
+            "level=x4&ua=1&lang=en-US&rasterDpi=150&imageMaxPpi=72.5&vtRecords=1-3,4-6&facturxProfile=BASIC WL&outputCondition=FOGRA39&profile=press/book-text-pages-check-and-fix&convertColors=cmyk&intent=relative&convertObjects=text,vector,images&inkLimit=300&rgbGrayToK=5&keepSpots=1&noBpc=1&grayToK=1",
+        );
         let mut fields = HashMap::new();
         fields.insert("destProfile".into(), Field::Text("icc".into()));
         fields.insert("deviceLink".into(), Field::Text("icc".into()));

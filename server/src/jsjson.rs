@@ -34,11 +34,7 @@ pub fn number(f: f64) -> String {
         };
         format!("{head}e{sign}{}", e.abs())
     };
-    if f < 0.0 {
-        format!("-{body}")
-    } else {
-        body
-    }
+    if f < 0.0 { format!("-{body}") } else { body }
 }
 
 pub fn js_string(v: &Value) -> String {

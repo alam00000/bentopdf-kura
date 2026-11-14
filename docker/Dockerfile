@@ -10,7 +10,7 @@ RUN scripts/linux-static.sh pdfium
 COPY pdfa-engine pdfa-engine
 RUN scripts/linux-static.sh engine && scripts/linux-static.sh verify
 
-FROM rust:1.92-bookworm AS server
+FROM rust:1.100-bookworm AS server
 WORKDIR /src
 COPY server/Cargo.toml server/Cargo.lock ./
 COPY server/src src

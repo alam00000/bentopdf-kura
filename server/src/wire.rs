@@ -6,11 +6,11 @@ use http_body_util::BodyExt;
 use hyper::body::Incoming;
 use hyper::{Method, Request, Response, StatusCode};
 use hyper_rustls::{HttpsConnector, HttpsConnectorBuilder};
-use hyper_util::client::legacy::{connect::HttpConnector, Client};
+use hyper_util::client::legacy::{Client, connect::HttpConnector};
 use hyper_util::rt::TokioExecutor;
 use rustls_pki_types::pem::PemObject;
 use rustls_pki_types::{CertificateDer, PrivateKeyDer};
-use serde::{de::DeserializeOwned, Deserialize, Serialize};
+use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use std::io;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -152,7 +152,9 @@ pub fn check_url(url: &str, insecure_http: bool) -> Result<(), String> {
         Some("http") => Err(format!(
             "refusing plain HTTP to {url}: use https://, or set KURA_INSECURE_HTTP=1 on a trusted private network"
         )),
-        _ => Err(format!("the coordinator address must start with https:// or http://, not {url}")),
+        _ => Err(format!(
+            "the coordinator address must start with https:// or http://, not {url}"
+        )),
     }
 }
 
@@ -268,9 +270,11 @@ mod tests {
         );
 
         let body = encode(&1, a.path(), &["x.icc".into()]).await.unwrap();
-        assert!(decode::<i32, _, _>(body.into_data_stream(), b.path(), 10)
-            .await
-            .is_err());
+        assert!(
+            decode::<i32, _, _>(body.into_data_stream(), b.path(), 10)
+                .await
+                .is_err()
+        );
 
         assert!(check_url("http://127.0.0.1:1", false).is_ok());
         assert!(check_url("http://[::1]:1", false).is_ok());

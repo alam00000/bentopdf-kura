@@ -78,7 +78,10 @@ fn http(
 ) -> std::io::Result<Reply> {
     let mut s = TcpStream::connect(("127.0.0.1", port))?;
     s.set_read_timeout(Some(Duration::from_secs(60)))?;
-    let mut req = format!("{method} {path} HTTP/1.1\r\nhost: localhost\r\nconnection: close\r\ncontent-length: {}\r\n", body.len());
+    let mut req = format!(
+        "{method} {path} HTTP/1.1\r\nhost: localhost\r\nconnection: close\r\ncontent-length: {}\r\n",
+        body.len()
+    );
     for (k, v) in headers {
         req.push_str(&format!("{k}: {v}\r\n"));
     }
@@ -343,10 +346,12 @@ fn coordinator_workers_retry_restart_dedupe_and_hot_folders() {
         serde_json::from_slice(&std::fs::read(hot.join("failed").join("notes.json")).unwrap())
             .unwrap();
     assert_eq!(failed["errorCode"], "NOT_A_PDF");
-    assert!(std::fs::read_dir(data.join("tmp"))
-        .unwrap()
-        .next()
-        .is_none());
+    assert!(
+        std::fs::read_dir(data.join("tmp"))
+            .unwrap()
+            .next()
+            .is_none()
+    );
 }
 
 #[test]
@@ -528,10 +533,12 @@ fn restarted_worker_sweeps_what_a_killed_one_left() {
     };
     let left = roots(&work);
     assert_eq!(left.len(), 1);
-    assert!(std::fs::read_dir(&left[0])
-        .unwrap()
-        .flatten()
-        .any(|e| e.file_name().to_string_lossy().starts_with("job-")));
+    assert!(
+        std::fs::read_dir(&left[0])
+            .unwrap()
+            .flatten()
+            .any(|e| e.file_name().to_string_lossy().starts_with("job-"))
+    );
     std::thread::sleep(Duration::from_millis(1200));
     let mut second = spawn(&["worker", "--name", "second"], &env);
     wait_until("leftover removed", Duration::from_secs(10), || {

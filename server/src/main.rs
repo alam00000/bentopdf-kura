@@ -165,7 +165,11 @@ async fn serve_http(app: Arc<App>, extra: String, tls: Option<Arc<rustls::Server
         app.cfg.queue_limit,
         app.cfg.max_upload / 1024 / 1024,
         app.profile_count(),
-        if app.cfg.api_token.is_empty() { "" } else { ", token required" },
+        if app.cfg.api_token.is_empty() {
+            ""
+        } else {
+            ", token required"
+        },
     );
     let router = axum::Router::new().fallback(api::handle).with_state(app);
     let acceptor = tls.map(tokio_rustls::TlsAcceptor::from);
@@ -360,18 +364,17 @@ fn spawn_version_refresh(
                     Duration::from_secs(10),
                 )
                 .await;
-            if let Ok(res) = res {
-                if let Ok(b) = http_body_util::BodyExt::collect(res.into_body()).await {
-                    let v = serde_json::from_slice::<serde_json::Value>(&b.to_bytes()).ok();
-                    if let Some(s) = v
-                        .as_ref()
-                        .and_then(|v| v["version"].as_str())
-                        .filter(|s| !s.is_empty())
-                    {
-                        if let Ok(mut w) = version.write() {
-                            *w = s.to_string();
-                        }
-                    }
+            if let Ok(res) = res
+                && let Ok(b) = http_body_util::BodyExt::collect(res.into_body()).await
+            {
+                let v = serde_json::from_slice::<serde_json::Value>(&b.to_bytes()).ok();
+                if let Some(s) = v
+                    .as_ref()
+                    .and_then(|v| v["version"].as_str())
+                    .filter(|s| !s.is_empty())
+                    && let Ok(mut w) = version.write()
+                {
+                    *w = s.to_string();
                 }
             }
             tokio::time::sleep(Duration::from_secs(5)).await;
